@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "SaborExpress": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "44c9OLMi3AA=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\SaborExpress.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\CORE5 ULTRA\\.nuget\\packages\\microsoft.visualstudio.azure.containers.tools.targets\\1.23.0\\microsoft.visualstudio.azure.containers.tools.targets.1.23.0.nupkg.sha512"
+  ],
+  "logs": []
+}
