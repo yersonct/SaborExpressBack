@@ -1,10 +1,8 @@
-{
-  "profiles": {
-    "SaborExpress": {
-      "commandName": "Project"
-    },
-    "Container (Dockerfile)": {
-      "commandName": "Docker"
-    }
-  }
+"Container (Dockerfile)": {
+  "commandName": "Docker",
+  "launchBrowser": true,
+  "launchUrl": "{Scheme}://localhost:8080/",
+  "publishAllPorts": true,
+  "useSSL": false,
+  "dockerfileRunArguments": "-p 8080:8080 --env-file .env"
 }

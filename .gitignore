@@ -1,0 +1,13 @@
+# Secretos y variables de entorno
+.env
+
+# Carpetas de compilación
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+
+# Archivos de configuración local (opcional, si tienes overrides)
+appsettings.Development.json

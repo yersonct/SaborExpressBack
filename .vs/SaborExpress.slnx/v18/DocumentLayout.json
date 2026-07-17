@@ -3,8 +3,51 @@
   "WorkspaceRootPath": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|c:\\users\\core5 ultra\\onedrive\\desktop\\saborexpress\\saborexpressback\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|solutionrelative:properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{67EE2847-8CBC-4A56-B3AC-8690162AC595}|Elementos de la soluci\u00F3n{67EE2847-8CBC-4A56-B3AC-8690162AC595}|C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\.env||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{67EE2847-8CBC-4A56-B3AC-8690162AC595}|Elementos de la soluci\u00F3n{67EE2847-8CBC-4A56-B3AC-8690162AC595}|solutionrelative:.env||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|c:\\users\\core5 ultra\\onedrive\\desktop\\saborexpress\\saborexpressback\\saborexpress.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|solutionrelative:saborexpress.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|c:\\users\\core5 ultra\\onedrive\\desktop\\saborexpress\\saborexpressback\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|c:\\users\\core5 ultra\\onedrive\\desktop\\saborexpress\\saborexpressback\\configuration\\swaggerconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|solutionrelative:configuration\\swaggerconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|c:\\users\\core5 ultra\\onedrive\\desktop\\saborexpress\\saborexpressback\\.dockerignore||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|solutionrelative:.dockerignore||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|c:\\users\\core5 ultra\\onedrive\\desktop\\saborexpress\\saborexpressback\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|solutionrelative:appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|c:\\users\\core5 ultra\\onedrive\\desktop\\saborexpress\\saborexpressback\\configuration\\databaseconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|solutionrelative:configuration\\databaseconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|c:\\users\\core5 ultra\\onedrive\\desktop\\saborexpress\\saborexpressback\\modules\\auth\\dtos\\registerdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|solutionrelative:modules\\auth\\dtos\\registerdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|c:\\users\\core5 ultra\\onedrive\\desktop\\saborexpress\\saborexpressback\\configuration\\jwtconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|solutionrelative:configuration\\jwtconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|c:\\users\\core5 ultra\\onedrive\\desktop\\saborexpress\\saborexpressback\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{14DCFB2E-8581-B499-2F27-A7D77F58E528}|SaborExpress.csproj|solutionrelative:controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -14,19 +57,162 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 6,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
+              "Title": ".env",
+              "DocumentMoniker": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\.env",
+              "RelativeDocumentMoniker": ".env",
+              "ToolTip": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\.env",
+              "RelativeToolTip": ".env",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAABbAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-07-17T11:14:51.079Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": ".dockerignore",
+              "DocumentMoniker": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\.dockerignore",
+              "RelativeDocumentMoniker": ".dockerignore",
+              "ToolTip": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\.dockerignore",
+              "RelativeToolTip": ".dockerignore",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAB0AAAATAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-07-17T10:39:24.944Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "DatabaseConfiguration.cs",
+              "DocumentMoniker": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Configuration\\DatabaseConfiguration.cs",
+              "RelativeDocumentMoniker": "Configuration\\DatabaseConfiguration.cs",
+              "ToolTip": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Configuration\\DatabaseConfiguration.cs",
+              "RelativeToolTip": "Configuration\\DatabaseConfiguration.cs",
+              "ViewState": "AgIAACIAAAAAAAAAAAAAwC0AAAAZAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-07-17T10:12:22.172Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "RegisterDto.cs",
+              "DocumentMoniker": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Modules\\Auth\\DTOs\\RegisterDto.cs",
+              "RelativeDocumentMoniker": "Modules\\Auth\\DTOs\\RegisterDto.cs",
+              "ToolTip": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Modules\\Auth\\DTOs\\RegisterDto.cs",
+              "RelativeToolTip": "Modules\\Auth\\DTOs\\RegisterDto.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-07-17T10:10:40.91Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "SwaggerConfiguration.cs",
+              "DocumentMoniker": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Configuration\\SwaggerConfiguration.cs",
+              "RelativeDocumentMoniker": "Configuration\\SwaggerConfiguration.cs",
+              "ToolTip": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Configuration\\SwaggerConfiguration.cs",
+              "RelativeToolTip": "Configuration\\SwaggerConfiguration.cs",
+              "ViewState": "AgIAABwAAAAAAAAAAAAcwDUAAABVAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-07-17T10:02:56.419Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Program.cs",
               "RelativeDocumentMoniker": "Program.cs",
               "ToolTip": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Program.cs",
               "RelativeToolTip": "Program.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAAKAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-07-02T05:50:14.967Z",
+              "WhenOpened": "2026-07-17T10:02:51.081Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "launchSettings.json",
+              "DocumentMoniker": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Properties\\launchSettings.json",
+              "RelativeDocumentMoniker": "Properties\\launchSettings.json",
+              "ToolTip": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Properties\\launchSettings.json",
+              "RelativeToolTip": "Properties\\launchSettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-07-17T09:57:58.553Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "appsettings.json",
+              "DocumentMoniker": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\appsettings.json",
+              "RelativeDocumentMoniker": "appsettings.json",
+              "ToolTip": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\appsettings.json",
+              "RelativeToolTip": "appsettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA0AAAAaAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-07-17T09:55:40.734Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "SaborExpress",
+              "DocumentMoniker": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\SaborExpress.csproj",
+              "RelativeDocumentMoniker": "SaborExpress.csproj",
+              "ToolTip": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\SaborExpress.csproj",
+              "RelativeToolTip": "SaborExpress.csproj",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAOAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2026-07-17T09:52:22.016Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "Microsoft.Common.CurrentVersion.targets",
+              "DocumentMoniker": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
+              "RelativeDocumentMoniker": "..\\..\\..\\..\\..\\..\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
+              "ToolTip": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
+              "RelativeToolTip": "..\\..\\..\\..\\..\\..\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
+              "ViewState": "AgIAAA4VAAAAAAAAAAAawBUVAAAEAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003801|",
+              "WhenOpened": "2026-07-17T09:51:52.752Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "JwtConfiguration.cs",
+              "DocumentMoniker": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Configuration\\JwtConfiguration.cs",
+              "RelativeDocumentMoniker": "Configuration\\JwtConfiguration.cs",
+              "ToolTip": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Configuration\\JwtConfiguration.cs",
+              "RelativeToolTip": "Configuration\\JwtConfiguration.cs",
+              "ViewState": "AgIAABcAAAAAAAAAAAAAwDcAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-07-17T09:51:14.508Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "AuthController.cs",
+              "DocumentMoniker": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Controllers\\AuthController.cs",
+              "RelativeDocumentMoniker": "Controllers\\AuthController.cs",
+              "ToolTip": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\Controllers\\AuthController.cs",
+              "RelativeToolTip": "Controllers\\AuthController.cs",
+              "ViewState": "AgIAACAAAAAAAAAAAAAUwCoAAABHAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-07-17T09:30:57.169Z",
               "EditorCaption": ""
             }
           ]
