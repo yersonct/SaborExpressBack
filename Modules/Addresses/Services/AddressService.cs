@@ -1,0 +1,115 @@
+// Modules/Addresses/Services/AddressService.cs
+using SaborExpress.Modules.Addresses.DTOs;
+using SaborExpress.Modules.Addresses.Interfaces;
+using SaborExpress.Modules.Addresses.Mappings;
+using SaborExpress.Modules.Addresses.Models;
+using SaborExpress.Modules.Addresses.Validators;
+
+namespace SaborExpress.Modules.Addresses.Services
+{
+    public class AddressService : IAddressService
+    {
+        private readonly IAddressRepository _addressRepository;
+        private readonly AddressValidator _validator;
+
+        public AddressService(IAddressRepository addressRepository, AddressValidator validator)
+        {
+            _addressRepository = addressRepository;
+            _validator = validator;
+        }
+
+        public async Task<List<AddressResponseDto>> GetByCustomerIdAsync(int customerId)
+        {
+            var addresses = await _addressRepository.GetByCustomerIdAsync(customerId);
+            return addresses.Select(AddressMapper.ToResponse).ToList();
+        }
+
+        public async Task<AddressResponseDto> GetByIdAsync(int id)
+        {
+            var address = await _addressRepository.GetByIdAsync(id);
+            if (address == null)
+                throw new ArgumentException("La dirección no existe");
+
+            return AddressMapper.ToResponse(address);
+        }
+
+        public async Task<AddressResponseDto> CreateAsync(CreateAddressDto dto, int customerId)
+        {
+            _validator.ValidateCreate(dto);
+
+            var address = new Address
+            {
+                CustomerId = customerId,
+                AddressLine = dto.AddressLine,
+                Reference = dto.Reference,
+                Latitude = dto.Latitude,
+                Longitude = dto.Longitude,
+                IsDefault = dto.IsDefault
+            };
+
+            if (dto.IsDefault)
+                await _addressRepository.ClearDefaultForCustomerAsync(customerId);
+
+            await _addressRepository.AddAsync(address);
+            await _addressRepository.SaveChangesAsync();
+
+            return AddressMapper.ToResponse(address);
+        }
+
+        public async Task<AddressResponseDto> UpdateAsync(int id, UpdateAddressDto dto, int customerId)
+        {
+            var address = await _addressRepository.GetByIdAsync(id);
+            if (address == null)
+                throw new ArgumentException("La dirección no existe");
+
+            if (address.CustomerId != customerId)
+                throw new ArgumentException("Esta dirección no pertenece al cliente");
+
+            _validator.ValidateUpdate(dto);
+
+            address.AddressLine = dto.AddressLine;
+            address.Reference = dto.Reference;
+            address.Latitude = dto.Latitude;
+            address.Longitude = dto.Longitude;
+
+            await _addressRepository.UpdateAsync(address);
+            await _addressRepository.SaveChangesAsync();
+
+            return AddressMapper.ToResponse(address);
+        }
+
+        public async Task<AddressResponseDto> SetDefaultAsync(int id, int customerId)
+        {
+            var address = await _addressRepository.GetByIdAsync(id);
+            if (address == null)
+                throw new ArgumentException("La dirección no existe");
+
+            if (address.CustomerId != customerId)
+                throw new ArgumentException("Esta dirección no pertenece al cliente");
+
+            if (address.IsDefault)
+                throw new ArgumentException("Esta dirección ya es la predeterminada");
+
+            await _addressRepository.ClearDefaultForCustomerAsync(customerId, address.Id);
+            address.IsDefault = true;
+
+            await _addressRepository.UpdateAsync(address);
+            await _addressRepository.SaveChangesAsync();
+
+            return AddressMapper.ToResponse(address);
+        }
+
+        public async Task DeleteAsync(int id, int customerId)
+        {
+            var address = await _addressRepository.GetByIdAsync(id);
+            if (address == null)
+                throw new ArgumentException("La dirección no existe");
+
+            if (address.CustomerId != customerId)
+                throw new ArgumentException("Esta dirección no pertenece al cliente");
+
+            await _addressRepository.DeleteAsync(address);
+            await _addressRepository.SaveChangesAsync();
+        }
+    }
+}

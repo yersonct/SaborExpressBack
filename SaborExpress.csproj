@@ -10,6 +10,8 @@
 	  <UserSecretsId>823bf26f-0f30-43dd-af52-5ed33c7397fe</UserSecretsId>
   </PropertyGroup>
 
+
+
 	<ItemGroup>
 		<PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.29" />
@@ -28,15 +30,21 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Folder Include="Data\Migrations\" />
-	  <Folder Include="Data\SeedData\" />
 	  <Folder Include="Middleware\" />
-	  <Folder Include="Shared\Constants\" />
+	  <Folder Include="Data\Migrations\" />
+	  <Folder Include="Migrations\" />
+	  <Folder Include="Modules\Auth\Factories\" />
+	  <Folder Include="Modules\Branches\Factories\" />
+	  <Folder Include="Modules\Employees\Factories\" />
+	  <Folder Include="Modules\Permissions\Factories\" />
+	  <Folder Include="Modules\UsersRoles\validators\" />
 	  <Folder Include="Shared\Exceptions\" />
-	  <Folder Include="Shared\Extensions\" />
-	  <Folder Include="Shared\Helpers\" />
 	  <Folder Include="Shared\Responses\" />
 	  <Folder Include="Shared\Utilities\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="Modules\Customers\Mappings\CustomerMapper.cs" />
 	</ItemGroup>
 
 </Project>

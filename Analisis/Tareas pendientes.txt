@@ -1,0 +1,62 @@
+recordatorio :Con eso en mente, cuando lleguemos a implementar la autorización basada en permisos (no solo en rol), el endpoint de Update en BranchesController va a necesitar además validar que el Administrador solo pueda editar la sede que le corresponde, no cualquiera — eso lo dejamos pendiente para cuando trabajemos esa parte.
+
+
+que administradro no le pongo lo mismo permission que gererente a los empleados, ni que le parezca los permiso de gerente a los administrdores, ni a otros roles
+
+)
+-separar la información de la sede, digamos que yo escogi esa sede, solamente me salga la información de esa sede(Listo, Toca poner la información de las demás entidades)
+
+
+y si el administrador pida la información de dicha sede que solamente le salga la información de esa sede (pendiente)
+
+
+proyecto se compila en Linux (por ejemplo en un pipeline de CI/CD)(pendiente)
+ 
+los permisso que ponga el gerente al trabajador o el administradro que funcione solamente a  esa sede
+
+que los datos o entidades que no se muestre en otras sedes 
+
+
+poner los https <- ligado con los cors 
+
+validación o enitdad para modificar el horario  de entrada y salida 
+
+
+que se ponga cuando employees que se ponga el rol que tiene para no quitar, ósea que lo puede quitar yo( para que no quite los roles que le puse cuando hice la migración 
+
+
+opciones de estado si fue aceptado del trabajo o negado
+
+
+ponerle notificación cuando llega o que fue aceptado el trabajador o, cuando envió la información
+notificación cuando ingreso el cliente
+
+
+
+
+
+el token aun esta funcionado a pensar que me cambie de rol, ósea que por error me quite el rol generente pero aun puedo pedir la petición 
+
+
+
+token  no se guarda en la base de datos, temporal en el navegador
+
+
+filtradores 
+validaciones 
+
+
+JobApplications<- endpoind que se encarga de traer todo los registro 
+
+
+
+token:	Dónde se guardan (en el cliente): * En localStorage o sessionStorage (aunque vulnerables a ataques XSS).
+
+	En una cookie HTTP-only (la opción más recomendada por seguridad, ya que JavaScript no puede leerla).
+
+
+	Redis es un sistema de base de datos NoSQL de código abierto, ultrarrápido y basado en memoria RAM, que funciona principalmente mediante pares de clave-valor. Sus usos principales son caché de datos, gestión de sesiones y 	mensajería en tiempo real
+
+
+	pregunta el token lleva la misma información y la diferencia :Access Token (JWT)	No	Se valida mediante su firma criptográfica para ahorrar consultas.
+								     :Refresh Token / Sesión	Sí	Permite invalidarlo, revocar accesos y controlar sesiones activas.

@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "X9QeppmAiTQ=",
+  "dgSpecHash": "tkxb2WnuUm0=",
   "success": true,
-  "projectFilePath": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\SaborExpress.csproj",
+  "projectFilePath": "C:\\Dev\\SaborExpress\\SaborExpressBack\\SaborExpress.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\CORE5 ULTRA\\.nuget\\packages\\azure.core\\1.50.0\\azure.core.1.50.0.nupkg.sha512",
     "C:\\Users\\CORE5 ULTRA\\.nuget\\packages\\azure.identity\\1.11.4\\azure.identity.1.11.4.nupkg.sha512",

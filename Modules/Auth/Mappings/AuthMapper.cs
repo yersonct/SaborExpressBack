@@ -5,13 +5,14 @@ namespace SaborExpress.Modules.Auth.Mappings
 {
     public static class AuthMapper
     {
-        public static AuthResponseDto ToAuthResponse(User user, string token)
+        public static AuthResponseDto ToAuthResponse(User user, string token, string refreshToken)
         {
             return new AuthResponseDto
             {
                 Token = token,
-                RoleId = user.RoleId,
-                Identifier = user.Email ?? user.Document ?? "Unknown"
+                RefreshToken = refreshToken,
+                Roles = user.UserRoles.Select(ur => ur.Role.Name).ToList(),
+                Identifier = user.Email ?? "Unknown"
             };
         }
     }

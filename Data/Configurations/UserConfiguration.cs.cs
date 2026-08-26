@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SaborExpress.Modules.Auth.Models;
 
@@ -17,22 +17,20 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.Email)
                 .HasColumnName("email")
-                .HasMaxLength(120);
+                .HasMaxLength(120)
+                .IsRequired();
 
-            builder.Property(x => x.Document)
-                .HasColumnName("document")
-                .HasMaxLength(20);
+            builder.HasIndex(x => x.Email)
+                .IsUnique();
 
             builder.Property(x => x.PasswordHash)
                 .HasColumnName("password_hash")
-                .IsRequired();
-
-            builder.Property(x => x.RoleId)
-                .HasColumnName("role_id")
+                .HasMaxLength(255)
                 .IsRequired();
 
             builder.Property(x => x.Token)
-                .HasColumnName("token");
+                .HasColumnName("token")
+                .HasColumnType("text");
 
             builder.Property(x => x.Status)
                 .HasColumnName("status")
@@ -42,7 +40,9 @@ namespace SaborExpress.Data.Configurations
                 .HasColumnName("last_login");
 
             builder.Property(x => x.CreatedAt)
-                .HasColumnName("created_at");
+                .HasColumnName("created_at")
+                .IsRequired();
+
         }
     }
 }

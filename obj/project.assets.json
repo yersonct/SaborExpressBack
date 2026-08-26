@@ -4826,11 +4826,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\SaborExpress.csproj",
+      "projectUniqueName": "C:\\Dev\\SaborExpress\\SaborExpressBack\\SaborExpress.csproj",
       "projectName": "SaborExpress",
-      "projectPath": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\SaborExpress.csproj",
+      "projectPath": "C:\\Dev\\SaborExpress\\SaborExpressBack\\SaborExpress.csproj",
       "packagesPath": "C:\\Users\\CORE5 ULTRA\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\CORE5 ULTRA\\OneDrive\\Desktop\\SaborExpress\\SaborExpressBack\\obj\\",
+      "outputPath": "C:\\Dev\\SaborExpress\\SaborExpressBack\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

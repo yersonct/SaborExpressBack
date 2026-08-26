@@ -1,16 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SaborExpress.Modules.Auth.DTOs
 {
     public class AuthResponseDto
     {
         public string Token { get; set; } = string.Empty;
-        public int RoleId { get; set; }
+        public List<string> Roles { get; set; } = new();
+        public string RefreshToken { get; set; } = string.Empty;
         public string Identifier { get; set; } = string.Empty;
-
     }
 }

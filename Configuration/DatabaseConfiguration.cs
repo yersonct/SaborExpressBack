@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using SaborExpress.Data;
 
 namespace SaborExpress.Configuration
@@ -12,56 +12,60 @@ namespace SaborExpress.Configuration
             var dbProvider = configuration.GetValue<string>("DatabaseProvider");
 
             services.AddDbContext<AppDbContext>(options =>
-            {
-                switch (dbProvider)
-                {
-                    case "MySQL":
-                        {
-                            var mySql = configuration.GetConnectionString("MySQLConnection");
-
-                            if (string.IsNullOrEmpty(mySql))
-                                throw new Exception("MySQLConnection no está configurada.");
-
-                            options.UseMySql(
-                                mySql,
-                                ServerVersion.AutoDetect(mySql)
-                            );
-
-                            break;
-                        }
-
-                    case "SqlServer":
-                        {
-                            var sql = configuration.GetConnectionString("SqlServerConnection");
-
-                            if (string.IsNullOrEmpty(sql))
-                                throw new Exception("SqlServerConnection no está configurada.");
-
-                            options.UseSqlServer(sql);
-
-                            break;
-                        }
-
-                    case "PostgreSQL":
-                        {
-                            var postgres = configuration.GetConnectionString("PostgresConnection");
-
-                            if (string.IsNullOrEmpty(postgres))
-                                throw new Exception("PostgresConnection no está configurada.");
-
-                            options.UseNpgsql(postgres);
-
-                            break;
-                        }
-
-                    default:
-                        throw new InvalidOperationException(
-                            $"Proveedor de base de datos no soportado: {dbProvider}"
-                        );
-                }
-            });
+                ConfigurarProveedor(options, dbProvider, configuration));
 
             return services;
+        }
+
+        private static void ConfigurarProveedor(
+            DbContextOptionsBuilder options, string? dbProvider, IConfiguration configuration)
+        {
+            switch (dbProvider)
+            {
+                case "MySQL":
+                    ConfigurarMySql(options, configuration);
+                    break;
+
+                case "SqlServer":
+                    ConfigurarSqlServer(options, configuration);
+                    break;
+
+                case "PostgreSQL":
+                    ConfigurarPostgres(options, configuration);
+                    break;
+
+                default:
+                    throw new InvalidOperationException(
+                        $"Proveedor de base de datos no soportado: {dbProvider}");
+            }
+        }
+
+        private static void ConfigurarMySql(DbContextOptionsBuilder options, IConfiguration configuration)
+        {
+            var connectionString = ObtenerConnectionString(configuration, "MySQLConnection");
+            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
+        }
+
+        private static void ConfigurarSqlServer(DbContextOptionsBuilder options, IConfiguration configuration)
+        {
+            var connectionString = ObtenerConnectionString(configuration, "SqlServerConnection");
+            options.UseSqlServer(connectionString);
+        }
+
+        private static void ConfigurarPostgres(DbContextOptionsBuilder options, IConfiguration configuration)
+        {
+            var connectionString = ObtenerConnectionString(configuration, "PostgresConnection");
+            options.UseNpgsql(connectionString);
+        }
+
+        private static string ObtenerConnectionString(IConfiguration configuration, string key)
+        {
+            var connectionString = configuration.GetConnectionString(key);
+
+            if (string.IsNullOrEmpty(connectionString))
+                throw new Exception($"{key} no est� configurada.");
+
+            return connectionString;
         }
     }
 }
