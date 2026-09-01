@@ -18,15 +18,15 @@ namespace SaborExpress.Controllers
 
         [HttpGet("employee/{employeeId:int}")]
         public async Task<IActionResult> GetByEmployee(int employeeId) =>
-            Ok(await _service.GetByEmployeeAsync(employeeId));
-
-        [HttpGet("branch/{branchId:int}")]
+            Ok(await _service.GetByEmployeeAsync(employeeId, ObtenerUsuarioActualId()));
+        [HttpGet("branch/{branchId}")] 
         public async Task<IActionResult> GetByBranch(int branchId) =>
-            Ok(await _service.GetByBranchAsync(branchId));
+            Ok(await _service.GetByBranchAsync(branchId, ObtenerUsuarioActualId()));
+
 
         [HttpGet("branch/{branchId:int}/today")]
         public async Task<IActionResult> GetByBranchToday(int branchId) =>
-            Ok(await _service.GetByBranchTodayAsync(branchId));
+            Ok(await _service.GetByBranchTodayAsync(branchId, ObtenerUsuarioActualId()));
 
         // Nuevo: cualquier usuario autenticado puede consultar el turno activo
         // de un empleado ahora mismo (no solo Gerente/Administrador)
@@ -67,5 +67,7 @@ namespace SaborExpress.Controllers
 
         private int ObtenerUsuarioActualId() =>
             int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+        
     }
 }

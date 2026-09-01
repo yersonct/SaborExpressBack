@@ -23,7 +23,8 @@ namespace SaborExpress.Controllers
         [HttpGet("customer/{customerId:int}")]
         public async Task<IActionResult> GetByCustomer(int customerId)
         {
-            var result = await _addressService.GetByCustomerIdAsync(customerId);
+            var currentUserId = this.GetCurrentUserId();
+            var result = await _addressService.GetByCustomerIdAsync(customerId, currentUserId);
             return Ok(result);
         }
 
@@ -31,7 +32,8 @@ namespace SaborExpress.Controllers
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
-            var result = await _addressService.GetByIdAsync(id);
+            var currentUserId = this.GetCurrentUserId();
+            var result = await _addressService.GetByIdAsync(id, currentUserId);
             return Ok(result);
         }
 

@@ -19,7 +19,6 @@ namespace SaborExpress.Modules.Reviews.Validators
             if (dto.Rating < 1 || dto.Rating > 5)
                 throw new ArgumentException("La calificación debe estar entre 1 y 5");
 
-            // CAMBIADO: mensaje más claro sobre por qué no se puede calificar
             if (!await _reviewRepository.OrderExistsAndIsReviewableAsync(dto.OrderId))
                 throw new ArgumentException(
                     "Solo se pueden calificar pedidos entregados que el cliente hizo por su cuenta desde la app. " +

@@ -16,16 +16,28 @@ namespace SaborExpress.Modules.Reviews.Repositories
             _context = context;
         }
 
+        // Liviana: solo lo que ReviewMapper realmente usa (Customer),
+        // sin cargar el Order completo. AsNoTracking porque son solo lecturas.
         private IQueryable<Review> BaseQuery()
         {
             return _context.Reviews
                 .Include(x => x.Customer)
-                .Include(x => x.Order);
+                .AsNoTracking();
         }
 
         public async Task<Review?> GetByIdAsync(int id)
         {
             return await BaseQuery().FirstOrDefaultAsync(x => x.Id == id);
+        }
+
+        // Usada solo cuando de verdad hace falta saber la sede del pedido
+        // (ej. DeleteAsync, para validar el permiso del Administrador).
+        public async Task<Review?> GetByIdWithOrderAsync(int id)
+        {
+            return await _context.Reviews
+                .Include(x => x.Customer)
+                .Include(x => x.Order)
+                .FirstOrDefaultAsync(x => x.Id == id);
         }
 
         public async Task<Review?> GetByOrderIdAsync(int orderId)
@@ -43,6 +55,8 @@ namespace SaborExpress.Modules.Reviews.Repositories
 
         public async Task<List<Review>> GetByBranchIdAsync(int branchId)
         {
+            // El filtro por Order.BranchId genera un JOIN en SQL solo para
+            // filtrar — no requiere el Include para cargar el objeto completo.
             return await BaseQuery()
                 .Where(x => x.Order.BranchId == branchId)
                 .OrderByDescending(x => x.CreatedAt)
@@ -69,13 +83,12 @@ namespace SaborExpress.Modules.Reviews.Repositories
                 .FirstOrDefaultAsync();
         }
 
-
         public async Task<bool> OrderExistsAndIsReviewableAsync(int orderId)
         {
             return await _context.Orders
                 .AnyAsync(x => x.Id == orderId
                     && x.Status == OrderStatus.Delivered
-                    && x.Channel == OrderChannel.App); // CAMBIADO: ya no depende de OrderType
+                    && x.Channel == OrderChannel.App);
         }
 
         public async Task<bool> OrderHasReviewAsync(int orderId)

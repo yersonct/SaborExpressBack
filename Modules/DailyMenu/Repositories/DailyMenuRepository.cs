@@ -16,7 +16,8 @@ namespace SaborExpress.Modules.DailyMenu.Repositories
             _context.DailyMenuItems
                 .Include(i => i.Branch)
                 .Include(i => i.Product)
-                    .ThenInclude(p => p.Category);
+                    .ThenInclude(p => p.Category)
+                .AsNoTracking();
 
         public async Task<List<DailyMenuItem>> GetByBranchAndDateAsync(int branchId, DateTime date, MealPeriod? period)
         {

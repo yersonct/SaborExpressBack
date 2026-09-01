@@ -20,7 +20,7 @@ namespace SaborExpress.Data.Configurations
                 .IsRequired();
 
             builder.HasOne(x => x.Category)
-                .WithMany()
+                .WithMany(c => c.Products) 
                 .HasForeignKey(x => x.CategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
 

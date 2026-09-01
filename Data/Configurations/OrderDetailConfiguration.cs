@@ -23,7 +23,7 @@ namespace SaborExpress.Data.Configurations
             builder.HasIndex(x => x.OrderId);
 
             builder.HasOne(x => x.Order)
-                .WithMany()
+                .WithMany(o => o.OrderDetails) 
                 .HasForeignKey(x => x.OrderId)
                 .OnDelete(DeleteBehavior.Restrict);
 

@@ -9,7 +9,7 @@ namespace SaborExpress.Modules.Orders.DTOs
         public int OrderId { get; set; }
         public OrderStatus Status { get; set; }
         public string? Notes { get; set; }
-        public int ChangedByEmployeeId { get; set; }
+        public int? ChangedByEmployeeId { get; set; }   // CAMBIADO: ahora int?
         public string? ChangedByEmployeeName { get; set; }
         public DateTime ChangedAt { get; set; }
     }

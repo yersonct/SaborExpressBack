@@ -7,7 +7,8 @@ namespace SaborExpress.Modules.DailyMenu.Interfaces
 {
     public interface IDailyMenuService
     {
-        Task<List<DailyMenuItemResponseDto>> GetByBranchAndDateAsync(int branchId, DateTime date, string? period);
+// IDailyMenuService.cs
+        Task<List<DailyMenuItemResponseDto>> GetByBranchAndDateAsync(int branchId, DateTime date, string? period, int currentUserId);
         Task<List<DailyMenuItemResponseDto>> GetTodayAvailableAsync(int branchId, string? period);
         Task<DailyMenuItemResponseDto> GetByIdAsync(int id);
         Task<DailyMenuItemResponseDto> CreateAsync(CreateDailyMenuItemDto dto, int currentUserId);

@@ -23,13 +23,13 @@ namespace SaborExpress.Data.Configurations
             builder.HasIndex(x => x.OrderId);
 
             builder.HasOne(x => x.Order)
-                .WithMany()
+                .WithMany(o => o.StatusHistories)
                 .HasForeignKey(x => x.OrderId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+
             builder.Property(x => x.ChangedByEmployeeId)
-                .HasColumnName("changed_by_employee_id")
-                .IsRequired();
+                .HasColumnName("changed_by_employee_id");
 
             builder.HasOne(x => x.ChangedByEmployee)
                 .WithMany()

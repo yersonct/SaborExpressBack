@@ -5,7 +5,6 @@ using SaborExpress.Modules.Deliveries.Interfaces;
 using SaborExpress.Modules.Deliveries.Models;
 using SaborExpress.Modules.Orders.Enum;
 using SaborExpress.Modules.Orders.Models;
-using SaborExpress.Shared.Constants;
 
 namespace SaborExpress.Modules.Deliveries.Repositories
 {
@@ -46,18 +45,18 @@ namespace SaborExpress.Modules.Deliveries.Repositories
                 .ToListAsync();
         }
 
-        // NUEVO: pedidos listos, tipo Delivery, sin repartidor asignado todavía
-        public async Task<List<Order>> GetAvailableOrdersAsync()
+        // Ahora filtra por sede: solo ve pedidos disponibles de su propia sede
+        public async Task<List<Order>> GetAvailableOrdersAsync(int branchId)
         {
             return await _context.Orders
                 .Where(o => o.OrderType == OrderType.Delivery
+                    && o.BranchId == branchId
                     && (o.Status == OrderStatus.Ready || o.Status == OrderStatus.Confirmed)
                     && !_context.Deliveries.Any(d => d.OrderId == o.Id))
                 .OrderBy(o => o.CreatedAt)
                 .ToListAsync();
         }
 
-        // NUEVO
         public async Task<int?> GetEmployeeBranchIdAsync(int employeeId)
         {
             return await _context.Employees
@@ -66,7 +65,6 @@ namespace SaborExpress.Modules.Deliveries.Repositories
                 .FirstOrDefaultAsync();
         }
 
-        // NUEVO: entregas de todos los repartidores de una sede
         public async Task<List<Delivery>> GetByBranchIdAsync(int branchId)
         {
             return await BaseQuery()
@@ -96,13 +94,7 @@ namespace SaborExpress.Modules.Deliveries.Repositories
             return await _context.Deliveries.AnyAsync(x => x.OrderId == orderId);
         }
 
-        public async Task<bool> EmployeeHasDeliveryRoleAsync(int employeeId)
-        {
-            return await _context.Employees
-                .Where(e => e.Id == employeeId)
-                .SelectMany(e => e.User.UserRoles)
-                .AnyAsync(ur => ur.Role.Name == RoleNames.Repartidor);
-        }
+
 
         public async Task AddAsync(Delivery delivery)
         {

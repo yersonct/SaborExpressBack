@@ -26,7 +26,7 @@ namespace SaborExpress.Modules.Orders.Validators
             _orderRepository = orderRepository;
         }
 
-        public async Task ValidateCreateAsync(CreateOrderDto dto, int employeeId)
+        public async Task ValidateCreateAsync(CreateOrderDto dto, int? employeeId)
         {
             if (dto.BranchId <= 0)
                 throw new ArgumentException("Debe indicar una sucursal válida");
@@ -34,8 +34,9 @@ namespace SaborExpress.Modules.Orders.Validators
             if (!await _orderRepository.BranchExistsAsync(dto.BranchId))
                 throw new ArgumentException("La sucursal no existe");
 
-            // NUEVO: antes no se validaba que el empleado que crea el pedido exista realmente.
-            if (!await _orderRepository.EmployeeExistsAsync(employeeId))
+            // Solo se valida si viene un empleado (Mesero/Cajero/etc creando el pedido).
+            // Si es null (Cliente desde la app), no hay nada que validar aquí.
+            if (employeeId.HasValue && !await _orderRepository.EmployeeExistsAsync(employeeId.Value))
                 throw new ArgumentException("El empleado que intenta crear el pedido no existe.");
 
             if (dto.OrderType == OrderType.DineIn && !dto.TableId.HasValue)

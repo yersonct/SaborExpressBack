@@ -14,5 +14,9 @@ namespace SaborExpress.Modules.EmployeeSchedules.Interfaces
 
           // Nuevo: dice si el empleado tiene turno activo AHORA MISMO, y con que rol
         Task<CurrentShiftResponseDto> GetCurrentShiftAsync(int employeeId);
+
+        Task<List<EmployeeScheduleResponseDto>> GetByEmployeeAsync(int employeeId, int currentUserId);
+        Task<List<EmployeeScheduleResponseDto>> GetByBranchAsync(int branchId, int currentUserId);
+        Task<List<EmployeeScheduleResponseDto>> GetByBranchTodayAsync(int branchId, int currentUserId);
     }
 }

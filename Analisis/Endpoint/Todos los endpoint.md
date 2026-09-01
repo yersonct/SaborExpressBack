@@ -496,24 +496,7 @@ usuario tiene la app abierta, también le llega al instante).
   `DeliveryService.cs` (cuando pasa a `InTransit`/`Delivered`) — el CRUD y el
   hub ya funcionan, pero todavía nadie los está
 
-## 25. EmployeePermissions (`EmployeePermission`) — nuevo, construido en esta conversación
 
-**Qué es:** excepciones puntuales de permisos por empleado individual, por
-encima de lo que da su rol. Ejemplo: dos meseros con el mismo rol, uno con
-`ORDERS_EDIT` habilitado y el otro no.
-
-**Se relaciona con:** `Employee` (muchos a 1), `Permission` (muchos a 1).
-Complementa (no reemplaza) a `RolePermission`.
-
-| Método | Endpoint | Estado |
-|---|---|---|
-| GET | `/api/employee-permissions/employee/{employeeId}` | 🟢 Construido — lista las excepciones puntuales de un empleado |
-| GET | `/api/employee-permissions/effective/{employeeId}` | 🟢 Construido — calcula el resultado final (permisos del rol + excepciones otorgadas − excepciones revocadas) |
-| POST | `/api/employee-permissions` | 🟢 Construido — valida existencia de empleado/permiso, no duplicados, Administrador restringido a su sede |
-| PUT | `/api/employee-permissions/{id}` | 🟢 Construido — mismas restricciones de sede que create |
-| DELETE | `/api/employee-permissions/{id}` | 🟢 Construido — mismas restricciones de sede |
-
-**Pendiente:** pegar los archivos generados por el script, agregar `DbSet<EmployeePermission>` en `AppDbContext`, registrar las dependencias, compilar, correr la migración `AddEmployeePermissions`, y probar en Swagger.
 ---
 
 ## EmployeeSchedules (`EmployeeSchedule`) — nuevo ✅ COMPLETADO
@@ -540,7 +523,7 @@ asignado para ese momento.
 `Payment` ya confirmado (`Completed`). Factura física simple, con numeración
 consecutiva por sucursal — sin integración DIAN por ahora.
 
-**Se relaciona con:** `Payment` (1 a 1 — una factura por pago conf
+**Se relaciona con:** `Payment` (1 a 1 — una factura por pago conf)
 
 ---
 ## 26. DailyMenu (`DailyMenuItem`) — ✅ COMPLETADO

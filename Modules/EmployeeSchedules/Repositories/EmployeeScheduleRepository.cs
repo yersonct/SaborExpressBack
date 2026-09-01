@@ -19,13 +19,16 @@ namespace SaborExpress.Modules.EmployeeSchedules.Repositories
             return await _context.EmployeeSchedules
                 .Include(s => s.Employee).ThenInclude(e => e.User)
                 .Include(s => s.Branch)
+                .Include(s => s.Role)
                 .FirstOrDefaultAsync(s => s.Id == id);
         }
 
         public async Task<List<EmployeeSchedule>> GetByEmployeeAsync(int employeeId)
         {
             return await _context.EmployeeSchedules
+                .Include(s => s.Employee).ThenInclude(e => e.User)
                 .Include(s => s.Branch)
+                .Include(s => s.Role)
                 .Where(s => s.EmployeeId == employeeId)
                 .OrderByDescending(s => s.ShiftDate)
                 .ToListAsync();
@@ -35,6 +38,7 @@ namespace SaborExpress.Modules.EmployeeSchedules.Repositories
         {
             return await _context.EmployeeSchedules
                 .Include(s => s.Employee).ThenInclude(e => e.User)
+                .Include(s => s.Role)
                 .Where(s => s.BranchId == branchId)
                 .OrderBy(s => s.ShiftDate)
                 .ToListAsync();
@@ -44,6 +48,7 @@ namespace SaborExpress.Modules.EmployeeSchedules.Repositories
         {
             return await _context.EmployeeSchedules
                 .Include(s => s.Employee).ThenInclude(e => e.User)
+                .Include(s => s.Role)
                 .Where(s => s.BranchId == branchId && s.ShiftDate == date)
                 .OrderBy(s => s.StartTime)
                 .ToListAsync();

@@ -4,6 +4,7 @@ using SaborExpress.Modules.Addresses.Interfaces;
 using SaborExpress.Modules.Addresses.Mappings;
 using SaborExpress.Modules.Addresses.Models;
 using SaborExpress.Modules.Addresses.Validators;
+using SaborExpress.Modules.Auth.Interfaces;
 
 namespace SaborExpress.Modules.Addresses.Services
 {
@@ -11,26 +12,58 @@ namespace SaborExpress.Modules.Addresses.Services
     {
         private readonly IAddressRepository _addressRepository;
         private readonly AddressValidator _validator;
+        private readonly IAuthRepository _authRepository;
 
-        public AddressService(IAddressRepository addressRepository, AddressValidator validator)
+        public AddressService(
+            IAddressRepository addressRepository,
+            AddressValidator validator,
+            IAuthRepository authRepository)
         {
             _addressRepository = addressRepository;
             _validator = validator;
+            _authRepository = authRepository;
         }
 
-        public async Task<List<AddressResponseDto>> GetByCustomerIdAsync(int customerId)
+        // Solo el dueño puede listar todas sus direcciones.
+        // (Un Repartidor no necesita ver la lista completa de alguien, solo
+        // la dirección puntual de su entrega asignada — eso es GetByIdAsync.)
+        public async Task<List<AddressResponseDto>> GetByCustomerIdAsync(int customerId, int currentUserId)
         {
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            var isOwner = currentUser.Customer?.Id == customerId;
+            if (!isOwner)
+                throw new UnauthorizedAccessException("Solo puedes ver tus propias direcciones");
+
             var addresses = await _addressRepository.GetByCustomerIdAsync(customerId);
             return addresses.Select(AddressMapper.ToResponse).ToList();
         }
 
-        public async Task<AddressResponseDto> GetByIdAsync(int id)
+        // Dueño de la dirección, o Repartidor con una entrega asignada a esa dirección.
+        public async Task<AddressResponseDto> GetByIdAsync(int id, int currentUserId)
         {
             var address = await _addressRepository.GetByIdAsync(id);
             if (address == null)
                 throw new ArgumentException("La dirección no existe");
 
-            return AddressMapper.ToResponse(address);
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            var isOwner = currentUser.Customer?.Id == address.CustomerId;
+            if (isOwner)
+                return AddressMapper.ToResponse(address);
+
+            if (currentUser.Employee != null)
+            {
+                var isAssignedDeliveryPerson = await _addressRepository
+                    .IsAssignedToDeliveryPersonAsync(id, currentUser.Employee.Id);
+
+                if (isAssignedDeliveryPerson)
+                    return AddressMapper.ToResponse(address);
+            }
+
+            throw new UnauthorizedAccessException("No tienes permiso para ver esta dirección");
         }
 
         public async Task<AddressResponseDto> CreateAsync(CreateAddressDto dto, int customerId)

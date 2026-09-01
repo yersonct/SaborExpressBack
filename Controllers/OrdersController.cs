@@ -8,7 +8,6 @@ using SaborExpress.Shared.Constants;
 
 namespace SaborExpress.Controllers
 {
-    
     [Authorize]
     [ApiController]
     [Route("api/Orders")]
@@ -24,8 +23,9 @@ namespace SaborExpress.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateOrderDto dto)
         {
-            var employeeId = this.GetCurrentEmployeeId();
-            var isClienteChannel = User.IsInRole(RoleNames.Cliente); 
+            var isClienteChannel = User.IsInRole(RoleNames.Cliente);
+            int? employeeId = isClienteChannel ? null : this.GetCurrentEmployeeId();
+
             var result = await _orderService.CreateAsync(dto, employeeId, isClienteChannel);
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
@@ -40,7 +40,8 @@ namespace SaborExpress.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] OrderFilterDto filter)
         {
-            var result = await _orderService.GetAllAsync(filter);
+            var currentUserId = this.GetCurrentUserId();
+            var result = await _orderService.GetAllAsync(filter, currentUserId);
             return Ok(result);
         }
 
@@ -61,7 +62,8 @@ namespace SaborExpress.Controllers
         [HttpGet("branch/{branchId:int}")]
         public async Task<IActionResult> GetByBranch(int branchId)
         {
-            var result = await _orderService.GetByBranchIdAsync(branchId);
+            var currentUserId = this.GetCurrentUserId();
+            var result = await _orderService.GetByBranchIdAsync(branchId, currentUserId);
             return Ok(result);
         }
 

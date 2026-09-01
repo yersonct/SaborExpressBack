@@ -55,7 +55,11 @@ namespace SaborExpress.Modules.Addresses.Repositories
             _context.Addresses.Update(address);
             return Task.CompletedTask;
         }
-
+        public async Task<bool> IsAssignedToDeliveryPersonAsync(int addressId, int employeeId)
+        {
+            return await _context.Deliveries
+                .AnyAsync(d => d.AddressId == addressId && d.DeliveryPersonId == employeeId);
+        }
         public Task DeleteAsync(Address address)
         {
             _context.Addresses.Remove(address);

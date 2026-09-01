@@ -72,5 +72,12 @@ namespace SaborExpress.Modules.Payments.Repositories
         {
             await _context.SaveChangesAsync();
         }
+
+        public async Task<Payment?> GetByWompiReferenceAsync(string reference)
+        {
+            return await _context.Payments
+                .Include(x => x.Order)
+                .FirstOrDefaultAsync(x => x.WompiReference == reference);
+        }
     }
 }

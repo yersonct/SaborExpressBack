@@ -33,7 +33,7 @@ namespace SaborExpress.Configuration
 
             if (string.IsNullOrEmpty(secretKey))
                 throw new InvalidOperationException(
-                    "JwtSettings:SecretKey no est· configurado en User Secrets o appsettings");
+                    "JwtSettings:SecretKey no est√° configurado en User Secrets o appsettings");
 
             return secretKey;
         }
@@ -61,9 +61,23 @@ namespace SaborExpress.Configuration
         {
             return new JwtBearerEvents
             {
+                // Nuevo: permite que el JWT viaje por query string, necesario
+                // para que el front pueda conectarse a /hubs/notifications
+                // (SignalR/WebSockets no permite headers personalizados).
+                OnMessageReceived = context =>
+                {
+                    var accessToken = context.Request.Query["access_token"];
+
+                    var path = context.HttpContext.Request.Path;
+                    if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                    {
+                        context.Token = accessToken;
+                    }
+
+                    return Task.CompletedTask;
+                },
                 OnAuthenticationFailed = context =>
                 {
-
                     return Task.CompletedTask;
                 },
                 OnTokenValidated = async context =>
@@ -72,7 +86,7 @@ namespace SaborExpress.Configuration
 
                     if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
                     {
-                        context.Fail("Token inv·lido: no contiene el identificador del usuario.");
+                        context.Fail("Token inv√°lido: no contiene el identificador del usuario.");
                         return;
                     }
 
@@ -87,15 +101,18 @@ namespace SaborExpress.Configuration
                         return;
                     }
 
+                    // El token puede venir del header normal (requests HTTP comunes)
+                    // o del query string (conexi√≥n a SignalR).
                     var rawToken = context.HttpContext.Request.Headers.Authorization
-                    .ToString()
-                    .Replace("Bearer ", string.Empty, StringComparison.OrdinalIgnoreCase);
+                        .ToString()
+                        .Replace("Bearer ", string.Empty, StringComparison.OrdinalIgnoreCase);
 
-
+                    if (string.IsNullOrEmpty(rawToken))
+                        rawToken = context.HttpContext.Request.Query["access_token"].ToString();
 
                     if (string.IsNullOrEmpty(user.Token) || user.Token != rawToken)
                     {
-                        context.Fail("Tu sesiÛn ya no es v·lida: se iniciÛ sesiÛn en otro dispositivo.");
+                        context.Fail("Tu sesi√≥n ya no es v√°lida: se inici√≥ sesi√≥n en otro dispositivo.");
                     }
                 }
             };

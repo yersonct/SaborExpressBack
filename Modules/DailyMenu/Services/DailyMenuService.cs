@@ -1,3 +1,4 @@
+// Modules/DailyMenu/Services/DailyMenuService.cs
 using SaborExpress.Modules.Auth.Interfaces;
 using SaborExpress.Modules.DailyMenu.DTOs;
 using SaborExpress.Modules.DailyMenu.Enum;
@@ -30,8 +31,10 @@ namespace SaborExpress.Modules.DailyMenu.Services
             _authorizationService = authorizationService;
         }
 
-        public async Task<List<DailyMenuItemResponseDto>> GetByBranchAndDateAsync(int branchId, DateTime date, string? period)
+        public async Task<List<DailyMenuItemResponseDto>> GetByBranchAndDateAsync(int branchId, DateTime date, string? period, int currentUserId)
         {
+            await EnsureCanViewBranchMenuAsync(branchId, currentUserId);
+
             var parsedPeriod = ParsePeriod(period);
             var items = await _repository.GetByBranchAndDateAsync(branchId, date, parsedPeriod);
             return items.Select(i => i.ToResponseDto()).ToList();
@@ -197,6 +200,18 @@ namespace SaborExpress.Modules.DailyMenu.Services
             var canToggle = await _authorizationService.CanPerformActionAsync(employeeId, PermissionNames.ActivarDesactivarPlato);
             if (!canToggle)
                 throw new InvalidOperationException("No tienes permiso para activar/desactivar platos ahora mismo.");
+        }
+
+        private async Task EnsureCanViewBranchMenuAsync(int branchId, int currentUserId)
+        {
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            if (currentUser.HasRole(RoleNames.Gerente))
+                return;
+
+            if (currentUser.Employee?.BranchId != branchId)
+                throw new InvalidOperationException("Solo puedes ver el menú de la sede a la que perteneces.");
         }
     }
 }

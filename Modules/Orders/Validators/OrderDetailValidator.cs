@@ -3,7 +3,8 @@ using SaborExpress.Modules.Orders.DTOs;
 using SaborExpress.Modules.Orders.Enum;
 using SaborExpress.Modules.Orders.Interfaces;
 using SaborExpress.Modules.Orders.Models;
-using SaborExpress.Modules.Products.Interfaces; // ajusta el namespace si es distinto
+using SaborExpress.Modules.Products.Interfaces;
+using SaborExpress.Modules.Products.Models;
 
 namespace SaborExpress.Modules.Orders.Validators
 {
@@ -11,82 +12,81 @@ namespace SaborExpress.Modules.Orders.Validators
     {
         private readonly IOrderDetailRepository _orderDetailRepository;
         private readonly IProductRepository _productRepository;
-        private readonly IOrderRepository _orderRepository; // NUEVO
+        private readonly IOrderRepository _orderRepository;
 
         public OrderDetailValidator(
             IOrderDetailRepository orderDetailRepository,
             IProductRepository productRepository,
-            IOrderRepository orderRepository) // NUEVO
+            IOrderRepository orderRepository)
         {
             _orderDetailRepository = orderDetailRepository;
             _productRepository = productRepository;
-            _orderRepository = orderRepository; // NUEVO
+            _orderRepository = orderRepository;
         }
 
-        public async Task ValidateCreateAsync(int orderId, CreateOrderDetailDto dto)
+        // Devuelve el Product ya validado, para que el service no tenga que
+        // volver a consultarlo (evita la consulta duplicada).
+        public async Task<Product> ValidateCreateAsync(int orderId, CreateOrderDetailDto dto)
         {
             if (dto.ProductId <= 0)
-                throw new ArgumentException("Debe indicar un producto válido");
+                throw new ArgumentException("Debe indicar un producto valido");
 
             if (dto.Quantity <= 0)
                 throw new ArgumentException("La cantidad debe ser mayor a cero");
 
-            var order = await _orderRepository.GetByIdAsync(orderId); // NUEVO
-            if (order == null)
-                throw new ArgumentException("El pedido no existe");
+            var orderStatus = await _orderRepository.GetOrderStatusAsync(orderId)
+                ?? throw new ArgumentException("El pedido no existe");
 
-            ValidateOrderIsEditable(order); // NUEVO
+            ValidateOrderIsEditable(orderStatus);
 
-            var product = await _productRepository.GetByIdAsync(dto.ProductId);
-            if (product == null)
-                throw new ArgumentException("El producto no existe");
+            var product = await _productRepository.GetByIdAsync(dto.ProductId)
+                ?? throw new ArgumentException("El producto no existe");
 
             if (!product.Status)
-                throw new ArgumentException("El producto está agotado y no se puede agregar al pedido");
+                throw new ArgumentException("El producto esta agotado y no se puede agregar al pedido");
+
+            return product;
         }
 
-        public async Task ValidateUpdate(OrderDetail orderDetail, UpdateOrderDetailDto dto) // ahora async
+        public async Task ValidateUpdate(OrderDetail orderDetail, UpdateOrderDetailDto dto)
         {
             if (dto.Quantity <= 0)
                 throw new ArgumentException("La cantidad debe ser mayor a cero");
 
             if (orderDetail.Status == OrderDetailStatus.Voided)
-                throw new ArgumentException("No se puede modificar una línea anulada");
+                throw new ArgumentException("No se puede modificar una linea anulada");
 
             if (orderDetail.Status == OrderDetailStatus.Delivered)
-                throw new ArgumentException("No se puede modificar una línea ya entregada");
+                throw new ArgumentException("No se puede modificar una linea ya entregada");
 
-            var order = await _orderRepository.GetByIdAsync(orderDetail.OrderId); // NUEVO
-            if (order == null)
-                throw new ArgumentException("El pedido no existe");
+            var orderStatus = await _orderRepository.GetOrderStatusAsync(orderDetail.OrderId)
+                ?? throw new ArgumentException("El pedido no existe");
 
-            ValidateOrderIsEditable(order); // NUEVO
+            ValidateOrderIsEditable(orderStatus);
         }
 
-        public async Task ValidateVoid(OrderDetail orderDetail, VoidOrderDetailDto dto) // ahora async
+        public async Task ValidateVoid(OrderDetail orderDetail, VoidOrderDetailDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.Reason))
-                throw new ArgumentException("Debe indicar el motivo de la anulación");
+                throw new ArgumentException("Debe indicar el motivo de la anulacion");
 
             if (orderDetail.Status == OrderDetailStatus.Voided)
-                throw new ArgumentException("Esta línea ya fue anulada");
+                throw new ArgumentException("Esta linea ya fue anulada");
 
             if (orderDetail.Status == OrderDetailStatus.Delivered)
-                throw new ArgumentException("No se puede anular una línea ya entregada");
+                throw new ArgumentException("No se puede anular una linea ya entregada");
 
-            var order = await _orderRepository.GetByIdAsync(orderDetail.OrderId); // NUEVO
-            if (order == null)
-                throw new ArgumentException("El pedido no existe");
+            var orderStatus = await _orderRepository.GetOrderStatusAsync(orderDetail.OrderId)
+                ?? throw new ArgumentException("El pedido no existe");
 
-            ValidateOrderIsEditable(order); // NUEVO
+            ValidateOrderIsEditable(orderStatus);
         }
 
-        // NUEVO: regla compartida por los 3 métodos
-        private static void ValidateOrderIsEditable(Order order)
+        private static void ValidateOrderIsEditable(OrderStatus status)
         {
-            if (order.Status == OrderStatus.Delivered || order.Status == OrderStatus.Cancelled)
+            if (status == OrderStatus.Delivered || status == OrderStatus.Cancelled)
                 throw new ArgumentException(
-                    $"No se pueden modificar las líneas de un pedido en estado {order.Status}");
+                    $"No se pueden modificar las lineas de un pedido en estado {status}");
         }
     }
 }

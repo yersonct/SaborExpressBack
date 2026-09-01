@@ -14,7 +14,7 @@ namespace SaborExpress.Modules.Deliveries.Controllers
     public class DeliveriesController : ControllerBase
     {
         private readonly IDeliveryService _deliveryService;
-        private readonly IDeliveryRepository _deliveryRepository; // para resolver sede del Administrador
+        private readonly IDeliveryRepository _deliveryRepository;
 
         public DeliveriesController(IDeliveryService deliveryService, IDeliveryRepository deliveryRepository)
         {
@@ -22,16 +22,15 @@ namespace SaborExpress.Modules.Deliveries.Controllers
             _deliveryRepository = deliveryRepository;
         }
 
-        // Ver pedidos sin repartidor, listos para tomar
         [HttpGet("available")]
         [Authorize(Roles = RoleNames.Repartidor)]
         public async Task<IActionResult> GetAvailable()
         {
-            var result = await _deliveryService.GetAvailableOrdersAsync();
+            var currentEmployeeId = this.GetCurrentEmployeeId();
+            var result = await _deliveryService.GetAvailableOrdersAsync(currentEmployeeId);
             return Ok(result);
         }
 
-        // Tomar un pedido — solo Repartidor, se asigna a sí mismo
         [HttpPost]
         [Authorize(Roles = RoleNames.Repartidor)]
         public async Task<IActionResult> Create([FromBody] CreateDeliveryDto dto)
@@ -48,7 +47,6 @@ namespace SaborExpress.Modules.Deliveries.Controllers
             return Ok(result);
         }
 
-        // Repartidor: solo las suyas | Administrador: solo si es de su sede | Gerente: cualquiera
         [HttpGet("employee/{deliveryPersonId}")]
         public async Task<IActionResult> GetByDeliveryPersonId(int deliveryPersonId)
         {
@@ -73,7 +71,6 @@ namespace SaborExpress.Modules.Deliveries.Controllers
             return Ok(result);
         }
 
-        // Administrador (su sede) / Gerente (cualquier sede): ver todos los repartos de una sede
         [HttpGet("branch/{branchId}")]
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador}")]
         public async Task<IActionResult> GetByBranch(int branchId)
@@ -91,7 +88,6 @@ namespace SaborExpress.Modules.Deliveries.Controllers
             return Ok(result);
         }
 
-        // Confirmar entrega — el repartidor asignado, o Administrador como respaldo (Gerente NO)
         [HttpPatch("{id}/status")]
         public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateDeliveryStatusDto dto)
         {

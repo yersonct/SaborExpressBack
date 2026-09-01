@@ -1,0 +1,627 @@
+﻿
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Notifications\DTOs\CreateNotificationDto.cs =====
+
+using SaborExpress.Modules.Notifications.Enum;
+
+namespace SaborExpress.Modules.Notifications.DTOs
+{
+    public class CreateNotificationDto
+    {
+        // Debe venir uno de los dos: destinatario puntual o toda una sede
+        public int? UserId { get; set; }
+        public int? BranchId { get; set; }
+
+        public string Title { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+
+        public NotificationType Type { get; set; } = NotificationType.Manual;
+
+        public string? RelatedEntityType { get; set; }
+        public int? RelatedEntityId { get; set; }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Notifications\DTOs\NotificationDto.cs =====
+
+using SaborExpress.Modules.Notifications.Enum;
+
+namespace SaborExpress.Modules.Notifications.DTOs
+{
+    public class NotificationDto
+    {
+        public int Id { get; set; }
+        public int UserId { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public NotificationType Type { get; set; }
+        public string? RelatedEntityType { get; set; }
+        public int? RelatedEntityId { get; set; }
+        public bool IsRead { get; set; }
+        public DateTime? ReadAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Notifications\Enum\NotificationType.cs =====
+
+namespace SaborExpress.Modules.Notifications.Enum
+{
+    public enum NotificationType
+    {
+        OrderCreated,
+        OrderStatusChanged,
+        OrderReady,
+        DeliveryAssigned,
+        DeliveryInTransit,
+        DeliveryCompleted,
+        ShiftEndingSoon,  
+        PaymentConfirmed,
+        Manual,
+        System
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Notifications\Hubs\NotificationHub.cs =====
+
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
+using System.Security.Claims;
+
+namespace SaborExpress.Modules.Notifications.Hubs
+{
+    [Authorize]
+    public class NotificationHub : Hub
+    {
+        public override async Task OnConnectedAsync()
+        {
+            var userId = GetUserId();
+            if (userId != null)
+                await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(userId.Value));
+
+            await base.OnConnectedAsync();
+        }
+
+        public override async Task OnDisconnectedAsync(Exception? exception)
+        {
+            var userId = GetUserId();
+            if (userId != null)
+                await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(userId.Value));
+
+            await base.OnDisconnectedAsync(exception);
+        }
+
+private int? GetUserId()
+{
+    var claim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    return int.TryParse(claim, out var id) ? id : null;
+}
+
+        public static string GroupName(int userId) => $"user-{userId}";
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Notifications\Interfaces\INotificationRepository.cs =====
+
+using SaborExpress.Modules.Notifications.Models;
+
+namespace SaborExpress.Modules.Notifications.Interfaces
+{
+    public interface INotificationRepository
+    {
+        Task<Notification> AddAsync(Notification notification);
+        Task<List<Notification>> AddRangeAsync(List<Notification> notifications);
+        Task<Notification?> GetByIdAsync(int id);
+        Task<List<Notification>> GetByUserIdAsync(int userId, bool? unreadOnly = null);
+        Task<int> GetUnreadCountAsync(int userId);
+        Task<List<int>> GetUserIdsByBranchIdAsync(int branchId);
+        Task UpdateAsync(Notification notification);
+        Task MarkAllAsReadAsync(int userId);
+        Task DeleteAsync(Notification notification);
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Notifications\Interfaces\IUserNotificationService.cs =====
+
+using SaborExpress.Modules.Notifications.DTOs;
+using SaborExpress.Modules.Notifications.Enum;
+
+namespace SaborExpress.Modules.Notifications.Interfaces
+{
+    public interface IUserNotificationService
+    {
+        Task<NotificationDto> CreateAsync(
+            int userId, string title, string message, NotificationType type,
+            string? relatedEntityType = null, int? relatedEntityId = null);
+
+        Task<List<NotificationDto>> CreateBulkAsync(
+            List<int> userIds, string title, string message, NotificationType type,
+            string? relatedEntityType = null, int? relatedEntityId = null);
+
+        Task<List<NotificationDto>> CreateManualAsync(CreateNotificationDto dto);
+
+        Task<List<NotificationDto>> GetByUserAsync(int userId, bool? unreadOnly = null);
+        Task<int> GetUnreadCountAsync(int userId);
+        Task<NotificationDto> MarkAsReadAsync(int id, int userId);
+        Task MarkAllAsReadAsync(int userId);
+        Task DeleteAsync(int id, int userId);
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Notifications\Mappings\NotificationMappings.cs =====
+
+using SaborExpress.Modules.Notifications.DTOs;
+using SaborExpress.Modules.Notifications.Models;
+
+namespace SaborExpress.Modules.Notifications.Mappings
+{
+    public static class NotificationMappings
+    {
+        public static NotificationDto ToDto(this Notification entity)
+        {
+            return new NotificationDto
+            {
+                Id = entity.Id,
+                UserId = entity.UserId,
+                Title = entity.Title,
+                Message = entity.Message,
+                Type = entity.Type,
+                RelatedEntityType = entity.RelatedEntityType,
+                RelatedEntityId = entity.RelatedEntityId,
+                IsRead = entity.IsRead,
+                ReadAt = entity.ReadAt,
+                CreatedAt = entity.CreatedAt
+            };
+        }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Notifications\Models\Notification.cs =====
+
+using SaborExpress.Modules.Auth.Models;
+using SaborExpress.Modules.Notifications.Enum;
+
+namespace SaborExpress.Modules.Notifications.Models
+{
+    public class Notification
+    {
+        public int Id { get; set; }
+
+        public int UserId { get; set; }
+        public User User { get; set; } = null!;
+
+        public string Title { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+
+        public NotificationType Type { get; set; }
+
+        // Referencia polimÃ³rfica: a quÃ© entidad apunta esta notificaciÃ³n
+        public string? RelatedEntityType { get; set; } // "Order", "Delivery", "Payment"...
+        public int? RelatedEntityId { get; set; }
+
+        public bool IsRead { get; set; } = false;
+        public DateTime? ReadAt { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Notifications\Repositories\NotificationRepository.cs =====
+
+using Microsoft.EntityFrameworkCore;
+using SaborExpress.Data;
+using SaborExpress.Modules.Notifications.Interfaces;
+using SaborExpress.Modules.Notifications.Models;
+
+namespace SaborExpress.Modules.Notifications.Repositories
+{
+    public class NotificationRepository : INotificationRepository
+    {
+        private readonly AppDbContext _context;
+
+        public NotificationRepository(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<Notification> AddAsync(Notification notification)
+        {
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync();
+            return notification;
+        }
+
+        public async Task<List<Notification>> AddRangeAsync(List<Notification> notifications)
+        {
+            _context.Notifications.AddRange(notifications);
+            await _context.SaveChangesAsync();
+            return notifications;
+        }
+
+        public async Task<Notification?> GetByIdAsync(int id)
+        {
+            return await _context.Notifications.FirstOrDefaultAsync(n => n.Id == id);
+        }
+
+        public async Task<List<Notification>> GetByUserIdAsync(int userId, bool? unreadOnly = null)
+        {
+            var query = _context.Notifications.Where(n => n.UserId == userId);
+
+            if (unreadOnly == true)
+                query = query.Where(n => !n.IsRead);
+
+            return await query.OrderByDescending(n => n.CreatedAt).ToListAsync();
+        }
+
+        public async Task<int> GetUnreadCountAsync(int userId)
+        {
+            return await _context.Notifications.CountAsync(n => n.UserId == userId && !n.IsRead);
+        }
+
+        public async Task<List<int>> GetUserIdsByBranchIdAsync(int branchId)
+        {
+            // Ajusta esta consulta a como realmente relacionas Employee -> User -> Branch en tu esquema
+            return await _context.Employees
+                .Where(e => e.BranchId == branchId && e.Status != "Retirado")
+                .Select(e => e.UserId)
+                .ToListAsync();
+        }
+
+        public async Task UpdateAsync(Notification notification)
+        {
+            _context.Notifications.Update(notification);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task MarkAllAsReadAsync(int userId)
+        {
+            var unread = await _context.Notifications
+                .Where(n => n.UserId == userId && !n.IsRead)
+                .ToListAsync();
+
+            foreach (var n in unread)
+            {
+                n.IsRead = true;
+                n.ReadAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task DeleteAsync(Notification notification)
+        {
+            _context.Notifications.Remove(notification);
+            await _context.SaveChangesAsync();
+        }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Notifications\Services\NotificationService.cs =====
+
+using Microsoft.AspNetCore.SignalR;
+using SaborExpress.Modules.Notifications.DTOs;
+using SaborExpress.Modules.Notifications.Enum;
+using SaborExpress.Modules.Notifications.Hubs;
+using SaborExpress.Modules.Notifications.Interfaces;
+using SaborExpress.Modules.Notifications.Mappings;
+using SaborExpress.Modules.Notifications.Models;
+
+namespace SaborExpress.Modules.Notifications.Services
+{
+    public class UserNotificationService : IUserNotificationService  
+    {
+        private readonly INotificationRepository _repository;
+        private readonly IHubContext<NotificationHub> _hubContext;
+
+        public UserNotificationService(INotificationRepository repository, IHubContext<NotificationHub> hubContext)
+        {
+            _repository = repository;
+            _hubContext = hubContext;
+        }
+
+        public async Task<NotificationDto> CreateAsync(
+            int userId, string title, string message, NotificationType type,
+            string? relatedEntityType = null, int? relatedEntityId = null)
+        {
+            var entity = new Notification
+            {
+                UserId = userId,
+                Title = title,
+                Message = message,
+                Type = type,
+                RelatedEntityType = relatedEntityType,
+                RelatedEntityId = relatedEntityId
+            };
+
+            await _repository.AddAsync(entity);
+            var dto = entity.ToDto();
+
+            await PushAsync(userId, dto);
+            return dto;
+        }
+
+        public async Task<List<NotificationDto>> CreateBulkAsync(
+            List<int> userIds, string title, string message, NotificationType type,
+            string? relatedEntityType = null, int? relatedEntityId = null)
+        {
+            var entities = userIds.Distinct().Select(uid => new Notification
+            {
+                UserId = uid,
+                Title = title,
+                Message = message,
+                Type = type,
+                RelatedEntityType = relatedEntityType,
+                RelatedEntityId = relatedEntityId
+            }).ToList();
+
+            await _repository.AddRangeAsync(entities);
+            var dtos = entities.Select(e => e.ToDto()).ToList();
+
+            foreach (var dto in dtos)
+                await PushAsync(dto.UserId, dto);
+
+            return dtos;
+        }
+
+        public async Task<List<NotificationDto>> CreateManualAsync(CreateNotificationDto dto)
+        {
+            if (dto.UserId == null && dto.BranchId == null)
+                throw new ArgumentException("Debes especificar UserId o BranchId como destinatario.");
+
+            if (dto.UserId != null)
+            {
+                var result = await CreateAsync(dto.UserId.Value, dto.Title, dto.Message, dto.Type,
+                    dto.RelatedEntityType, dto.RelatedEntityId);
+                return new List<NotificationDto> { result };
+            }
+
+            var userIds = await _repository.GetUserIdsByBranchIdAsync(dto.BranchId!.Value);
+            if (userIds.Count == 0)
+                throw new KeyNotFoundException("No hay empleados activos en esa sucursal.");
+
+            return await CreateBulkAsync(userIds, dto.Title, dto.Message, dto.Type,
+                dto.RelatedEntityType, dto.RelatedEntityId);
+        }
+
+        public async Task<List<NotificationDto>> GetByUserAsync(int userId, bool? unreadOnly = null)
+        {
+            var list = await _repository.GetByUserIdAsync(userId, unreadOnly);
+            return list.Select(n => n.ToDto()).ToList();
+        }
+
+        public Task<int> GetUnreadCountAsync(int userId) => _repository.GetUnreadCountAsync(userId);
+
+        public async Task<NotificationDto> MarkAsReadAsync(int id, int userId)
+        {
+            var entity = await _repository.GetByIdAsync(id)
+                ?? throw new KeyNotFoundException("NotificaciÃ³n no encontrada.");
+
+            if (entity.UserId != userId)
+                throw new UnauthorizedAccessException("No puedes marcar como leÃ­da una notificaciÃ³n que no es tuya.");
+
+            if (!entity.IsRead)
+            {
+                entity.IsRead = true;
+                entity.ReadAt = DateTime.UtcNow;
+                await _repository.UpdateAsync(entity);
+            }
+
+            return entity.ToDto();
+        }
+
+        public Task MarkAllAsReadAsync(int userId) => _repository.MarkAllAsReadAsync(userId);
+
+        public async Task DeleteAsync(int id, int userId)
+        {
+            var entity = await _repository.GetByIdAsync(id)
+                ?? throw new KeyNotFoundException("NotificaciÃ³n no encontrada.");
+
+            if (entity.UserId != userId)
+                throw new UnauthorizedAccessException("No puedes eliminar una notificaciÃ³n que no es tuya.");
+
+            await _repository.DeleteAsync(entity);
+        }
+
+        private async Task PushAsync(int userId, NotificationDto dto)
+        {
+            await _hubContext.Clients
+                .Group(NotificationHub.GroupName(userId))
+                .SendAsync("ReceiveNotification", dto);
+        }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Controllers\NotificationsController.cs =====
+
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using SaborExpress.Modules.Notifications.DTOs;
+using SaborExpress.Modules.Notifications.Interfaces;
+using SaborExpress.Shared.Extensions;
+
+namespace SaborExpress.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize]
+    public class NotificationsController : ControllerBase
+    {
+        private readonly IUserNotificationService   _service;
+
+        public NotificationsController(IUserNotificationService   service)
+        {
+            _service = service;
+        }
+
+        [HttpGet("user/{userId:int}")]
+        public async Task<IActionResult> GetByUser(int userId, [FromQuery] bool? unreadOnly)
+        {
+            // Un usuario solo puede ver sus propias notificaciones
+            if (userId != this.GetCurrentUserId())
+                return Forbid();
+
+            var result = await _service.GetByUserAsync(userId, unreadOnly);
+            return Ok(result);
+        }
+
+        [HttpGet("user/{userId:int}/unread-count")]
+        public async Task<IActionResult> GetUnreadCount(int userId)
+        {
+            if (userId != this.GetCurrentUserId())
+                return Forbid();
+
+            var count = await _service.GetUnreadCountAsync(userId);
+            return Ok(new { unreadCount = count });
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Gerente,Administrador")]
+        public async Task<IActionResult> Create([FromBody] CreateNotificationDto dto)
+        {
+            var result = await _service.CreateManualAsync(dto);
+            return StatusCode(201, result);
+        }
+
+        [HttpPatch("{id:int}/read")]
+        public async Task<IActionResult> MarkAsRead(int id)
+        {
+            var result = await _service.MarkAsReadAsync(id, this.GetCurrentUserId());
+            return Ok(result);
+        }
+
+        [HttpPatch("user/{userId:int}/read-all")]
+        public async Task<IActionResult> MarkAllAsRead(int userId)
+        {
+            if (userId != this.GetCurrentUserId())
+                return Forbid();
+
+            await _service.MarkAllAsReadAsync(userId);
+            return NoContent();
+        }
+
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            await _service.DeleteAsync(id, this.GetCurrentUserId());
+            return NoContent();
+        }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Configuration\JwtConfiguration.cs =====
+
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using SaborExpress.Modules.Auth.Interfaces;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+
+namespace SaborExpress.Configuration
+{
+    public static class JwtConfiguration
+    {
+        public static IServiceCollection AddJwtConfiguration(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
+
+            var secretKey = ObtenerSecretKey(configuration);
+
+            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(options =>
+                {
+                    options.TokenValidationParameters = ConstruirParametrosValidacion(configuration, secretKey);
+                    options.Events = ConstruirEventos();
+                });
+
+            return services;
+        }
+
+        private static string ObtenerSecretKey(IConfiguration configuration)
+        {
+            var secretKey = configuration["JwtSettings:SecretKey"];
+
+            if (string.IsNullOrEmpty(secretKey))
+                throw new InvalidOperationException(
+                    "JwtSettings:SecretKey no está configurado en User Secrets o appsettings");
+
+            return secretKey;
+        }
+
+        private static TokenValidationParameters ConstruirParametrosValidacion(
+            IConfiguration configuration, string secretKey)
+        {
+            return new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+
+                ValidIssuer = configuration["JwtSettings:Issuer"],
+                ValidAudience = configuration["JwtSettings:Audience"],
+
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+
+                ClockSkew = TimeSpan.Zero
+            };
+        }
+
+        private static JwtBearerEvents ConstruirEventos()
+        {
+            return new JwtBearerEvents
+            {
+                OnAuthenticationFailed = context =>
+                {
+
+                    return Task.CompletedTask;
+                },
+                OnTokenValidated = async context =>
+                {
+                    var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                    if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+                    {
+                        context.Fail("Token inválido: no contiene el identificador del usuario.");
+                        return;
+                    }
+
+                    var authRepository = context.HttpContext.RequestServices
+                        .GetRequiredService<IAuthRepository>();
+
+                    var user = await authRepository.GetByIdWithRelationsAsync(userId);
+
+                    if (user == null)
+                    {
+                        context.Fail("Usuario no encontrado.");
+                        return;
+                    }
+
+                    var rawToken = context.HttpContext.Request.Headers.Authorization
+                    .ToString()
+                    .Replace("Bearer ", string.Empty, StringComparison.OrdinalIgnoreCase);
+
+
+
+                    if (string.IsNullOrEmpty(user.Token) || user.Token != rawToken)
+                    {
+                        context.Fail("Tu sesión ya no es válida: se inició sesión en otro dispositivo.");
+                    }
+                }
+            };
+        }
+    }
+}

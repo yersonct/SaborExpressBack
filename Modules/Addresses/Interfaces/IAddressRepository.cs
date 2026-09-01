@@ -8,6 +8,7 @@ namespace SaborExpress.Modules.Addresses.Interfaces
         Task<Address?> GetByIdAsync(int id);
         Task<List<Address>> GetByCustomerIdAsync(int customerId);
         Task<bool> CustomerExistsAsync(int customerId);
+        Task<bool> IsAssignedToDeliveryPersonAsync(int addressId, int employeeId); // nuevo
         Task ClearDefaultForCustomerAsync(int customerId, int? excludeAddressId = null);
 
         Task AddAsync(Address address);

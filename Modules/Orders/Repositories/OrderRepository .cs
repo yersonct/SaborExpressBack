@@ -16,7 +16,8 @@ namespace SaborExpress.Modules.Orders.Repositories
             _context = context;
         }
 
-        private IQueryable<Order> BaseQuery()
+        // Para el detalle completo (GetByIdAsync): sí necesita las líneas y productos.
+        private IQueryable<Order> DetailQuery()
         {
             return _context.Orders
                 .Include(x => x.Customer)
@@ -27,14 +28,25 @@ namespace SaborExpress.Modules.Orders.Repositories
                     .ThenInclude(d => d.Product);
         }
 
+        // Para listados (resumen): NO necesita OrderDetails ni Product,
+        // solo lo que OrderSummaryDto realmente usa.
+        private IQueryable<Order> SummaryQuery()
+        {
+            return _context.Orders
+                .Include(x => x.Customer)
+                .Include(x => x.Employee)
+                .Include(x => x.Table)
+                .AsNoTracking();
+        }
+
         public async Task<Order?> GetByIdAsync(int id)
         {
-            return await BaseQuery().FirstOrDefaultAsync(x => x.Id == id);
+            return await DetailQuery().FirstOrDefaultAsync(x => x.Id == id);
         }
 
         public async Task<List<Order>> GetAllAsync(int? branchId, OrderStatus? status)
         {
-            var query = BaseQuery().AsQueryable();
+            var query = SummaryQuery();
 
             if (branchId.HasValue)
                 query = query.Where(x => x.BranchId == branchId.Value);
@@ -49,7 +61,7 @@ namespace SaborExpress.Modules.Orders.Repositories
 
         public async Task<List<Order>> GetByTableIdAsync(int tableId)
         {
-            return await BaseQuery()
+            return await SummaryQuery()
                 .Where(x => x.TableId == tableId)
                 .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync();
@@ -57,7 +69,7 @@ namespace SaborExpress.Modules.Orders.Repositories
 
         public async Task<List<Order>> GetByCustomerIdAsync(int customerId)
         {
-            return await BaseQuery()
+            return await SummaryQuery()
                 .Where(x => x.CustomerId == customerId)
                 .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync();
@@ -65,7 +77,7 @@ namespace SaborExpress.Modules.Orders.Repositories
 
         public async Task<List<Order>> GetByBranchIdAsync(int branchId)
         {
-            return await BaseQuery()
+            return await SummaryQuery()
                 .Where(x => x.BranchId == branchId)
                 .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync();
@@ -106,26 +118,50 @@ namespace SaborExpress.Modules.Orders.Repositories
         {
             await _context.SaveChangesAsync();
         }
+
         public async Task RecalculateTotalsAsync(int orderId, decimal taxRate)
         {
-            var order = await _context.Orders
-                .Include(x => x.OrderDetails)
-                .FirstOrDefaultAsync(x => x.Id == orderId);
-
-            if (order == null) return;
-
-            // Solo cuentan las líneas que siguen "vivas" — una anulada no debe cobrarse
-            var subTotal = order.OrderDetails
-                .Where(d => d.Status != OrderDetailStatus.Voided
+            var subTotal = await _context.OrderDetails
+                .Where(d => d.OrderId == orderId
+                        && d.Status != OrderDetailStatus.Voided
                         && d.Status != OrderDetailStatus.Cancelled)
-                .Sum(d => d.SubTotal);
+                .SumAsync(d => d.SubTotal);
 
-            order.SubTotal = subTotal;
-            order.Tax = Math.Round(subTotal * taxRate, 2);
-            order.Total = order.SubTotal + order.Tax;
-            order.UpdatedAt = DateTime.UtcNow;
+            var tax = Math.Round(subTotal * taxRate, 2);
+            var total = subTotal + tax;
 
-            await _context.SaveChangesAsync();
+            await _context.Orders
+                .Where(o => o.Id == orderId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(o => o.SubTotal, subTotal)
+                    .SetProperty(o => o.Tax, tax)
+                    .SetProperty(o => o.Total, total)
+                    .SetProperty(o => o.UpdatedAt, DateTime.UtcNow));
+        }
+
+        public async Task<OrderStatus?> GetOrderStatusAsync(int orderId)
+        {
+            return await _context.Orders
+                .Where(o => o.Id == orderId)
+                .Select(o => (OrderStatus?)o.Status)
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<OrderDeliveryInfo?> GetDeliveryInfoAsync(int orderId)
+        {
+            return await _context.Orders
+                .Where(o => o.Id == orderId)
+                .Select(o => new OrderDeliveryInfo
+                {
+                    Id = o.Id,
+                    OrderType = o.OrderType,
+                    Status = o.Status,
+                    CustomerId = o.CustomerId,
+                    BranchId = o.BranchId,
+                    Total = o.Total,
+                    CreatedAt = o.CreatedAt
+                })
+                .FirstOrDefaultAsync();
         }
     }
 }

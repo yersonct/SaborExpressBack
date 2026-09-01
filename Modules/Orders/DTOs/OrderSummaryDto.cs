@@ -3,13 +3,12 @@ using SaborExpress.Modules.Orders.Enum;
 
 namespace SaborExpress.Modules.Orders.DTOs
 {
-    // Para listados (GetAll, por mesa, por cliente, por sucursal) - sin las líneas del pedido
     public class OrderSummaryDto
     {
         public int Id { get; set; }
         public int? CustomerId { get; set; }
         public string? CustomerName { get; set; }
-        public int EmployeeId { get; set; }
+        public int? EmployeeId { get; set; }        // CAMBIADO: ahora int?
         public string? EmployeeName { get; set; }
         public int? TableId { get; set; }
         public int? TableNumber { get; set; }

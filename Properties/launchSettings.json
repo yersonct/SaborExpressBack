@@ -19,7 +19,11 @@
         "EmailSettings__Password": "mvsj zgwj zlms etdu",
         "RefreshTokenExpirationHours": "12",
         "InitialManager__Email": "yersonrubiano64@gmail.com",
-        "InitialManager__Password": "CambiaEstaClave123!"
+        "InitialManager__Password": "CambiaEstaClave123!",
+
+        "Wompi__PublicKey": "pub_test_gWOm94KLt9hO9tnwkrY4RIvitWaYewh5",
+        "Wompi__IntegritySecret": "test_integrity_xQSMQpNPTIfpuHb1NgAEixoAcj1J1eL4",
+        "Wompi__EventsSecret": "test_events_T4qWn1h96acDPhP3lmjrU7yXGt86aetb"
       }
     },
     "Container (Dockerfile)": {

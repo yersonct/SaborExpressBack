@@ -54,7 +54,7 @@ namespace SaborExpress.Data.Configurations
 
             // Configuraci�n de la Relaci�n (Foreign Key) con la tabla Users
             builder.HasOne(x => x.User)
-                .WithMany() // Dejar vac�o si User no tiene una lista de c�digos
+                .WithMany(u => u.PasswordResetCodes)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade); // Si se borra el usuario, se borran sus c�digos
         }

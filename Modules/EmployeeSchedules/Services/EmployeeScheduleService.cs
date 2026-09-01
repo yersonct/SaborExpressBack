@@ -4,6 +4,7 @@ using SaborExpress.Modules.Branches.Interfaces;
 using SaborExpress.Modules.EmployeeSchedules.DTOs;
 using SaborExpress.Modules.EmployeeSchedules.Interfaces;
 using SaborExpress.Modules.EmployeeSchedules.Mappings;
+using SaborExpress.Modules.EmployeeSchedules.Validators;
 using SaborExpress.Modules.Employees.Interfaces;
 using SaborExpress.Modules.Employees.Models;
 using SaborExpress.Shared.Constants;
@@ -17,17 +18,19 @@ namespace SaborExpress.Modules.EmployeeSchedules.Services
         private readonly IEmployeeRepository _employeeRepository;
         private readonly IBranchRepository _branchRepository;
         private readonly IAuthRepository _authRepository;
-
+        private readonly EmployeeScheduleValidator _validator;
         public EmployeeScheduleService(
             IEmployeeScheduleRepository repository,
             IEmployeeRepository employeeRepository,
             IBranchRepository branchRepository,
-            IAuthRepository authRepository)
+            IAuthRepository authRepository,
+            EmployeeScheduleValidator validator)
         {
             _repository = repository;
             _employeeRepository = employeeRepository;
             _branchRepository = branchRepository;
             _authRepository = authRepository;
+            _validator = validator;
         }
 
         public async Task<List<EmployeeScheduleResponseDto>> GetByEmployeeAsync(int employeeId)
@@ -51,6 +54,7 @@ namespace SaborExpress.Modules.EmployeeSchedules.Services
 
         public async Task<EmployeeScheduleResponseDto> CreateAsync(CreateEmployeeScheduleDto dto, int currentUserId)
         {
+            _validator.ValidateCreate(dto);
             ValidateTimeRange(dto.StartTime, dto.EndTime);
 
             var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
@@ -80,6 +84,7 @@ namespace SaborExpress.Modules.EmployeeSchedules.Services
 
         public async Task<EmployeeScheduleResponseDto> UpdateAsync(int id, UpdateEmployeeScheduleDto dto, int currentUserId)
         {
+             _validator.ValidateUpdate(dto);
             ValidateTimeRange(dto.StartTime, dto.EndTime);
 
             var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
@@ -201,6 +206,43 @@ namespace SaborExpress.Modules.EmployeeSchedules.Services
                 StartTime = fullSchedule.StartTime,
                 EndTime = fullSchedule.EndTime
             };
+        }
+
+        public async Task<List<EmployeeScheduleResponseDto>> GetByEmployeeAsync(int employeeId, int currentUserId)
+        {
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            var targetEmployee = await _employeeRepository.GetByIdAsync(employeeId)
+                ?? throw new KeyNotFoundException("El empleado no existe.");
+
+            EnsureBranchAccess(currentUser, targetEmployee.BranchId);
+
+            var schedules = await _repository.GetByEmployeeAsync(employeeId);
+            return schedules.Select(s => s.ToResponseDto()).ToList();
+        }
+
+        public async Task<List<EmployeeScheduleResponseDto>> GetByBranchAsync(int branchId, int currentUserId)
+        {
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            EnsureBranchAccess(currentUser, branchId);
+
+            var schedules = await _repository.GetByBranchAsync(branchId);
+            return schedules.Select(s => s.ToResponseDto()).ToList();
+        }
+
+        public async Task<List<EmployeeScheduleResponseDto>> GetByBranchTodayAsync(int branchId, int currentUserId)
+        {
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            EnsureBranchAccess(currentUser, branchId);
+
+            var today = DateOnly.FromDateTime(DateTime.Now);
+            var schedules = await _repository.GetByBranchAndDateAsync(branchId, today);
+            return schedules.Select(s => s.ToResponseDto()).ToList();
         }
     }
 }

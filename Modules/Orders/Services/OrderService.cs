@@ -1,4 +1,5 @@
 // Modules/Orders/Services/OrderService.cs
+using SaborExpress.Modules.Auth.Interfaces;
 using SaborExpress.Modules.Configurations.Interfaces;
 using SaborExpress.Modules.Orders.DTOs;
 using SaborExpress.Modules.Orders.Enum;
@@ -6,9 +7,9 @@ using SaborExpress.Modules.Orders.Interfaces;
 using SaborExpress.Modules.Orders.Mappings;
 using SaborExpress.Modules.Orders.Models;
 using SaborExpress.Modules.Orders.Validators;
-using SaborExpress.Shared.Interfaces;
 using SaborExpress.Shared.Constants;
-
+using SaborExpress.Shared.Extensions;
+using SaborExpress.Shared.Interfaces;
 
 namespace SaborExpress.Modules.Orders.Services
 {
@@ -19,22 +20,25 @@ namespace SaborExpress.Modules.Orders.Services
         private readonly OrderValidator _validator;
         private readonly IAuthorizationService _authorizationService;
         private readonly IConfigurationRepository _configurationRepository;
+        private readonly IAuthRepository _authRepository;
 
         public OrderService(
             IOrderRepository orderRepository,
             IOrderStatusHistoryRepository statusHistoryRepository,
             OrderValidator validator,
             IAuthorizationService authorizationService,
-            IConfigurationRepository configurationRepository)
+            IConfigurationRepository configurationRepository,
+            IAuthRepository authRepository)
         {
             _orderRepository = orderRepository;
             _statusHistoryRepository = statusHistoryRepository;
             _validator = validator;
             _authorizationService = authorizationService;
             _configurationRepository = configurationRepository;
+            _authRepository = authRepository;
         }
 
-        public async Task<OrderResponseDto> CreateAsync(CreateOrderDto dto, int employeeId, bool isClienteChannel)
+        public async Task<OrderResponseDto> CreateAsync(CreateOrderDto dto, int? employeeId, bool isClienteChannel)
         {
             await EnsureBranchIsOpenAsync(dto.BranchId);
 
@@ -63,7 +67,7 @@ namespace SaborExpress.Modules.Orders.Services
                 OrderId = order.Id,
                 ChangedByEmployeeId = employeeId,
                 Status = OrderStatus.Pending,
-                Notes = "Pedido creado",
+                Notes = isClienteChannel ? "Pedido creado por el cliente desde la app" : "Pedido creado",
                 ChangedAt = DateTime.UtcNow
             });
             await _statusHistoryRepository.SaveChangesAsync();
@@ -81,9 +85,12 @@ namespace SaborExpress.Modules.Orders.Services
             return OrderMapper.ToResponse(order);
         }
 
-        public async Task<List<OrderSummaryDto>> GetAllAsync(OrderFilterDto filter)
+        // CAMBIADO: recibe currentUserId, fuerza la sede si el usuario no es Gerente
+        public async Task<List<OrderSummaryDto>> GetAllAsync(OrderFilterDto filter, int currentUserId)
         {
-            var orders = await _orderRepository.GetAllAsync(filter.BranchId, filter.Status);
+            var effectiveBranchId = await ResolveAllowedBranchIdAsync(filter.BranchId, currentUserId);
+
+            var orders = await _orderRepository.GetAllAsync(effectiveBranchId, filter.Status);
             return orders.Select(OrderMapper.ToSummary).ToList();
         }
 
@@ -99,8 +106,11 @@ namespace SaborExpress.Modules.Orders.Services
             return orders.Select(OrderMapper.ToSummary).ToList();
         }
 
-        public async Task<List<OrderSummaryDto>> GetByBranchIdAsync(int branchId)
+        // CAMBIADO: recibe currentUserId, valida que la sede pedida sea la propia (salvo Gerente)
+        public async Task<List<OrderSummaryDto>> GetByBranchIdAsync(int branchId, int currentUserId)
         {
+            await EnsureCanAccessBranchAsync(branchId, currentUserId);
+
             var orders = await _orderRepository.GetByBranchIdAsync(branchId);
             return orders.Select(OrderMapper.ToSummary).ToList();
         }
@@ -163,7 +173,7 @@ namespace SaborExpress.Modules.Orders.Services
             if (order == null)
                 throw new ArgumentException("El pedido no existe");
 
-            await EnsureCanCancelAsync(employeeId); 
+            await EnsureCanCancelAsync(employeeId);
 
             _validator.ValidateCancel(order, dto);
 
@@ -187,9 +197,6 @@ namespace SaborExpress.Modules.Orders.Services
             return OrderMapper.ToResponse(cancelled!);
         }
 
-        // Nuevo: valida que la sede esté dentro de su horario de apertura/cierre
-        // configurado en BranchSetting (Key = OPENING_TIME / CLOSING_TIME).
-        // Si la sede no tiene esas configuraciones, se asume abierta 24h.
         private async Task EnsureBranchIsOpenAsync(int branchId)
         {
             var openingConfig = await _configurationRepository.GetByKeyAsync(branchId, "OPENING_TIME");
@@ -201,7 +208,7 @@ namespace SaborExpress.Modules.Orders.Services
             if (!TimeOnly.TryParse(openingConfig.Value, out var opening) ||
                 !TimeOnly.TryParse(closingConfig.Value, out var closing))
             {
-                return; // configuracion mal cargada, no bloquea pedidos por un dato invalido
+                return;
             }
 
             var now = TimeOnly.FromDateTime(DateTime.Now);
@@ -226,6 +233,7 @@ namespace SaborExpress.Modules.Orders.Services
 
             throw new InvalidOperationException("No tienes permiso para modificar este pedido.");
         }
+
         private async Task EnsureCanUpdateStatusAsync(int employeeId)
         {
             var canUpdateStatus = await _authorizationService.CanPerformActionAsync(employeeId, PermissionNames.ActualizarEstadoPedido);
@@ -238,6 +246,36 @@ namespace SaborExpress.Modules.Orders.Services
             var canCancel = await _authorizationService.CanPerformActionAsync(employeeId, PermissionNames.CancelarPedido);
             if (!canCancel)
                 throw new InvalidOperationException("No tienes permiso para cancelar pedidos.");
+        }
+
+        // Nuevo: si el usuario es Administrador (o cualquier no-Gerente), fuerza
+        // el filtro a SU sede, sin importar qué branchId haya pedido o si no
+        // mandó ninguno. Si es Gerente, respeta el filtro tal como vino.
+        private async Task<int?> ResolveAllowedBranchIdAsync(int? requestedBranchId, int currentUserId)
+        {
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            if (currentUser.HasRole(RoleNames.Gerente))
+                return requestedBranchId;
+
+            var ownBranchId = currentUser.Employee?.BranchId
+                ?? throw new InvalidOperationException("El usuario actual no tiene una sede asignada.");
+
+            return ownBranchId;
+        }
+
+        // Nuevo: para el endpoint branch/{id}, donde el Id viene explícito en la URL
+        private async Task EnsureCanAccessBranchAsync(int branchId, int currentUserId)
+        {
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            if (currentUser.HasRole(RoleNames.Gerente))
+                return;
+
+            if (currentUser.Employee?.BranchId != branchId)
+                throw new InvalidOperationException("Solo puedes ver los pedidos de tu propia sede.");
         }
     }
 }

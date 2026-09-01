@@ -5,16 +5,13 @@ namespace SaborExpress.Modules.Deliveries.Interfaces
 {
     public interface IDeliveryService
     {
-        // CAMBIADO: recibe currentEmployeeId (quien toma el pedido)
         Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int currentEmployeeId);
 
-        // NUEVO
-        Task<List<AvailableOrderDto>> GetAvailableOrdersAsync();
+        // Ahora recibe currentEmployeeId para resolver su sede internamente
+        Task<List<AvailableOrderDto>> GetAvailableOrdersAsync(int currentEmployeeId);
 
         Task<List<DeliveryResponseDto>> GetByOrderIdAsync(int orderId);
         Task<List<DeliveryResponseDto>> GetByDeliveryPersonIdAsync(int deliveryPersonId);
-
-        // NUEVO
         Task<List<DeliveryResponseDto>> GetByBranchIdAsync(int branchId);
 
         Task<DeliveryResponseDto> UpdateStatusAsync(

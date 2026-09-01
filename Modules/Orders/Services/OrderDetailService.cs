@@ -5,7 +5,6 @@ using SaborExpress.Modules.Orders.Interfaces;
 using SaborExpress.Modules.Orders.Mappings;
 using SaborExpress.Modules.Orders.Models;
 using SaborExpress.Modules.Orders.Validators;
-using SaborExpress.Modules.Products.Interfaces; // ajusta si es distinto
 
 namespace SaborExpress.Modules.Orders.Services
 {
@@ -13,23 +12,20 @@ namespace SaborExpress.Modules.Orders.Services
     {
         private readonly IOrderDetailRepository _orderDetailRepository;
         private readonly IOrderDetailHistoryRepository _historyRepository;
-        private readonly IProductRepository _productRepository;
         private readonly IOrderRepository _orderRepository;
         private readonly OrderDetailValidator _validator;
 
-        // TODO: mover a Configurations (TAX_RATE) cuando ese módulo esté listo
+        // TODO: mover a Configurations (TAX_RATE) cuando se defina el rate por sede
         private const decimal TaxRate = 0.19m;
 
         public OrderDetailService(
             IOrderDetailRepository orderDetailRepository,
             IOrderDetailHistoryRepository historyRepository,
-            IProductRepository productRepository,
             IOrderRepository orderRepository,
             OrderDetailValidator validator)
         {
             _orderDetailRepository = orderDetailRepository;
             _historyRepository = historyRepository;
-            _productRepository = productRepository;
             _orderRepository = orderRepository;
             _validator = validator;
         }
@@ -42,9 +38,8 @@ namespace SaborExpress.Modules.Orders.Services
 
         public async Task<OrderDetailResponseDto> CreateAsync(int orderId, CreateOrderDetailDto dto, int employeeId)
         {
-            await _validator.ValidateCreateAsync(orderId, dto);
-
-            var product = await _productRepository.GetByIdAsync(dto.ProductId);
+            // El validator ya trajo y valido el producto; no hace falta pedirlo de nuevo
+            var product = await _validator.ValidateCreateAsync(orderId, dto);
 
             var orderDetail = new OrderDetail
             {
@@ -52,7 +47,7 @@ namespace SaborExpress.Modules.Orders.Services
                 ProductId = dto.ProductId,
                 Quantity = dto.Quantity,
                 Notes = dto.Notes,
-                UnitPrice = product!.Price,
+                UnitPrice = product.Price,
                 SubTotal = product.Price * dto.Quantity,
                 LastModifiedByEmployeeId = employeeId,
                 Status = OrderDetailStatus.Pending
@@ -79,11 +74,10 @@ namespace SaborExpress.Modules.Orders.Services
 
         public async Task<OrderDetailResponseDto> UpdateAsync(int id, UpdateOrderDetailDto dto, int employeeId)
         {
-            var orderDetail = await _orderDetailRepository.GetByIdAsync(id);
-            if (orderDetail == null)
-                throw new ArgumentException("La línea del pedido no existe");
+            var orderDetail = await _orderDetailRepository.GetByIdAsync(id)
+                ?? throw new ArgumentException("La linea del pedido no existe");
 
-            await _validator.ValidateUpdate(orderDetail, dto); // ahora con await
+            await _validator.ValidateUpdate(orderDetail, dto);
 
             var oldValue = $"Qty: {orderDetail.Quantity}, Notes: {orderDetail.Notes}";
 
@@ -114,11 +108,10 @@ namespace SaborExpress.Modules.Orders.Services
 
         public async Task<OrderDetailResponseDto> VoidAsync(int id, VoidOrderDetailDto dto, int employeeId)
         {
-            var orderDetail = await _orderDetailRepository.GetByIdAsync(id);
-            if (orderDetail == null)
-                throw new ArgumentException("La línea del pedido no existe");
+            var orderDetail = await _orderDetailRepository.GetByIdAsync(id)
+                ?? throw new ArgumentException("La linea del pedido no existe");
 
-            await _validator.ValidateVoid(orderDetail, dto); // ahora con await
+            await _validator.ValidateVoid(orderDetail, dto);
 
             var oldStatus = orderDetail.Status;
             orderDetail.Status = OrderDetailStatus.Voided;

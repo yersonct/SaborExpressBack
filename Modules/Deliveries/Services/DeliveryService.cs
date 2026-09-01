@@ -50,9 +50,12 @@ namespace SaborExpress.Modules.Deliveries.Services
             return DeliveryMapper.ToResponse(created!);
         }
 
-        public async Task<List<AvailableOrderDto>> GetAvailableOrdersAsync()
+        public async Task<List<AvailableOrderDto>> GetAvailableOrdersAsync(int currentEmployeeId)
         {
-            var orders = await _deliveryRepository.GetAvailableOrdersAsync();
+            var branchId = await _deliveryRepository.GetEmployeeBranchIdAsync(currentEmployeeId)
+                ?? throw new InvalidOperationException("No se pudo determinar tu sede.");
+
+            var orders = await _deliveryRepository.GetAvailableOrdersAsync(branchId);
             return orders.Select(o => new AvailableOrderDto
             {
                 OrderId = o.Id,
@@ -90,8 +93,6 @@ namespace SaborExpress.Modules.Deliveries.Services
             if (delivery == null)
                 throw new ArgumentException("El domicilio no existe");
 
-            // El respaldo del Administrador sigue siendo por rol, no por permiso —
-            // es una excepción operativa, no algo que se le "otorgue" a alguien.
             if (!isAdmin)
             {
                 var canUpdate = await _authorizationService.CanPerformActionAsync(currentEmployeeId, PermissionNames.ActualizarEstadoEntrega);

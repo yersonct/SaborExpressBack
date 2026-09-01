@@ -28,18 +28,16 @@ namespace SaborExpress.Modules.Deliveries.Validators
             _orderRepository = orderRepository;
         }
 
-        // CAMBIADO: ahora recibe currentEmployeeId (quien toma el pedido), no viene del dto
-       public async Task ValidateCreateAsync(CreateDeliveryDto dto, int currentEmployeeId)
+        public async Task ValidateCreateAsync(CreateDeliveryDto dto, int currentEmployeeId)
         {
             if (dto.OrderId <= 0)
-                throw new ArgumentException("Debe indicar un pedido válido");
+                throw new ArgumentException("Debe indicar un pedido valido");
 
             if (dto.AddressId <= 0)
-                throw new ArgumentException("Debe indicar una dirección válida");
+                throw new ArgumentException("Debe indicar una direccion valida");
 
-            var order = await _orderRepository.GetByIdAsync(dto.OrderId);
-            if (order == null)
-                throw new ArgumentException("El pedido no existe");
+            var order = await _orderRepository.GetDeliveryInfoAsync(dto.OrderId)
+                ?? throw new ArgumentException("El pedido no existe");
 
             if (order.OrderType != OrderType.Delivery)
                 throw new ArgumentException("Solo se puede tomar repartos de pedidos tipo Delivery");
@@ -53,18 +51,15 @@ namespace SaborExpress.Modules.Deliveries.Validators
                 throw new ArgumentException("Este pedido ya fue tomado por otro repartidor");
 
             if (!await _deliveryRepository.AddressExistsAsync(dto.AddressId))
-                throw new ArgumentException("La dirección no existe");
+                throw new ArgumentException("La direccion no existe");
 
             if (order.CustomerId.HasValue &&
                 !await _deliveryRepository.AddressBelongsToCustomerAsync(dto.AddressId, order.CustomerId.Value))
             {
-                throw new ArgumentException("La dirección no pertenece al cliente de este pedido");
+                throw new ArgumentException("La direccion no pertenece al cliente de este pedido");
             }
-
-            // Ya no valida rol aquí — lo hace CanPerformActionAsync en el servicio, con turno incluido
         }
 
-        // CAMBIADO: isAdmin en vez de isManagerOrAdmin — el Gerente ya NO tiene esta excepción
         public void ValidateStatusChange(
             Delivery delivery,
             UpdateDeliveryStatusDto dto,

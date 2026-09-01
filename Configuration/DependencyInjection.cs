@@ -265,6 +265,7 @@ namespace SaborExpress.Configuration
             services.AddScoped<IPaymentRepository, PaymentRepository>();
             services.AddScoped<IPaymentService, PaymentService>();
             services.AddScoped<PaymentValidator>();
+            services.AddScoped<IWompiClient, WompiClient>();
 
             return services;
         }

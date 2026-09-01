@@ -5,6 +5,7 @@ using SaborExpress.Modules.Payments.DTOs;
 using SaborExpress.Modules.Payments.Interfaces;
 using SaborExpress.Shared.Extensions;
 using System.Security.Claims;
+using System.Text.Json;
 
 namespace SaborExpress.Controllers
 {
@@ -24,7 +25,7 @@ namespace SaborExpress.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreatePaymentDto dto)
         {
-            var cashierId = this.GetCurrentEmployeeId(); // TODO: en pagos en línea, usar un "cajero de sistema"
+            var cashierId = this.GetCurrentEmployeeId();
             var currentUserId = GetCurrentUserId();
             var result = await _paymentService.CreateAsync(dto, cashierId, currentUserId);
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
@@ -61,6 +62,46 @@ namespace SaborExpress.Controllers
         {
             var result = await _paymentService.GetAllAsync(filter);
             return Ok(result);
+        }
+
+        // POST /api/Payments/wompi/init
+        // El cliente inicia el pago desde el checkout de la app.
+        // Devuelve los datos que el widget de Wompi necesita para renderizarse
+        // (llave pública, referencia, monto en centavos, firma de integridad).
+        [HttpPost("wompi/init")]
+        public async Task<IActionResult> InitWompiPayment([FromBody] InitWompiPaymentDto dto)
+        {
+            var currentUserId = GetCurrentUserId();
+            var result = await _paymentService.InitWompiPaymentAsync(dto, currentUserId);
+            return Ok(result);
+        }
+
+        // POST /api/Payments/wompi/webhook
+        // Wompi llama esto de forma asíncrona para confirmar el resultado del pago.
+        // Sin [Authorize]: Wompi no manda un JWT de este sistema, manda su propia
+        // firma de verificación (validada dentro del Service).
+        [AllowAnonymous]
+        [HttpPost("wompi/webhook")]
+        public async Task<IActionResult> WompiWebhook()
+        {
+            Request.EnableBuffering();
+            using var reader = new StreamReader(Request.Body, leaveOpen: true);
+            var rawBody = await reader.ReadToEndAsync();
+            Request.Body.Position = 0;
+
+            var signatureHeader = Request.Headers["X-Event-Checksum"].FirstOrDefault() ?? string.Empty;
+
+            var webhook = JsonSerializer.Deserialize<WompiWebhookDto>(
+                rawBody,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (webhook == null)
+                return BadRequest();
+
+            await _paymentService.ProcessWompiWebhookAsync(webhook, rawBody, signatureHeader);
+
+            // Wompi solo necesita un 200 para no reintentar el envío
+            return Ok();
         }
 
         private int GetCurrentUserId()

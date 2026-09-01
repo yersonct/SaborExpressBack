@@ -27,8 +27,7 @@ namespace SaborExpress.Data.Configurations
                 .OnDelete(DeleteBehavior.Restrict);
 
             builder.Property(x => x.EmployeeId)
-                .HasColumnName("employee_id")
-                .IsRequired();
+                .HasColumnName("employee_id");
 
             builder.HasIndex(x => x.EmployeeId);
 

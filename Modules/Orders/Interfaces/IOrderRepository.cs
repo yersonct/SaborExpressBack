@@ -1,4 +1,3 @@
-// Modules/Orders/Interfaces/IOrderRepository.cs
 using SaborExpress.Modules.Orders.Enum;
 using SaborExpress.Modules.Orders.Models;
 
@@ -21,5 +20,10 @@ namespace SaborExpress.Modules.Orders.Interfaces
         Task UpdateAsync(Order order);
         Task SaveChangesAsync();
         Task RecalculateTotalsAsync(int orderId, decimal taxRate);
+
+        Task<OrderStatus?> GetOrderStatusAsync(int orderId);
+
+        // Nuevo: proyeccion liviana para el modulo Deliveries
+        Task<OrderDeliveryInfo?> GetDeliveryInfoAsync(int orderId);
     }
 }

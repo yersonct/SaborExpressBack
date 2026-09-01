@@ -19,7 +19,9 @@ namespace SaborExpress.Modules.Payments.Mappings
                 Method = payment.Method,
                 Amount = payment.Amount,
                 Status = payment.Status,
-                PaidAt = payment.PaidAt
+                PaidAt = payment.PaidAt,
+                WompiReference = payment.WompiReference,
+                WompiTransactionId = payment.WompiTransactionId
             };
         }
     }

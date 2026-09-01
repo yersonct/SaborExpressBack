@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SaborExpress")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+be4c67c489affc262a28dc7e19853a6a1e0ea91b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ea6372957029a5621e33721d73d25feaccf56340")]
 [assembly: System.Reflection.AssemblyProductAttribute("SaborExpress")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SaborExpress")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

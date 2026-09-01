@@ -21,10 +21,14 @@ namespace SaborExpress.Controllers
         public async Task<IActionResult> GetTodayAvailable(int branchId, [FromQuery] string? period) =>
             Ok(await _service.GetTodayAvailableAsync(branchId, period));
 
+    // DailyMenuController.cs
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador}")]
         [HttpGet("branch/{branchId:int}/date/{date:datetime}")]
-        public async Task<IActionResult> GetByBranchAndDate(int branchId, DateTime date, [FromQuery] string? period) =>
-            Ok(await _service.GetByBranchAndDateAsync(branchId, date, period));
+        public async Task<IActionResult> GetByBranchAndDate(int branchId, DateTime date, [FromQuery] string? period)
+        {
+            var currentUserId = GetCurrentUserId();
+            return Ok(await _service.GetByBranchAndDateAsync(branchId, date, period, currentUserId));
+        }
 
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador}")]
         [HttpGet("{id:int}")]

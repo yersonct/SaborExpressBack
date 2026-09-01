@@ -1,9 +1,11 @@
+// Modules/Payments/Enum/PaymentMethod.cs
 namespace SaborExpress.Modules.Payments.Enum
-{  
-  public enum PaymentMethod
+{
+    public enum PaymentMethod
     {
         Cash,
         Card,
-        Transfer
+        Transfer,
+        Wompi // nuevo: pago vía widget embebido
     }
 }

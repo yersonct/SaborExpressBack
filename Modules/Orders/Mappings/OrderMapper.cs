@@ -12,7 +12,7 @@ namespace SaborExpress.Modules.Orders.Mappings
             {
                 Id = order.Id,
                 CustomerId = order.CustomerId,
-                CustomerName = order.Customer?.Name, // ajusta si tu Customer no tiene "Name"
+                CustomerName = order.Customer?.Name,
                 EmployeeId = order.EmployeeId,
                 EmployeeName = order.Employee == null
                     ? null

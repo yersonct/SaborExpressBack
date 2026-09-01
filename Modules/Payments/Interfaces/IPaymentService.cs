@@ -10,5 +10,9 @@ namespace SaborExpress.Modules.Payments.Interfaces
         Task<PaymentResponseDto> GetByIdAsync(int id);
         Task<PaymentResponseDto> RefundAsync(int id, RefundPaymentDto dto, int currentUserId);
         Task<List<PaymentResponseDto>> GetAllAsync(PaymentFilterDto filter);
+
+        // Nuevos, para Wompi
+        Task<WompiWidgetDataDto> InitWompiPaymentAsync(InitWompiPaymentDto dto, int currentUserId);
+        Task ProcessWompiWebhookAsync(WompiWebhookDto webhook, string rawBody, string signatureHeader);
     }
 }

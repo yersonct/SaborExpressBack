@@ -198,14 +198,9 @@ namespace SaborExpress.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("user_id");
 
-                    b.Property<int?>("UserId1")
-                        .HasColumnType("integer");
-
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
-
-                    b.HasIndex("UserId1");
 
                     b.ToTable("password_reset_codes", (string)null);
                 });
@@ -829,7 +824,7 @@ namespace SaborExpress.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("customer_id");
 
-                    b.Property<int>("EmployeeId")
+                    b.Property<int?>("EmployeeId")
                         .HasColumnType("integer")
                         .HasColumnName("employee_id");
 
@@ -907,9 +902,6 @@ namespace SaborExpress.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("order_id");
 
-                    b.Property<int?>("OrderId1")
-                        .HasColumnType("integer");
-
                     b.Property<int>("ProductId")
                         .HasColumnType("integer")
                         .HasColumnName("product_id");
@@ -937,8 +929,6 @@ namespace SaborExpress.Migrations
                     b.HasIndex("LastModifiedByEmployeeId");
 
                     b.HasIndex("OrderId");
-
-                    b.HasIndex("OrderId1");
 
                     b.HasIndex("ProductId");
 
@@ -1007,7 +997,7 @@ namespace SaborExpress.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("changed_at");
 
-                    b.Property<int>("ChangedByEmployeeId")
+                    b.Property<int?>("ChangedByEmployeeId")
                         .HasColumnType("integer")
                         .HasColumnName("changed_by_employee_id");
 
@@ -1020,9 +1010,6 @@ namespace SaborExpress.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("order_id");
 
-                    b.Property<int?>("OrderId1")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -1034,8 +1021,6 @@ namespace SaborExpress.Migrations
                     b.HasIndex("ChangedByEmployeeId");
 
                     b.HasIndex("OrderId");
-
-                    b.HasIndex("OrderId1");
 
                     b.ToTable("order_status_history", (string)null);
                 });
@@ -1053,7 +1038,7 @@ namespace SaborExpress.Migrations
                         .HasColumnType("decimal(10,2)")
                         .HasColumnName("amount");
 
-                    b.Property<int>("CashierId")
+                    b.Property<int?>("CashierId")
                         .HasColumnType("integer")
                         .HasColumnName("cashier_id");
 
@@ -1077,11 +1062,25 @@ namespace SaborExpress.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
 
+                    b.Property<string>("WompiReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("wompi_reference");
+
+                    b.Property<string>("WompiTransactionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("wompi_transaction_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CashierId");
 
                     b.HasIndex("OrderId");
+
+                    b.HasIndex("WompiReference")
+                        .IsUnique()
+                        .HasFilter("wompi_reference IS NOT NULL");
 
                     b.ToTable("payments", (string)null);
                 });
@@ -1141,9 +1140,6 @@ namespace SaborExpress.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("category_id");
 
-                    b.Property<int?>("CategoryId1")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1181,8 +1177,6 @@ namespace SaborExpress.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
-
-                    b.HasIndex("CategoryId1");
 
                     b.ToTable("products", (string)null);
                 });
@@ -1432,14 +1426,10 @@ namespace SaborExpress.Migrations
             modelBuilder.Entity("SaborExpress.Modules.Auth.Models.PasswordResetCode", b =>
                 {
                     b.HasOne("SaborExpress.Modules.Auth.Models.User", "User")
-                        .WithMany()
+                        .WithMany("PasswordResetCodes")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("SaborExpress.Modules.Auth.Models.User", null)
-                        .WithMany("PasswordResetCodes")
-                        .HasForeignKey("UserId1");
 
                     b.Navigation("User");
                 });
@@ -1621,8 +1611,7 @@ namespace SaborExpress.Migrations
                     b.HasOne("SaborExpress.Modules.Employees.Models.Employee", "Employee")
                         .WithMany()
                         .HasForeignKey("EmployeeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("SaborExpress.Modules.Tables.Models.Table", "Table")
                         .WithMany()
@@ -1647,14 +1636,10 @@ namespace SaborExpress.Migrations
                         .IsRequired();
 
                     b.HasOne("SaborExpress.Modules.Orders.Models.Order", "Order")
-                        .WithMany()
+                        .WithMany("OrderDetails")
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.HasOne("SaborExpress.Modules.Orders.Models.Order", null)
-                        .WithMany("OrderDetails")
-                        .HasForeignKey("OrderId1");
 
                     b.HasOne("SaborExpress.Modules.Products.Models.Product", "Product")
                         .WithMany()
@@ -1693,18 +1678,13 @@ namespace SaborExpress.Migrations
                     b.HasOne("SaborExpress.Modules.Employees.Models.Employee", "ChangedByEmployee")
                         .WithMany()
                         .HasForeignKey("ChangedByEmployeeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("SaborExpress.Modules.Orders.Models.Order", "Order")
-                        .WithMany()
+                        .WithMany("StatusHistories")
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.HasOne("SaborExpress.Modules.Orders.Models.Order", null)
-                        .WithMany("StatusHistories")
-                        .HasForeignKey("OrderId1");
 
                     b.Navigation("ChangedByEmployee");
 
@@ -1716,8 +1696,7 @@ namespace SaborExpress.Migrations
                     b.HasOne("SaborExpress.Modules.Employees.Models.Employee", "Cashier")
                         .WithMany()
                         .HasForeignKey("CashierId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("SaborExpress.Modules.Orders.Models.Order", "Order")
                         .WithMany()
@@ -1733,14 +1712,10 @@ namespace SaborExpress.Migrations
             modelBuilder.Entity("SaborExpress.Modules.Products.Models.Product", b =>
                 {
                     b.HasOne("SaborExpress.Modules.Categories.Models.Category", "Category")
-                        .WithMany()
+                        .WithMany("Products")
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.HasOne("SaborExpress.Modules.Categories.Models.Category", null)
-                        .WithMany("Products")
-                        .HasForeignKey("CategoryId1");
 
                     b.Navigation("Category");
                 });

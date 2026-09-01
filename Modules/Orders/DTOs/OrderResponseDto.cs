@@ -3,13 +3,12 @@ using SaborExpress.Modules.Orders.Enum;
 
 namespace SaborExpress.Modules.Orders.DTOs
 {
-    // Para GET /api/Orders/{id} - detalle completo con sus líneas
     public class OrderResponseDto
     {
         public int Id { get; set; }
         public int? CustomerId { get; set; }
         public string? CustomerName { get; set; }
-        public int EmployeeId { get; set; }
+        public int? EmployeeId { get; set; }        // CAMBIADO: ahora int?
         public string? EmployeeName { get; set; }
         public int? TableId { get; set; }
         public int? TableNumber { get; set; }

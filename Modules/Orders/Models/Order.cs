@@ -12,15 +12,19 @@ namespace SaborExpress.Modules.Orders.Models
         public int Id { get; set; }
         public int? CustomerId { get; set; }
         public Customer? Customer { get; set; }
-        public int EmployeeId { get; set; }
-        public Employee Employee { get; set; } = null!;
+
+        // CAMBIADO: ahora es opcional. Un pedido creado por un Cliente desde
+        // la app empieza SIN empleado — se asigna después, cuando un Mesero
+        // o Repartidor realmente lo toma/atiende.
+        public int? EmployeeId { get; set; }
+        public Employee? Employee { get; set; }
+
         public int? TableId { get; set; }
         public Table? Table { get; set; }
         public int BranchId { get; set; }
         public Branch Branch { get; set; } = null!;
         public OrderType OrderType { get; set; }
 
-        // NUEVO: quién originó el pedido — define si es reseñable después
         public OrderChannel Channel { get; set; } = OrderChannel.Mostrador;
 
         public OrderStatus Status { get; set; } = OrderStatus.Pending;
