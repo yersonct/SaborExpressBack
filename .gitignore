@@ -1,5 +1,6 @@
 # Secretos y variables de entorno
 .env
+Properties/launchSettings.json
 
 # Carpetas de compilación
 bin/
