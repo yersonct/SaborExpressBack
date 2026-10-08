@@ -20,10 +20,13 @@ namespace SaborExpress.Controllers
             _service = service;
         }
 
+        // 👇 Pública: la usa la carta digital sin login (clientes en las mesas)
+        // branchId opcional: si se pasa, filtra productos de esa sede + los globales
+        [AllowAnonymous]
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] int? branchId = null)
         {
-            var products = await _service.GetAllAsync();
+            var products = await _service.GetAllAsync(branchId);
             return Ok(products);
         }
 
@@ -59,6 +62,8 @@ namespace SaborExpress.Controllers
             return NoContent();
         }
 
+        // 👇 También pública, por si la carta llega a filtrar por categoría
+        [AllowAnonymous]
         [HttpGet("category/{categoryId}")]
         public async Task<IActionResult> GetByCategory(int categoryId)
         {
@@ -66,7 +71,6 @@ namespace SaborExpress.Controllers
             return Ok(products);
         }
 
-        // 👇 Ahora también deja entrar al Cocinero
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador},{RoleNames.Cocinero}")]
         [HttpPatch("{id}/status")]
         public async Task<IActionResult> UpdateStatus(int id, [FromBody] ProductStatusUpdateDto dto)

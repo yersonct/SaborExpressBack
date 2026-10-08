@@ -12,7 +12,7 @@ namespace SaborExpress.Modules.Orders.Models
         public int OrderDetailId { get; set; } // FK
         public OrderDetail OrderDetail { get; set; } = null!;
 
-        public int ChangedByEmployeeId { get; set; } // FK
+        public int? ChangedByEmployeeId { get; set; } // FK
         public Employee ChangedByEmployee { get; set; } = null!;
 
         public OrderDetailHistoryAction Action { get; set; }

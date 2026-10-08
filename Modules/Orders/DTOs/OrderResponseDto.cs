@@ -17,6 +17,9 @@ namespace SaborExpress.Modules.Orders.DTOs
         public OrderType OrderType { get; set; }
         public OrderStatus Status { get; set; }
         public decimal SubTotal { get; set; }
+
+        public int? AssignedDeliveryPersonId { get; set; }
+        public string? AssignedDeliveryPersonName { get; set; } 
         public decimal Tax { get; set; }
         public decimal Total { get; set; }
         public string? Notes { get; set; }

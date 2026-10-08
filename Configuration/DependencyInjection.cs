@@ -92,6 +92,16 @@ using SaborExpress.Modules.Notifications.Repositories;
 using SaborExpress.Modules.Notifications.Services;
 using SaborExpress.Shared.BackgroundServices;
 
+using SaborExpress.Modules.DailyMenu.Interfaces;
+using SaborExpress.Modules.DailyMenu.Repositories;
+using SaborExpress.Modules.DailyMenu.Services;
+using SaborExpress.Modules.DailyMenu.Validators;
+
+using SaborExpress.Modules.Invoices.Interfaces;
+using SaborExpress.Modules.Invoices.Repositories;
+using SaborExpress.Modules.Invoices.Services;
+using SaborExpress.Modules.Invoices.Validators;
+
 namespace SaborExpress.Configuration
 {
     public static class DependencyInjection
@@ -120,11 +130,14 @@ namespace SaborExpress.Configuration
             services.AddReviewsModule();
             services.AddAddressesModule();
             services.AddUserPreferencesModule();
+            services.AddUserSettingsModule();
             services.AddConfigurationsModule();
+            services.AddBranchOperationalSettingsModule();
             services.AddEmailConfirmationModule();
             services.AddNotificationsModule();
             services.AddBackgroundEmailQueueModule();
-            
+            services.AddDailyMenuModule();
+            services.AddInvoicesModule();
             return services;
         }
 
@@ -265,7 +278,7 @@ namespace SaborExpress.Configuration
             services.AddScoped<IPaymentRepository, PaymentRepository>();
             services.AddScoped<IPaymentService, PaymentService>();
             services.AddScoped<PaymentValidator>();
-            services.AddScoped<IWompiClient, WompiClient>();
+            services.AddHttpClient<IWompiClient, WompiClient>();
 
             return services;
         }
@@ -299,6 +312,7 @@ namespace SaborExpress.Configuration
         {
             services.AddScoped<IDeliveryRepository, DeliveryRepository>();
             services.AddScoped<IDeliveryService, DeliveryService>();
+            services.AddScoped<IDeliveryAssignmentService, DeliveryAssignmentService>(); // NUEVO
             services.AddScoped<DeliveryValidator>();
 
             return services;
@@ -339,6 +353,23 @@ namespace SaborExpress.Configuration
 
             return services;
         }
+                public static IServiceCollection AddBranchOperationalSettingsModule(this IServiceCollection services)
+        {
+            services.AddScoped<IBranchOperationalSettingsRepository, BranchOperationalSettingsRepository>();
+            services.AddScoped<IBranchOperationalSettingsService, BranchOperationalSettingsService>();
+            services.AddScoped<BranchOperationalSettingsValidator>();
+
+            return services;
+        }
+
+        public static IServiceCollection AddUserSettingsModule(this IServiceCollection services)
+        {
+            services.AddScoped<IUserSettingsRepository, UserSettingsRepository>();
+            services.AddScoped<IUserSettingsService, UserSettingsService>();
+            services.AddScoped<UserSettingsValidator>();
+
+            return services;
+        }
         public static IServiceCollection AddEmailConfirmationModule(this IServiceCollection services)
         {
             services.AddScoped<IEmailConfirmationRepository, EmailConfirmationRepository>();
@@ -360,7 +391,23 @@ namespace SaborExpress.Configuration
 
             return services;
         }
+        private static IServiceCollection AddDailyMenuModule(this IServiceCollection services)
+        {
+            services.AddScoped<IDailyMenuRepository, DailyMenuRepository>();
+            services.AddScoped<IDailyMenuService, DailyMenuService>();
+            services.AddScoped<DailyMenuValidator>();
 
-        
+            return services;
+        }
+
+        private static IServiceCollection AddInvoicesModule(this IServiceCollection services)
+        {
+            services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+            services.AddScoped<IInvoiceService, InvoiceService>();
+            services.AddScoped<InvoiceValidator>();
+
+            return services;
+        }
+
     }
 }

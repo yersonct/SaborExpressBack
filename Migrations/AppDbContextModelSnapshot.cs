@@ -312,6 +312,14 @@ namespace SaborExpress.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<decimal>("Latitude")
+                        .HasColumnType("decimal(9,6)")
+                        .HasColumnName("latitude");
+
+                    b.Property<decimal>("Longitude")
+                        .HasColumnType("decimal(9,6)")
+                        .HasColumnName("longitude");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -323,6 +331,11 @@ namespace SaborExpress.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("phone");
 
+                    b.Property<string>("PublicKitchenCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("public_kitchen_code");
+
                     b.Property<bool>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -332,6 +345,9 @@ namespace SaborExpress.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("PublicKitchenCode")
                         .IsUnique();
 
                     b.ToTable("branches", (string)null);
@@ -374,6 +390,67 @@ namespace SaborExpress.Migrations
                         .IsUnique();
 
                     b.ToTable("categories", (string)null);
+                });
+
+            modelBuilder.Entity("SaborExpress.Modules.Configurations.Models.BranchOperationalSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AcceptsDelivery")
+                        .HasColumnType("boolean")
+                        .HasColumnName("accepts_delivery");
+
+                    b.Property<bool>("AcceptsDineIn")
+                        .HasColumnType("boolean")
+                        .HasColumnName("accepts_dine_in");
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("integer")
+                        .HasColumnName("branch_id");
+
+                    b.Property<TimeOnly>("ClosingTime")
+                        .HasColumnType("time")
+                        .HasColumnName("closing_time");
+
+                    b.Property<decimal>("DeliveryFee")
+                        .HasColumnType("decimal(12,2)")
+                        .HasColumnName("delivery_fee");
+
+                    b.Property<decimal>("DeliveryRadiusKm")
+                        .HasColumnType("decimal(5,2)")
+                        .HasColumnName("delivery_radius_km");
+
+                    b.Property<decimal>("MinOrderAmount")
+                        .HasColumnType("decimal(12,2)")
+                        .HasColumnName("min_order_amount");
+
+                    b.Property<TimeOnly>("OpeningTime")
+                        .HasColumnType("time")
+                        .HasColumnName("opening_time");
+
+                    b.Property<decimal>("SuggestedTipPercent")
+                        .HasColumnType("decimal(5,2)")
+                        .HasColumnName("suggested_tip_percent");
+
+                    b.Property<decimal>("TaxRate")
+                        .HasColumnType("decimal(5,2)")
+                        .HasColumnName("tax_rate");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .IsUnique();
+
+                    b.ToTable("branch_operational_settings", (string)null);
                 });
 
             modelBuilder.Entity("SaborExpress.Modules.Configurations.Models.BranchSetting", b =>
@@ -437,13 +514,18 @@ namespace SaborExpress.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Address")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
                         .HasColumnName("address");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("Document")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("document");
 
                     b.Property<string>("LastName")
                         .HasMaxLength(120)
@@ -525,6 +607,15 @@ namespace SaborExpress.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("assigned_at");
 
+                    b.Property<int?>("CustomerRating")
+                        .HasColumnType("integer")
+                        .HasColumnName("customer_rating");
+
+                    b.Property<string>("CustomerRatingComment")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("customer_rating_comment");
+
                     b.Property<DateTime?>("DeliveredAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("delivered_at");
@@ -536,6 +627,10 @@ namespace SaborExpress.Migrations
                     b.Property<int>("OrderId")
                         .HasColumnType("integer")
                         .HasColumnName("order_id");
+
+                    b.Property<DateTime?>("RatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rated_at");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -574,6 +669,12 @@ namespace SaborExpress.Migrations
 
                     b.Property<TimeOnly>("EndTime")
                         .HasColumnType("time without time zone");
+
+                    b.Property<string>("KitchenAccessToken")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("KitchenLinkSent")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
@@ -655,6 +756,9 @@ namespace SaborExpress.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("document");
 
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("LastName")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
@@ -671,10 +775,10 @@ namespace SaborExpress.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("phone");
 
-                    b.Property<string>("Photo")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("photo");
+                    b.Property<string>("Plate")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("plate");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -687,6 +791,11 @@ namespace SaborExpress.Migrations
                     b.Property<int>("UserId")
                         .HasColumnType("integer")
                         .HasColumnName("user_id");
+
+                    b.Property<string>("Vehicle")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("vehicle");
 
                     b.HasKey("Id");
 
@@ -806,6 +915,9 @@ namespace SaborExpress.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("AddressId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("BranchId")
                         .HasColumnType("integer")
                         .HasColumnName("branch_id");
@@ -827,6 +939,11 @@ namespace SaborExpress.Migrations
                     b.Property<int?>("EmployeeId")
                         .HasColumnType("integer")
                         .HasColumnName("employee_id");
+
+                    b.Property<string>("GuestName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("guest_name");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
@@ -867,6 +984,8 @@ namespace SaborExpress.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AddressId");
+
                     b.HasIndex("BranchId");
 
                     b.HasIndex("CustomerId");
@@ -889,7 +1008,19 @@ namespace SaborExpress.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("LastModifiedByEmployeeId")
+                    b.Property<int>("BatchNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("batch_number");
+
+                    b.Property<bool>("IsToGo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_to_go");
+
+                    b.Property<int?>("LastModifiedByEmployeeId")
                         .HasColumnType("integer")
                         .HasColumnName("last_modified_by_employee_id");
 
@@ -954,7 +1085,7 @@ namespace SaborExpress.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("changed_at");
 
-                    b.Property<int>("ChangedByEmployeeId")
+                    b.Property<int?>("ChangedByEmployeeId")
                         .HasColumnType("integer")
                         .HasColumnName("changed_by_employee_id");
 
@@ -1136,6 +1267,9 @@ namespace SaborExpress.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("BranchId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("CategoryId")
                         .HasColumnType("integer")
                         .HasColumnName("category_id");
@@ -1175,6 +1309,8 @@ namespace SaborExpress.Migrations
                         .HasColumnName("status");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
 
                     b.HasIndex("CategoryId");
 
@@ -1303,6 +1439,9 @@ namespace SaborExpress.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("Number")
                         .HasColumnType("integer")
                         .HasColumnName("number");
@@ -1367,6 +1506,55 @@ namespace SaborExpress.Migrations
                         .IsUnique();
 
                     b.ToTable("user_preferences", (string)null);
+                });
+
+            modelBuilder.Entity("SaborExpress.Modules.UserPreferences.Models.UserSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("EmailNotifications")
+                        .HasColumnType("boolean")
+                        .HasColumnName("email_notifications");
+
+                    b.Property<bool>("PushNotifications")
+                        .HasColumnType("boolean")
+                        .HasColumnName("push_notifications");
+
+                    b.Property<bool>("SoundNotifications")
+                        .HasColumnType("boolean")
+                        .HasColumnName("sound_notifications");
+
+                    b.Property<string>("Theme")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("theme");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("time_zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("user_settings", (string)null);
                 });
 
             modelBuilder.Entity("SaborExpress.Modules.UsersRoles.Models.UserRole", b =>
@@ -1443,6 +1631,17 @@ namespace SaborExpress.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SaborExpress.Modules.Configurations.Models.BranchOperationalSettings", b =>
+                {
+                    b.HasOne("SaborExpress.Modules.Branches.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
                 });
 
             modelBuilder.Entity("SaborExpress.Modules.Configurations.Models.BranchSetting", b =>
@@ -1597,6 +1796,10 @@ namespace SaborExpress.Migrations
 
             modelBuilder.Entity("SaborExpress.Modules.Orders.Models.Order", b =>
                 {
+                    b.HasOne("SaborExpress.Modules.Addresses.Models.Address", "Address")
+                        .WithMany()
+                        .HasForeignKey("AddressId");
+
                     b.HasOne("SaborExpress.Modules.Branches.Models.Branch", "Branch")
                         .WithMany()
                         .HasForeignKey("BranchId")
@@ -1618,6 +1821,8 @@ namespace SaborExpress.Migrations
                         .HasForeignKey("TableId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.Navigation("Address");
+
                     b.Navigation("Branch");
 
                     b.Navigation("Customer");
@@ -1632,8 +1837,7 @@ namespace SaborExpress.Migrations
                     b.HasOne("SaborExpress.Modules.Employees.Models.Employee", "LastModifiedByEmployee")
                         .WithMany()
                         .HasForeignKey("LastModifiedByEmployeeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("SaborExpress.Modules.Orders.Models.Order", "Order")
                         .WithMany("OrderDetails")
@@ -1659,8 +1863,7 @@ namespace SaborExpress.Migrations
                     b.HasOne("SaborExpress.Modules.Employees.Models.Employee", "ChangedByEmployee")
                         .WithMany()
                         .HasForeignKey("ChangedByEmployeeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("SaborExpress.Modules.Orders.Models.OrderDetail", "OrderDetail")
                         .WithMany("Histories")
@@ -1699,7 +1902,7 @@ namespace SaborExpress.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("SaborExpress.Modules.Orders.Models.Order", "Order")
-                        .WithMany()
+                        .WithMany("Payments")
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
@@ -1711,11 +1914,17 @@ namespace SaborExpress.Migrations
 
             modelBuilder.Entity("SaborExpress.Modules.Products.Models.Product", b =>
                 {
+                    b.HasOne("SaborExpress.Modules.Branches.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId");
+
                     b.HasOne("SaborExpress.Modules.Categories.Models.Category", "Category")
                         .WithMany("Products")
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Branch");
 
                     b.Navigation("Category");
                 });
@@ -1780,6 +1989,17 @@ namespace SaborExpress.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("SaborExpress.Modules.UserPreferences.Models.UserSettings", b =>
+                {
+                    b.HasOne("SaborExpress.Modules.Auth.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("SaborExpress.Modules.UsersRoles.Models.UserRole", b =>
                 {
                     b.HasOne("SaborExpress.Modules.Roles.Models.Role", "Role")
@@ -1825,6 +2045,8 @@ namespace SaborExpress.Migrations
             modelBuilder.Entity("SaborExpress.Modules.Orders.Models.Order", b =>
                 {
                     b.Navigation("OrderDetails");
+
+                    b.Navigation("Payments");
 
                     b.Navigation("StatusHistories");
                 });

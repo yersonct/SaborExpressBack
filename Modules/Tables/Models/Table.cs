@@ -13,6 +13,7 @@ namespace SaborExpress.Modules.Tables.Models
 
         public int Number { get; set; }
         public TableStatus Status { get; set; } = TableStatus.Available;
+        public bool IsDeleted { get; set; } = false;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

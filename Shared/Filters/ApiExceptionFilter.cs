@@ -12,6 +12,8 @@ namespace SaborExpress.Shared.Filters
             {
                 TooManyLoginAttemptsException ex => BuildRetryAfterResult(context, ex.RetryAfterSeconds, ex.Message),
                 TooManyResetAttemptsException ex => BuildRetryAfterResult(context, ex.RetryAfterSeconds, ex.Message),
+                EmailNotConfirmedException ex => new ObjectResult(new { error = ex.Message, code = "EMAIL_NOT_CONFIRMED" }) { StatusCode = 401 },
+                AccountNotActivatedException ex => new ObjectResult(new { error = ex.Message, code = "ACCOUNT_NOT_ACTIVATED" }) { StatusCode = 401 },
                 UnauthorizedAccessException ex => new ObjectResult(new { error = ex.Message }) { StatusCode = 401 },
                 KeyNotFoundException ex => new ObjectResult(new { error = ex.Message }) { StatusCode = 404 },
                 InvalidOperationException ex => new ObjectResult(new { error = ex.Message }) { StatusCode = 409 },

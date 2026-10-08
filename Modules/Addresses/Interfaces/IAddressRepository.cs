@@ -11,6 +11,14 @@ namespace SaborExpress.Modules.Addresses.Interfaces
         Task<bool> IsAssignedToDeliveryPersonAsync(int addressId, int employeeId); // nuevo
         Task ClearDefaultForCustomerAsync(int customerId, int? excludeAddressId = null);
 
+        Task<Address?> GetDefaultByCustomerIdAsync(int customerId);
+
+        // La dirección más reciente del cliente (opcionalmente sin contar una).
+        Task<Address?> GetMostRecentByCustomerIdAsync(int customerId, int? excludeAddressId = null);
+
+        // Refleja la dirección predeterminada en Customers.Address.
+        Task SetCustomerAddressTextAsync(int customerId, string? addressText);
+
         Task AddAsync(Address address);
         Task UpdateAsync(Address address);
         Task DeleteAsync(Address address);

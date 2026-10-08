@@ -10,5 +10,9 @@ namespace SaborExpress.Modules.Employees.Interfaces
         Task<EmployeeResponseDto> UpdateAsync(int id, UpdateEmployeeDto dto, int currentUserId);
         Task DeactivateAsync(int id, int currentUserId);
         Task<(byte[] Archivo, string NombreArchivo, string ContentType)?> GetCvAsync(int id);
+        Task<EmployeeMeResponseDto> SetMyAvailabilityAsync(int employeeId, bool isAvailable);
+
+        Task<EmployeeMeResponseDto> GetMeAsync(int employeeId);
+        Task<EmployeeMeResponseDto> UpdateMeAsync(int employeeId, UpdateEmployeeMeDto dto);
     }
 }

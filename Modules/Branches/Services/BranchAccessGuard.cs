@@ -20,6 +20,14 @@ namespace SaborExpress.Modules.Branches.Services
             return user.Employee?.BranchId;
         }
 
+        public async Task<bool> IsGerenteAsync(int userId)
+        {
+            var user = await _authRepository.GetByIdWithRelationsAsync(userId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            return user.HasRole(RoleNames.Gerente);
+        }
+
         public async Task EnsureCanAccessBranchAsync(int branchId, int userId)
         {
             var user = await _authRepository.GetByIdWithRelationsAsync(userId)

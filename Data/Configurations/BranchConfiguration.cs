@@ -18,6 +18,21 @@ namespace SaborExpress.Data.Configurations
             builder.Property(x => x.Phone).HasColumnName("phone").HasMaxLength(30);
             builder.Property(x => x.Status).HasColumnName("status").HasDefaultValue(true);
             builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
+
+            builder.Property(x => x.Latitude)
+                .HasColumnName("latitude")
+                .HasColumnType("decimal(9,6)")
+                .IsRequired();
+
+            builder.Property(x => x.Longitude)
+                .HasColumnName("longitude")
+                .HasColumnType("decimal(9,6)")
+                .IsRequired();
+
+            builder.Property(x => x.PublicKitchenCode)
+                .HasColumnName("public_kitchen_code")
+                .HasMaxLength(20);
+            builder.HasIndex(x => x.PublicKitchenCode).IsUnique();
         }
     }
 }

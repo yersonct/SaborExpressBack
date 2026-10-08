@@ -4,7 +4,8 @@ namespace SaborExpress.Modules.Products.Interfaces
 {
     public interface IProductRepository
     {
-        Task<List<Product>> GetAllAsync();
+        // branchId null = trae todos los productos, sin filtrar por sede
+        Task<List<Product>> GetAllAsync(int? branchId = null);
         Task<Product?> GetByIdAsync(int id);
         Task<Product> AddAsync(Product product);
         Task UpdateAsync(Product product);

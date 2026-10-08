@@ -20,7 +20,6 @@ namespace SaborExpress.Controllers
         public async Task<IActionResult> Register([FromBody] RegisterCustomerDto dto) =>
             Ok(await _customerService.RegisterAsync(dto));
 
-        [Authorize(Roles = RoleNames.Cliente)]
         [HttpGet("me")]
         public async Task<IActionResult> GetMe()
         {
@@ -28,7 +27,6 @@ namespace SaborExpress.Controllers
             return Ok(await _customerService.GetMeAsync(userId));
         }
 
-        [Authorize(Roles = RoleNames.Cliente)]
         [HttpPut("me")]
         public async Task<IActionResult> UpdateMe([FromBody] UpdateCustomerDto dto)
         {

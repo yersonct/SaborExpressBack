@@ -20,11 +20,15 @@ namespace SaborExpress.Modules.Employees.Repositories
             return _context.Employees
                 .Include(e => e.User)
                     .ThenInclude(u => u.UserRoles)
-                        .ThenInclude(ur => ur.Role);
+                        .ThenInclude(ur => ur.Role)
+                        .Include(e => e.Branch);
         }
 
         public async Task<Employee?> GetByIdAsync(int id)
             => await EmployeesWithRelations().FirstOrDefaultAsync(e => e.Id == id);
+
+        public async Task<Employee?> GetByUserIdAsync(int userId)
+            => await EmployeesWithRelations().FirstOrDefaultAsync(e => e.UserId == userId);
 
         public async Task<Employee?> GetByDocumentAsync(string document)
             => await EmployeesWithRelations().FirstOrDefaultAsync(e => e.Document == document);
@@ -60,7 +64,6 @@ namespace SaborExpress.Modules.Employees.Repositories
                 Email = e.User.Email,
                 Phone = e.Phone,
                 Address = e.Address,
-                Photo = e.Photo,
                 RoleNames = e.User.UserRoles.Select(ur => ur.Role.Name).ToList(),
                 BranchId = e.BranchId,
                 Status = e.Status,
@@ -104,6 +107,29 @@ namespace SaborExpress.Modules.Employees.Repositories
                 .Where(e => e.BranchId == branchId && e.Status != "Retirado")
                 .SelectMany(e => e.User.UserRoles)
                 .Where(ur => ur.Role.Name == RoleNames.Administrador)
+                .Select(ur => ur.UserId)
+                .Distinct()
+                .ToListAsync();
+        }
+
+        public async Task<List<int>> GetUserIdsByBranchAndRolesAsync(int branchId, params string[] roleNames)
+        {
+            return await _context.Employees
+                .Where(e => e.BranchId == branchId && e.Status != "Retirado")
+                .SelectMany(e => e.User.UserRoles)
+                .Where(ur => roleNames.Contains(ur.Role.Name))
+                .Select(ur => ur.UserId)
+                .Distinct()
+                .ToListAsync(); 
+        }
+
+        // Sin filtro de sede: usado para roles que ven TODAS las sedes (ej. Gerente).
+        public async Task<List<int>> GetUserIdsByRolesAsync(params string[] roleNames)
+        {
+            return await _context.Employees
+                .Where(e => e.Status != "Retirado")
+                .SelectMany(e => e.User.UserRoles)
+                .Where(ur => roleNames.Contains(ur.Role.Name))
                 .Select(ur => ur.UserId)
                 .Distinct()
                 .ToListAsync();

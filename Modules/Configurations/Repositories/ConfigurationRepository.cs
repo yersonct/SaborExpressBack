@@ -43,7 +43,21 @@ namespace SaborExpress.Modules.Configurations.Repositories
                 .Include(x => x.Branch)
                 .FirstOrDefaultAsync(x => x.BranchId == branchId && x.Key == key);
         }
+                public async Task<int?> GetEmployeeBranchIdAsync(int employeeId)
+        {
+            return await _context.Employees
+                .Where(e => e.Id == employeeId)
+                .Select(e => (int?)e.BranchId)
+                .FirstOrDefaultAsync();
+        }
 
+        public async Task<int?> GetBranchIdByConfigurationIdAsync(int configurationId)
+        {
+            return await _context.Configurations
+                .Where(x => x.Id == configurationId)
+                .Select(x => x.BranchId)
+                .FirstOrDefaultAsync();
+        }
         public async Task<bool> BranchExistsAsync(int branchId)
         {
             return await _context.Branches.AnyAsync(x => x.Id == branchId);

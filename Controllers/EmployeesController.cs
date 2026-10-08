@@ -39,6 +39,7 @@ namespace SaborExpress.Controllers
 
         return StatusCode(201, new
         {
+            employeeId = result.Id,
             message = $"Empleado registrado correctamente. Se envio un codigo de activacion a {result.Email} para que confirme su cuenta."
         });
         }
@@ -57,7 +58,7 @@ namespace SaborExpress.Controllers
             await _employeeService.DeactivateAsync(id, currentUserId);
             return NoContent();
         }
-
+        
         [HttpGet("{id}/cv")]
         public async Task<IActionResult> DownloadCv(int id)
         {
@@ -67,7 +68,6 @@ namespace SaborExpress.Controllers
 
             return File(cv.Value.Archivo, cv.Value.ContentType, cv.Value.NombreArchivo);
         }
-
         private int ObtenerUsuarioActualId() =>
             int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
     }

@@ -28,7 +28,7 @@ namespace SaborExpress.Modules.Tables.Repositories
         {
             return await _context.Tables
                 .Include(x => x.Branch)
-                .Where(x => x.BranchId == branchId && x.Status != TableStatus.Inactive)
+                .Where(x => x.BranchId == branchId)
                 .OrderBy(x => x.Number)
                 .ToListAsync();
         }
@@ -43,6 +43,7 @@ namespace SaborExpress.Modules.Tables.Repositories
             return await _context.Tables.AnyAsync(x =>
                 x.BranchId == branchId &&
                 x.Number == number &&
+                !x.IsDeleted &&
                 (!excludeId.HasValue || x.Id != excludeId.Value));
         }
 

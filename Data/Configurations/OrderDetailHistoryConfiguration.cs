@@ -25,8 +25,7 @@ namespace SaborExpress.Data.Configurations
                 .OnDelete(DeleteBehavior.Restrict);
 
             builder.Property(x => x.ChangedByEmployeeId)
-                .HasColumnName("changed_by_employee_id")
-                .IsRequired();
+                .HasColumnName("changed_by_employee_id");
 
             builder.HasOne(x => x.ChangedByEmployee)
                 .WithMany()

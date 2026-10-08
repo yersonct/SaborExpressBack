@@ -15,13 +15,16 @@ namespace SaborExpress.Modules.Orders.Models
         public int ProductId { get; set; } // FK
         public Product Product { get; set; } = null!;
 
-        public int LastModifiedByEmployeeId { get; set; } // FK
+        public int? LastModifiedByEmployeeId { get; set; } // FK
         public Employee LastModifiedByEmployee { get; set; } = null!;
 
         public int Quantity { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal SubTotal { get; set; }
         public string? Notes { get; set; }
+        public bool IsToGo { get; set; } = false;
+
+          public int BatchNumber { get; set; } = 1;
         public OrderDetailStatus Status { get; set; } = OrderDetailStatus.Pending;
 
         public ICollection<OrderDetailHistory> Histories { get; set; } = new List<OrderDetailHistory>();

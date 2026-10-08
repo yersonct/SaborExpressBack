@@ -42,12 +42,20 @@ namespace SaborExpress.Modules.Auth.Helpers
             if (user.Customer != null)
                 claims.Add(new Claim("CustomerId", user.Customer.Id.ToString()));
 
-            // NUEVO: si el usuario es empleado, agregar su EmployeeId al token
-            // (aprovechamos para resolver el mismo patron que faltaba en Employee)
-            if (user.Employee != null)
-                claims.Add(new Claim("EmployeeId", user.Employee.Id.ToString()));
+        // NUEVO: si el usuario es empleado, agregar su EmployeeId al token
+                    // (aprovechamos para resolver el mismo patron que faltaba en Employee)
+                    if (user.Employee != null)
+                    {
+                        claims.Add(new Claim("EmployeeId", user.Employee.Id.ToString()));
 
-            return claims;
+                        // NUEVO: agregamos también el BranchId, para que la app móvil
+                        // no necesite llamar a /api/Employees/{id} (bloqueado para
+                        // roles operativos como Mesero/Cocinero/Cajero/Repartidor).
+                        if (user.Employee.BranchId.HasValue)
+                            claims.Add(new Claim("BranchId", user.Employee.BranchId.Value.ToString()));
+                    }
+
+                    return claims;
         }
 
         private SecurityTokenDescriptor ConstruirDescriptor(List<Claim> claims)

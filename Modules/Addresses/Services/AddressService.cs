@@ -84,9 +84,19 @@ namespace SaborExpress.Modules.Addresses.Services
                 await _addressRepository.ClearDefaultForCustomerAsync(customerId);
 
             await _addressRepository.AddAsync(address);
+
+            // La predeterminada también se refleja en Customers.Address.
+            if (dto.IsDefault)
+                await _addressRepository.SetCustomerAddressTextAsync(customerId, address.AddressLine);
+
             await _addressRepository.SaveChangesAsync();
 
             return AddressMapper.ToResponse(address);
+        }
+        public async Task<AddressResponseDto?> GetDefaultForCustomerAsync(int customerId)
+        {
+            var address = await _addressRepository.GetDefaultByCustomerIdAsync(customerId);
+            return address == null ? null : AddressMapper.ToResponse(address);
         }
 
         public async Task<AddressResponseDto> UpdateAsync(int id, UpdateAddressDto dto, int customerId)
@@ -106,6 +116,11 @@ namespace SaborExpress.Modules.Addresses.Services
             address.Longitude = dto.Longitude;
 
             await _addressRepository.UpdateAsync(address);
+
+            // Si es la predeterminada y cambió el texto, se actualiza también el cliente.
+            if (address.IsDefault)
+                await _addressRepository.SetCustomerAddressTextAsync(customerId, address.AddressLine);
+
             await _addressRepository.SaveChangesAsync();
 
             return AddressMapper.ToResponse(address);
@@ -127,6 +142,7 @@ namespace SaborExpress.Modules.Addresses.Services
             address.IsDefault = true;
 
             await _addressRepository.UpdateAsync(address);
+            await _addressRepository.SetCustomerAddressTextAsync(customerId, address.AddressLine);
             await _addressRepository.SaveChangesAsync();
 
             return AddressMapper.ToResponse(address);
@@ -141,7 +157,27 @@ namespace SaborExpress.Modules.Addresses.Services
             if (address.CustomerId != customerId)
                 throw new ArgumentException("Esta dirección no pertenece al cliente");
 
+            var wasDefault = address.IsDefault;
+
             await _addressRepository.DeleteAsync(address);
+
+            // Si se borra la predeterminada, la dirección más reciente que quede
+            // pasa a ser la nueva predeterminada. Si no queda ninguna, se vacía
+            // Customers.Address.
+            if (wasDefault)
+            {
+                var next = await _addressRepository
+                    .GetMostRecentByCustomerIdAsync(customerId, excludeAddressId: id);
+
+                if (next != null)
+                {
+                    next.IsDefault = true;
+                    await _addressRepository.UpdateAsync(next);
+                }
+
+                await _addressRepository.SetCustomerAddressTextAsync(customerId, next?.AddressLine);
+            }
+
             await _addressRepository.SaveChangesAsync();
         }
     }

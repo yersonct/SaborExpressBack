@@ -60,6 +60,16 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.DeliveredAt)
                 .HasColumnName("delivered_at");
+
+            builder.Property(x => x.CustomerRating)
+                .HasColumnName("customer_rating");
+
+            builder.Property(x => x.CustomerRatingComment)
+                .HasColumnName("customer_rating_comment")
+                .HasMaxLength(250);
+
+            builder.Property(x => x.RatedAt)
+                .HasColumnName("rated_at");
         }
     }
 }

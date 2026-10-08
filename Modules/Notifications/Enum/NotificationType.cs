@@ -11,6 +11,7 @@ namespace SaborExpress.Modules.Notifications.Enum
         ShiftEndingSoon,  
         PaymentConfirmed,
         Manual,
-        System
+        System,
+        ReviewReceived
     }
 }

@@ -100,7 +100,7 @@ namespace SaborExpress.Shared.Services
                 SaborExpress
               </p>
               <p style=""margin:6px 0 0; font-size: 13px; color:rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 1px;"">
-                Notificaci�n del sistema
+                Notificación del sistema
               </p>
             </td>
           </tr>
@@ -120,7 +120,7 @@ namespace SaborExpress.Shared.Services
               <table role=""presentation"" width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""margin-top:28px; background-color:#F8FAFC; border-radius:10px; border: 1px solid #E2E8F0;"">
                 <tr>
                   <td style=""padding: 16px 20px; font-size: 13px; color:#64748B;"">
-                    ?? {localTime:dd/MM/yyyy HH:mm}
+                    {localTime:dd/MM/yyyy HH:mm}
                   </td>
                 </tr>
               </table>

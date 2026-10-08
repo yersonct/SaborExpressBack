@@ -10,5 +10,3 @@ obj/
 .vs/
 *.user
 
-# Archivos de configuración local (opcional, si tienes overrides)
-appsettings.Development.json

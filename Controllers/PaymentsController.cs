@@ -6,6 +6,7 @@ using SaborExpress.Modules.Payments.Interfaces;
 using SaborExpress.Shared.Extensions;
 using System.Security.Claims;
 using System.Text.Json;
+using SaborExpress.Shared.Constants;
 
 namespace SaborExpress.Controllers
 {
@@ -15,10 +16,12 @@ namespace SaborExpress.Controllers
     public class PaymentsController : ControllerBase
     {
         private readonly IPaymentService _paymentService;
+        private readonly ILogger<PaymentsController> _logger;
 
-        public PaymentsController(IPaymentService paymentService)
+        public PaymentsController(IPaymentService paymentService, ILogger<PaymentsController> logger)
         {
             _paymentService = paymentService;
+            _logger = logger;
         }
 
         // POST /api/Payments
@@ -58,9 +61,19 @@ namespace SaborExpress.Controllers
 
         // GET /api/Payments  (filtrable por sucursal/fecha - Gerente/Admin)
         [HttpGet]
+        [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador}")]
         public async Task<IActionResult> GetAll([FromQuery] PaymentFilterDto filter)
         {
             var result = await _paymentService.GetAllAsync(filter);
+            return Ok(result);
+        }
+
+        // GET /api/Payments/my-shift — cierre de caja del Cajero autenticado (solo sus pagos de hoy)
+        [HttpGet("my-shift")]
+        public async Task<IActionResult> GetMyShift()
+        {
+            var cashierId = this.GetCurrentEmployeeId();
+            var result = await _paymentService.GetMyShiftSummaryAsync(cashierId);
             return Ok(result);
         }
 
@@ -76,10 +89,26 @@ namespace SaborExpress.Controllers
             return Ok(result);
         }
 
+                // POST /api/Payments/wompi/cashier-init
+        // El cajero genera el cobro por QR. Devuelve los datos para armar el link de Wompi.
+        [HttpPost("wompi/cashier-init")]
+        public async Task<IActionResult> InitCashierWompi([FromBody] InitCashierWompiPaymentDto dto)
+        {
+            var cashierId = this.GetCurrentEmployeeId();
+            var result = await _paymentService.InitCashierWompiPaymentAsync(dto, cashierId, GetCurrentUserId());
+            return Ok(result);
+        }
+
+        // POST /api/Payments/{id}/wompi-sync
+        // Respaldo: si el webhook no llegó, el back le pregunta a Wompi el estado real.
+        [HttpPost("{id:int}/wompi-sync")]
+        public async Task<IActionResult> SyncWompi(int id)
+        {
+            var result = await _paymentService.SyncWompiPaymentAsync(id, GetCurrentUserId());
+            return Ok(result);
+        }
+
         // POST /api/Payments/wompi/webhook
-        // Wompi llama esto de forma asíncrona para confirmar el resultado del pago.
-        // Sin [Authorize]: Wompi no manda un JWT de este sistema, manda su propia
-        // firma de verificación (validada dentro del Service).
         [AllowAnonymous]
         [HttpPost("wompi/webhook")]
         public async Task<IActionResult> WompiWebhook()
@@ -89,11 +118,22 @@ namespace SaborExpress.Controllers
             var rawBody = await reader.ReadToEndAsync();
             Request.Body.Position = 0;
 
+            _logger.LogInformation("Webhook Wompi recibido: {Body}", rawBody);
+
             var signatureHeader = Request.Headers["X-Event-Checksum"].FirstOrDefault() ?? string.Empty;
 
-            var webhook = JsonSerializer.Deserialize<WompiWebhookDto>(
-                rawBody,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            WompiWebhookDto? webhook;
+            try
+            {
+                webhook = JsonSerializer.Deserialize<WompiWebhookDto>(
+                    rawBody,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Webhook Wompi con JSON inválido");
+                return BadRequest();
+            }
 
             if (webhook == null)
                 return BadRequest();

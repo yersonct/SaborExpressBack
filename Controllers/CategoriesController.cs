@@ -18,6 +18,8 @@ namespace SaborExpress.Controllers
             _service = service;
         }
 
+        // 👇 Pública: la usa la carta digital para saber qué categorías están activas
+        [AllowAnonymous]
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
@@ -25,6 +27,7 @@ namespace SaborExpress.Controllers
             return Ok(categories);
         }
 
+        [AllowAnonymous]
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(int id)
         {

@@ -107,6 +107,32 @@ namespace SaborExpress.Modules.EmployeeSchedules.Repositories
                 .ToListAsync();
         }
 
+        public async Task<List<int>> GetEmployeeIdsWithSchedulesAsync()
+        {
+            return await _context.EmployeeSchedules
+                .Select(s => s.EmployeeId)
+                .Distinct()
+                .ToListAsync();
+        }
+
+        public async Task<List<int>> GetRequiredRoleIdsAsync(int employeeId, DateOnly fromDate)
+        {
+            return await _context.EmployeeSchedules
+                .Where(s => s.EmployeeId == employeeId && s.ShiftDate >= fromDate)
+                .Select(s => s.RoleId)
+                .Distinct()
+                .ToListAsync();
+        }
+
+        public async Task<List<int>> GetAllRoleIdsEverAssignedAsync(int employeeId)
+        {
+            return await _context.EmployeeSchedules
+                .Where(s => s.EmployeeId == employeeId)
+                .Select(s => s.RoleId)
+                .Distinct()
+                .ToListAsync();
+        }
+
         public async Task MarkReminderSentAsync(int scheduleId)
         {
             var schedule = await _context.EmployeeSchedules.FindAsync(scheduleId);
@@ -117,10 +143,10 @@ namespace SaborExpress.Modules.EmployeeSchedules.Repositories
             }
         }
 
-        public async Task<List<EmployeeSchedule>> GetShiftsEndedTodayAsync()
+        public async Task<List<EmployeeSchedule>> GetShiftsEndedTodayAsync(DateTime now)
         {
-            var today = DateOnly.FromDateTime(DateTime.Now);
-            var nowTime = TimeOnly.FromDateTime(DateTime.Now);
+            var today = DateOnly.FromDateTime(now);
+            var nowTime = TimeOnly.FromDateTime(now);
 
             return await _context.EmployeeSchedules
                 .Include(s => s.Employee).ThenInclude(e => e.User)
@@ -129,6 +155,50 @@ namespace SaborExpress.Modules.EmployeeSchedules.Repositories
                     && s.Status == Enum.ScheduleStatus.Programado
                     && s.EndTime <= nowTime)
                 .ToListAsync();
+        }
+
+        public async Task<List<EmployeeSchedule>> GetActiveCookShiftsToNotifyAsync(DateTime now)
+        {
+            var today = DateOnly.FromDateTime(now);
+            var nowTime = TimeOnly.FromDateTime(now);
+
+            return await _context.EmployeeSchedules
+                .Include(s => s.Employee).ThenInclude(e => e.User)
+                .Include(s => s.Branch)
+                .Include(s => s.Role)
+                .Where(s => s.ShiftDate == today
+                    && s.Status == Enum.ScheduleStatus.Programado
+                    && !s.KitchenLinkSent
+                    && s.Role.Name == SaborExpress.Shared.Constants.RoleNames.Cocinero
+                    && s.StartTime <= nowTime
+                    && s.EndTime >= nowTime)
+                .ToListAsync();
+        }
+
+        public async Task MarkKitchenLinkSentAsync(int scheduleId, string accessToken)
+        {
+            var schedule = await _context.EmployeeSchedules.FindAsync(scheduleId);
+            if (schedule != null)
+            {
+                schedule.KitchenLinkSent = true;
+                schedule.KitchenAccessToken = accessToken;
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        public async Task<EmployeeSchedule?> GetActiveScheduleByTokenAsync(string token, DateTime now)
+        {
+            var today = DateOnly.FromDateTime(now);
+            var nowTime = TimeOnly.FromDateTime(now);
+
+            return await _context.EmployeeSchedules
+                .Include(s => s.Branch)
+                .Include(s => s.Employee)
+                .FirstOrDefaultAsync(s => s.KitchenAccessToken == token
+                    && s.ShiftDate == today
+                    && s.Status == Enum.ScheduleStatus.Programado
+                    && s.StartTime <= nowTime
+                    && s.EndTime >= nowTime);
         }
     }
 }

@@ -33,9 +33,6 @@ namespace SaborExpress.Modules.Deliveries.Validators
             if (dto.OrderId <= 0)
                 throw new ArgumentException("Debe indicar un pedido valido");
 
-            if (dto.AddressId <= 0)
-                throw new ArgumentException("Debe indicar una direccion valida");
-
             var order = await _orderRepository.GetDeliveryInfoAsync(dto.OrderId)
                 ?? throw new ArgumentException("El pedido no existe");
 
@@ -50,14 +47,12 @@ namespace SaborExpress.Modules.Deliveries.Validators
             if (await _deliveryRepository.OrderHasDeliveryAsync(dto.OrderId))
                 throw new ArgumentException("Este pedido ya fue tomado por otro repartidor");
 
-            if (!await _deliveryRepository.AddressExistsAsync(dto.AddressId))
-                throw new ArgumentException("La direccion no existe");
-
-            if (order.CustomerId.HasValue &&
-                !await _deliveryRepository.AddressBelongsToCustomerAsync(dto.AddressId, order.CustomerId.Value))
-            {
-                throw new ArgumentException("La direccion no pertenece al cliente de este pedido");
-            }
+            // La dirección ya no la manda el repartidor: viene del pedido.
+            // Si el pedido de tipo Delivery no tiene dirección, es un dato
+            // corrupto/incompleto — no un error del repartidor.
+            if (order.AddressId is null)
+                throw new InvalidOperationException(
+                    "Este pedido no tiene una dirección de entrega asociada. Contacta a soporte.");
         }
 
         public void ValidateStatusChange(

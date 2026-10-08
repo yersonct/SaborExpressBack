@@ -62,5 +62,13 @@ namespace SaborExpress.Modules.Auth.Repositories
             var normalizado = NormalizarEmail(email);
             return await _context.Users.AnyAsync(u => u.Email!.ToLower() == normalizado && u.Id != excludeUserId);
         }
+
+        public async Task<int?> GetUserIdByEmployeeIdAsync(int employeeId)
+        {
+            return await _context.Users
+                .Where(u => u.Employee != null && u.Employee.Id == employeeId)
+                .Select(u => (int?)u.Id)
+                .FirstOrDefaultAsync();
+        }
     }
 }

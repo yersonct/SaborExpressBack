@@ -13,9 +13,14 @@ namespace SaborExpress.Modules.Orders.DTOs
         public int? TableId { get; set; }
         public int? TableNumber { get; set; }
         public int BranchId { get; set; }
+
+        public int? AssignedDeliveryPersonId { get; set; }
+        public string? AssignedDeliveryPersonName { get; set; }
         public OrderType OrderType { get; set; }
         public OrderStatus Status { get; set; }
         public decimal Total { get; set; }
+        public bool IsFullyPaid { get; set; }
         public DateTime CreatedAt { get; set; }
+        public List<OrderSummaryItemDto> OrderDetails { get; set; } = new(); // 👈 nuevo
     }
 }

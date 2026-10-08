@@ -32,7 +32,8 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.Phone).HasColumnName("phone").HasMaxLength(20);
             builder.Property(x => x.Address).HasColumnName("address").HasMaxLength(255);
-            builder.Property(x => x.Photo).HasColumnName("photo").HasMaxLength(255);
+            builder.Property(x => x.Vehicle).HasColumnName("vehicle").HasMaxLength(100);
+            builder.Property(x => x.Plate).HasColumnName("plate").HasMaxLength(20);
 
             builder.Property(x => x.BranchId).HasColumnName("branch_id");
 

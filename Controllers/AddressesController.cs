@@ -63,7 +63,18 @@ namespace SaborExpress.Controllers
             var result = await _addressService.SetDefaultAsync(id, customerId);
             return Ok(result);
         }
+        // GET /api/Addresses/me/default
+        [HttpGet("me/default")]
+        public async Task<IActionResult> GetMyDefault()
+        {
+            var customerId = this.GetCurrentCustomerId();
+            var result = await _addressService.GetDefaultForCustomerAsync(customerId);
 
+            if (result == null)
+                return NotFound(new { message = "El cliente no tiene una dirección predeterminada." });
+
+            return Ok(result);
+        }
         // DELETE /api/Addresses/{id}
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)

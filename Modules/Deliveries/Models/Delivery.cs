@@ -1,4 +1,5 @@
 // Modules/Deliveries/Models/Delivery.cs
+using System.ComponentModel.DataAnnotations.Schema; // NUEVO
 using SaborExpress.Modules.Addresses.Models;
 using SaborExpress.Modules.Deliveries.Enum;
 using SaborExpress.Modules.Employees.Models;
@@ -22,5 +23,23 @@ namespace SaborExpress.Modules.Deliveries.Models
         public DeliveryStatus Status { get; set; } = DeliveryStatus.Assigned;
         public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
         public DateTime? DeliveredAt { get; set; }
+
+        // Calificación que el cliente le da al repartidor (1-5). Null = sin calificar.
+        public int? CustomerRating { get; set; }
+        public string? CustomerRatingComment { get; set; }
+        public DateTime? RatedAt { get; set; }
+
+        // NUEVO: no se guarda en la base de datos. Order no tiene navegación
+        // hacia Payment, así que el repositorio los llena con una consulta aparte
+        // (mismo patrón que AssignedDeliveryPersonId en Order.cs).
+        [NotMapped]
+        public string? PaymentMethod { get; set; }
+
+        [NotMapped]
+        public string? PaymentStatus { get; set; }
+
+        // NUEVO: suma de pagos Completed del pedido
+        [NotMapped]
+        public decimal AmountPaid { get; set; }
     }
 }

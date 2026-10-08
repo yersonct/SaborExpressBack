@@ -11,5 +11,10 @@ namespace SaborExpress.Modules.Auth.Interfaces
         Task UpdateAsync(User user);
         Task<User?> GetByIdWithRelationsAsync(int id);
         Task<bool> ExistsByEmailAsync(string email, int excludeUserId);
+
+        // Puente Employee.Id -> User.Id, usado por notificaciones (crear una
+        // notificación exige el UserId, pero muchos servicios solo tienen el
+        // EmployeeId a mano).
+        Task<int?> GetUserIdByEmployeeIdAsync(int employeeId);
     }
 }

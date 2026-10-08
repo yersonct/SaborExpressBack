@@ -39,7 +39,12 @@ namespace SaborExpress.Modules.Auth.Repositories
 
             await _context.SaveChangesAsync();
         }
-
+        public async Task<EmailConfirmationCode?> GetByTokenAsync(string token)
+        {
+            return await _context.EmailConfirmationCodes
+                .Include(c => c.User)
+                .FirstOrDefaultAsync(c => c.Code == token);
+        }
         public async Task UpdateAsync(EmailConfirmationCode code)
         {
             _context.EmailConfirmationCodes.Update(code);

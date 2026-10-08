@@ -14,5 +14,11 @@ namespace SaborExpress.Modules.Payments.Interfaces
         // Nuevos, para Wompi
         Task<WompiWidgetDataDto> InitWompiPaymentAsync(InitWompiPaymentDto dto, int currentUserId);
         Task ProcessWompiWebhookAsync(WompiWebhookDto webhook, string rawBody, string signatureHeader);
+        Task<PaymentResponseDto> SyncWompiPaymentAsync(int paymentId, int currentUserId);
+        Task<WompiWidgetDataDto> InitCashierWompiPaymentAsync(InitCashierWompiPaymentDto dto, int cashierId, int currentUserId);
+        Task SyncPendingWompiPaymentsAsync();
+
+        // NUEVO — cierre de caja del Cajero (solo sus propios pagos de hoy)
+        Task<CashierShiftSummaryDto> GetMyShiftSummaryAsync(int cashierId);
     }
 }

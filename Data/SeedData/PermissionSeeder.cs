@@ -60,15 +60,20 @@ namespace SaborExpress.Data.SeedData
             [RoleNames.Mesero] = new[]
             {
                 PermissionNames.CrearPedido, PermissionNames.EditarPedidoPropio,
-                PermissionNames.CancelarPedido, PermissionNames.CambiarEstadoMesa
+                PermissionNames.CancelarPedido, PermissionNames.CambiarEstadoMesa,
+                PermissionNames.ActualizarEstadoPedido
             },
             [RoleNames.Cajero] = new[]
             {
-                PermissionNames.EditarPedidoPropio, PermissionNames.RegistrarPago, PermissionNames.ReembolsarPago
+                PermissionNames.EditarPedidoPropio, PermissionNames.RegistrarPago, PermissionNames.ReembolsarPago,
+                PermissionNames.ActualizarEstadoPedido
             },
             [RoleNames.Cocinero] = new[]
             {
                 PermissionNames.ActualizarEstadoPedido, PermissionNames.ActivarDesactivarPlato
+            },
+            [RoleNames.AuxiliarCocina] = new string[]
+            {
             },
             [RoleNames.Repartidor] = new[]
             {
@@ -83,6 +88,7 @@ namespace SaborExpress.Data.SeedData
             [RoleNames.Mesero] = "Toma y gestiona pedidos en mesa",
             [RoleNames.Cajero] = "Registra pedidos y cobra en mostrador",
             [RoleNames.Cocinero] = "Prepara los pedidos en cocina",
+            [RoleNames.AuxiliarCocina] = "Consulta el tablero de cocina, sin cambiar estados",
             [RoleNames.Repartidor] = "Entrega pedidos a domicilio",
         };
 

@@ -14,12 +14,22 @@ namespace SaborExpress.Modules.Products.Repositories
             _context = context;
         }
 
-        public async Task<List<Product>> GetAllAsync()
+        public async Task<List<Product>> GetAllAsync(int? branchId = null)
         {
-            return await _context.Products
+            var query = _context.Products
                 .Include(p => p.Category)
+                .Include(p => p.Branch)
                 .AsNoTracking()
-                .ToListAsync();
+                .AsQueryable();
+
+            if (branchId.HasValue)
+            {
+                // Muestra los productos de esa sede + los "globales" (BranchId null),
+                // para no romper el catálogo actual mientras vas asignando sedes poco a poco.
+                query = query.Where(p => p.BranchId == branchId.Value);
+            }
+
+            return await query.ToListAsync();
         }
 
         public async Task<Product?> GetByIdAsync(int id)

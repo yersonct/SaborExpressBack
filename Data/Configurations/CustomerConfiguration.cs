@@ -26,8 +26,16 @@ namespace SaborExpress.Data.Configurations
                 .HasColumnName("last_name")
                 .HasMaxLength(120);
 
+            builder.Property(x => x.Document)
+                .HasColumnName("document")
+                .HasMaxLength(20);
+                
             builder.Property(x => x.Phone).HasColumnName("phone").HasMaxLength(30);
-            builder.Property(x => x.Address).HasColumnName("address").HasMaxLength(255);
+
+            builder.Property(x => x.Address)
+                .HasColumnName("address")
+                .HasMaxLength(200);
+
             builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
 
             builder.HasOne(x => x.User)

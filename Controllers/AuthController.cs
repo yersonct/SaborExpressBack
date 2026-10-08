@@ -71,7 +71,6 @@ namespace SaborExpress.Controllers
         }
 
 
-        [Authorize(Roles = $"{RoleNames.Cliente}")]
         [HttpPost("confirm-email")]
         public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailDto dto)
         {
@@ -92,7 +91,12 @@ namespace SaborExpress.Controllers
             var response = await _authService.RefreshTokenAsync(dto);
             return Ok(response);
         }
-
+        [HttpPost("resend-activation-code")]
+        public async Task<IActionResult> ResendActivationCode([FromBody] ResendActivationDto dto)
+        {
+            await _employeeActivationService.ResendActivationCodeAsync(dto);
+            return Ok(new { message = "Si la cuenta existe y no ha sido activada, se enviara un nuevo codigo." });
+        }
 
         [HttpPost("activate-account")]
         public async Task<IActionResult> ActivateAccount([FromBody] ActivateAccountDto dto)

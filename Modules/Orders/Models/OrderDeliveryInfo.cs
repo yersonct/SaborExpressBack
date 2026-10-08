@@ -11,6 +11,7 @@ namespace SaborExpress.Modules.Orders.Models
         public OrderStatus Status { get; set; }
         public int? CustomerId { get; set; }
         public int BranchId { get; set; }
+        public int? AddressId { get; set; } // 👈 NUEVO
         public decimal Total { get; set; }
         public DateTime CreatedAt { get; set; }
     }

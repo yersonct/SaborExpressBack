@@ -8,5 +8,6 @@ namespace SaborExpress.Modules.Orders.DTOs
         public int ProductId { get; set; }
         public int Quantity { get; set; }
         public string? Notes { get; set; }
+        public bool IsToGo { get; set; } = false;
     }
 }

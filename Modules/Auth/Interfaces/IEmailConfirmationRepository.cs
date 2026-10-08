@@ -8,5 +8,6 @@ namespace SaborExpress.Modules.Auth.Interfaces
         Task<EmailConfirmationCode?> GetLatestCodeByUserIdAsync(int userId);
         Task InvalidatePendingCodesAsync(int userId);
         Task UpdateAsync(EmailConfirmationCode code);
+        Task<EmailConfirmationCode?> GetByTokenAsync(string token);
     }
 }

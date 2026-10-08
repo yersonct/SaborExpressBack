@@ -1,0 +1,471 @@
+﻿===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Products\Models\Product.cs =====
+using SaborExpress.Modules.Categories.Models;
+
+namespace SaborExpress.Modules.Products.Models
+{
+    public class Product
+    {
+        public int Id { get; set; }
+        public int CategoryId { get; set; } // FK
+        public Category Category { get; set; } = null!;
+
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public string? Photo { get; set; }
+        public int PreparationTimeInMinutes { get; set; }
+        public bool Status { get; set; } = true; // Ajusta si ya tienes un enum de estado
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Products\DTOs\ProductCreateDto.cs =====
+using Microsoft.AspNetCore.Http;
+
+namespace SaborExpress.Modules.Products.DTOs
+{
+    public class ProductCreateDto
+    {
+        public int CategoryId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public IFormFile? Photo { get; set; }
+        public int PreparationTimeInMinutes { get; set; }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Products\DTOs\ProductResponseDto.cs =====
+namespace SaborExpress.Modules.Products.DTOs
+{
+    public class ProductResponseDto
+    {
+        public int Id { get; set; }
+        public int CategoryId { get; set; }
+        public string CategoryName { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public string? Photo { get; set; }
+        public int PreparationTimeInMinutes { get; set; }
+        public bool Status { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Products\DTOs\ProductUpdateDto.cs =====
+using Microsoft.AspNetCore.Http;
+
+namespace SaborExpress.Modules.Products.DTOs
+{
+    public class ProductUpdateDto
+    {
+        public int CategoryId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public IFormFile? Photo { get; set; }
+        public int PreparationTimeInMinutes { get; set; }
+        public bool Status { get; set; }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Products\DTOs\ProductStatusUpdateDto.cs =====
+namespace SaborExpress.Modules.Products.DTOs
+{
+    public class ProductStatusUpdateDto
+    {
+        public bool Status { get; set; }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Products\Mappings\ProductMappings.cs =====
+using SaborExpress.Modules.Products.DTOs;
+using SaborExpress.Modules.Products.Models;
+
+namespace SaborExpress.Modules.Products.Mappings
+{
+    public static class ProductMappings
+    {
+        public static ProductResponseDto ToResponseDto(this Product product)
+        {
+            return new ProductResponseDto
+            {
+                Id = product.Id,
+                CategoryId = product.CategoryId,
+                CategoryName = product.Category?.Name ?? string.Empty,
+                Name = product.Name,
+                Description = product.Description,
+                Price = product.Price,
+                Photo = product.Photo,
+                PreparationTimeInMinutes = product.PreparationTimeInMinutes,
+                Status = product.Status,
+                CreatedAt = product.CreatedAt
+            };
+        }
+
+        public static Product ToEntity(this ProductCreateDto dto, string? photoPath)
+        {
+            return new Product
+            {
+                CategoryId = dto.CategoryId,
+                Name = dto.Name,
+                Description = dto.Description,
+                Price = dto.Price,
+                Photo = photoPath,
+                PreparationTimeInMinutes = dto.PreparationTimeInMinutes,
+                Status = true,
+                CreatedAt = DateTime.UtcNow
+            };
+        }
+
+        public static void ApplyUpdate(this Product product, ProductUpdateDto dto, string? photoPath)
+        {
+            product.CategoryId = dto.CategoryId;
+            product.Name = dto.Name;
+            product.Description = dto.Description;
+            product.Price = dto.Price;
+            product.PreparationTimeInMinutes = dto.PreparationTimeInMinutes;
+            product.Status = dto.Status;
+
+            if (photoPath != null)
+                product.Photo = photoPath;
+        }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Products\Interfaces\IProductRepository.cs =====
+using SaborExpress.Modules.Products.Models;
+
+namespace SaborExpress.Modules.Products.Interfaces
+{
+    public interface IProductRepository
+    {
+        Task<List<Product>> GetAllAsync();
+        Task<Product?> GetByIdAsync(int id);
+        Task<Product> AddAsync(Product product);
+        Task UpdateAsync(Product product);
+        Task DeleteAsync(Product product);
+        Task<bool> ExistsByNameAsync(string name, int? excludeId = null);
+
+        Task<List<Product>> GetByCategoryIdAsync(int categoryId);
+        Task<bool> HasOrderItemsAsync(int productId);
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Products\Repositories\ProductRepository.cs =====
+using Microsoft.EntityFrameworkCore;
+using SaborExpress.Data; // AJUSTAR: namespace real de tu AppDbContext
+using SaborExpress.Modules.Products.Interfaces;
+using SaborExpress.Modules.Products.Models;
+
+namespace SaborExpress.Modules.Products.Repositories
+{
+    public class ProductRepository : IProductRepository
+    {
+        private readonly AppDbContext _context;
+
+        public ProductRepository(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<List<Product>> GetAllAsync()
+        {
+            return await _context.Products
+                .Include(p => p.Category)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+
+        public async Task<Product?> GetByIdAsync(int id)
+        {
+            return await _context.Products
+                .Include(p => p.Category)
+                .FirstOrDefaultAsync(p => p.Id == id);
+        }
+
+        public async Task<Product> AddAsync(Product product)
+        {
+            _context.Products.Add(product);
+            await _context.SaveChangesAsync();
+            return product;
+        }
+
+        public async Task UpdateAsync(Product product)
+        {
+            _context.Products.Update(product);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task DeleteAsync(Product product)
+        {
+            _context.Products.Remove(product);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<bool> ExistsByNameAsync(string name, int? excludeId = null)
+        {
+            var query = _context.Products.Where(p => p.Name.ToLower() == name.ToLower());
+
+            if (excludeId.HasValue)
+                query = query.Where(p => p.Id != excludeId.Value);
+
+            return await query.AnyAsync();
+        }
+        public async Task<List<Product>> GetByCategoryIdAsync(int categoryId)
+        {
+            return await _context.Products
+                .Include(p => p.Category)
+                .Where(p => p.CategoryId == categoryId)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+
+        public async Task<bool> HasOrderItemsAsync(int productId)
+        {
+            // AJUSTAR: cambia "OrderItems" y "ProductId" por los nombres reales
+            // de tu DbSet/entidad en el mÃ³dulo Orders
+            return await _context.OrderDetails
+                .AnyAsync(oi => oi.ProductId == productId);
+        }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Products\Interfaces\IProductService.cs =====
+using SaborExpress.Modules.Products.DTOs;
+
+namespace SaborExpress.Modules.Products.Interfaces
+{
+    public interface IProductService
+    {
+        Task<List<ProductResponseDto>> GetAllAsync();
+        Task<ProductResponseDto?> GetByIdAsync(int id);
+        Task<ProductResponseDto> CreateAsync(ProductCreateDto dto);
+        Task UpdateAsync(int id, ProductUpdateDto dto);
+        Task DeleteAsync(int id);
+
+        Task<List<ProductResponseDto>> GetByCategoryIdAsync(int categoryId);
+        Task UpdateStatusAsync(int id, bool status, int currentEmployeeId, bool isManagerOrAdmin);
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Products\Services\ProductService.cs =====
+using SaborExpress.Modules.Products.DTOs;
+using SaborExpress.Modules.Products.Interfaces;
+using SaborExpress.Modules.Products.Mappings;
+using SaborExpress.Modules.Products.Validators;
+using SaborExpress.Shared.Constants;
+using SaborExpress.Shared.Interfaces;
+using Microsoft.AspNetCore.Http;
+
+namespace SaborExpress.Modules.Products.Services
+{
+    public class ProductService : IProductService
+    {
+        private readonly IProductRepository _repository;
+        private readonly ProductValidator _validator;
+        private readonly IAuthorizationService _authorizationService;
+
+        public ProductService(
+            IProductRepository repository,
+            ProductValidator validator,
+            IAuthorizationService authorizationService)
+        {
+            _repository = repository;
+            _validator = validator;
+            _authorizationService = authorizationService;
+        }
+
+        public async Task<List<ProductResponseDto>> GetAllAsync()
+        {
+            var products = await _repository.GetAllAsync();
+            return products.Select(p => p.ToResponseDto()).ToList();
+        }
+
+        public async Task<ProductResponseDto?> GetByIdAsync(int id)
+        {
+            var product = await _repository.GetByIdAsync(id);
+            return product?.ToResponseDto();
+        }
+
+        public async Task<ProductResponseDto> CreateAsync(ProductCreateDto dto)
+        {
+            await _validator.ValidateCreateAsync(dto);
+
+            string? photoPath = null;
+            if (dto.Photo != null)
+                photoPath = await SavePhotoAsync(dto.Photo);
+
+            var entity = dto.ToEntity(photoPath);
+            var created = await _repository.AddAsync(entity);
+            return created.ToResponseDto();
+        }
+
+        public async Task UpdateAsync(int id, ProductUpdateDto dto)
+        {
+            var product = await _repository.GetByIdAsync(id)
+                ?? throw new ArgumentException("Producto no encontrado");
+
+            await _validator.ValidateUpdateAsync(id, dto);
+
+            string? photoPath = null;
+            if (dto.Photo != null)
+                photoPath = await SavePhotoAsync(dto.Photo);
+
+            product.ApplyUpdate(dto, photoPath);
+            await _repository.UpdateAsync(product);
+        }
+
+        public async Task DeleteAsync(int id)
+        {
+            var product = await _repository.GetByIdAsync(id)
+                ?? throw new ArgumentException("Producto no encontrado");
+
+            var hasOrders = await _repository.HasOrderItemsAsync(id);
+            if (hasOrders)
+                throw new InvalidOperationException(
+                    "No se puede eliminar este producto porque tiene pedidos asociados. " +
+                    "Usa Actualizar para desactivarlo en su lugar.");
+
+            await _repository.DeleteAsync(product);
+        }
+
+        private async Task<string> SavePhotoAsync(IFormFile photo)
+        {
+            var fileName = $"{Guid.NewGuid()}{Path.GetExtension(photo.FileName)}";
+            var folderPath = Path.Combine("wwwroot", "uploads", "products");
+            Directory.CreateDirectory(folderPath);
+            var filePath = Path.Combine(folderPath, fileName);
+
+            using var stream = new FileStream(filePath, FileMode.Create);
+            await photo.CopyToAsync(stream);
+
+            return $"/uploads/products/{fileName}";
+        }
+
+        public async Task<List<ProductResponseDto>> GetByCategoryIdAsync(int categoryId)
+        {
+            var products = await _repository.GetByCategoryIdAsync(categoryId);
+            return products.Select(p => p.ToResponseDto()).ToList();
+        }
+
+        // Ahora recibe el empleado actual y valida el permiso ActivarDesactivarPlato
+        // (Gerente/Administrador ya entran por el rol en el controller; el Cocinero
+        // necesita este permiso + turno activo para llegar hasta aquÃ­).
+        public async Task UpdateStatusAsync(int id, bool status, int currentEmployeeId, bool isManagerOrAdmin)
+        {
+            var product = await _repository.GetByIdAsync(id)
+                ?? throw new ArgumentException("Producto no encontrado");
+
+            if (!isManagerOrAdmin)
+            {
+                var canToggle = await _authorizationService.CanPerformActionAsync(currentEmployeeId, PermissionNames.ActivarDesactivarPlato);
+                if (!canToggle)
+                    throw new InvalidOperationException("No tienes permiso para activar/desactivar productos ahora mismo.");
+            }
+
+            product.Status = status;
+            await _repository.UpdateAsync(product);
+        }
+    }
+}
+
+
+===== C:\Dev\SaborExpress\SaborExpressBack\Modules\Products\Validators\ProductValidator.cs =====
+using SaborExpress.Modules.Categories.Interfaces;
+using SaborExpress.Modules.Products.DTOs;
+using SaborExpress.Modules.Products.Interfaces;
+
+namespace SaborExpress.Modules.Products.Validators
+{
+    public class ProductValidator
+    {
+        private readonly IProductRepository _productRepository;
+        private readonly ICategoryRepository _categoryRepository;
+        private const int MaxNameLength = 100;
+        private const int MaxDescriptionLength = 500;
+        private const long MaxPhotoSizeBytes = 5 * 1024 * 1024;
+        private static readonly string[] AllowedPhotoTypes = { "image/jpeg", "image/png", "image/webp" };
+
+        public ProductValidator(IProductRepository productRepository, ICategoryRepository categoryRepository)
+        {
+            _productRepository = productRepository;
+            _categoryRepository = categoryRepository;
+        }
+
+        public async Task ValidateCreateAsync(ProductCreateDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Name))
+                throw new ArgumentException("El nombre del producto es obligatorio");
+
+            if (dto.Name.Length > MaxNameLength)
+                throw new ArgumentException($"El nombre no debe superar {MaxNameLength} caracteres");
+
+            if (!string.IsNullOrWhiteSpace(dto.Description) && dto.Description.Length > MaxDescriptionLength)
+                throw new ArgumentException($"La descripciÃ³n no debe superar {MaxDescriptionLength} caracteres");
+
+            if (dto.Price <= 0)
+                throw new ArgumentException("El precio debe ser mayor a cero");
+
+            if (dto.PreparationTimeInMinutes < 0)
+                throw new ArgumentException("El tiempo de preparaciÃ³n no puede ser negativo");
+
+            if (await _categoryRepository.GetByIdAsync(dto.CategoryId) is null)
+                throw new ArgumentException("La categorÃ­a seleccionada no existe");
+
+            if (await _productRepository.ExistsByNameAsync(dto.Name))
+                throw new ArgumentException("Ya existe un producto con ese nombre");
+
+            ValidatePhoto(dto.Photo);
+        }
+
+        public async Task ValidateUpdateAsync(int id, ProductUpdateDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Name))
+                throw new ArgumentException("El nombre del producto es obligatorio");
+
+            if (dto.Name.Length > MaxNameLength)
+                throw new ArgumentException($"El nombre no debe superar {MaxNameLength} caracteres");
+
+            if (!string.IsNullOrWhiteSpace(dto.Description) && dto.Description.Length > MaxDescriptionLength)
+                throw new ArgumentException($"La descripciÃ³n no debe superar {MaxDescriptionLength} caracteres");
+
+            if (dto.Price <= 0)
+                throw new ArgumentException("El precio debe ser mayor a cero");
+
+            if (dto.PreparationTimeInMinutes < 0)
+                throw new ArgumentException("El tiempo de preparaciÃ³n no puede ser negativo");
+
+            if (await _categoryRepository.GetByIdAsync(dto.CategoryId) is null)
+                throw new ArgumentException("La categorÃ­a seleccionada no existe");
+
+            if (await _productRepository.ExistsByNameAsync(dto.Name, excludeId: id))
+                throw new ArgumentException("Ya existe otro producto con ese nombre");
+
+            ValidatePhoto(dto.Photo);
+        }
+
+        private void ValidatePhoto(Microsoft.AspNetCore.Http.IFormFile? photo)
+        {
+            if (photo == null) return;
+
+            if (!AllowedPhotoTypes.Contains(photo.ContentType))
+                throw new ArgumentException("La foto debe ser JPG, PNG o WEBP");
+
+            if (photo.Length > MaxPhotoSizeBytes)
+                throw new ArgumentException("La foto no debe superar 5MB");
+        }
+    }
+}
+
+

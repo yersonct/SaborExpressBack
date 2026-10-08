@@ -4,7 +4,7 @@ namespace SaborExpress.Modules.Products.Interfaces
 {
     public interface IProductService
     {
-        Task<List<ProductResponseDto>> GetAllAsync();
+        Task<List<ProductResponseDto>> GetAllAsync(int? branchId = null);
         Task<ProductResponseDto?> GetByIdAsync(int id);
         Task<ProductResponseDto> CreateAsync(ProductCreateDto dto);
         Task UpdateAsync(int id, ProductUpdateDto dto);

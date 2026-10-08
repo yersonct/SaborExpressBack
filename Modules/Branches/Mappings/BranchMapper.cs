@@ -12,11 +12,11 @@ namespace SaborExpress.Modules.Branches.Mappings
             Address = summary.Address,
             Phone = summary.Phone,
             Status = summary.Status,
-            EmployeeCount = summary.EmployeeCount
+            EmployeeCount = summary.EmployeeCount,
+            Latitude = summary.Latitude,
+            Longitude = summary.Longitude
         };
 
-        // Usado solo justo después de crear/actualizar, cuando ya tenemos
-        // la entidad en memoria y el conteo de empleados por separado.
         public static BranchResponseDto ToResponse(Branch branch, int employeeCount) => new()
         {
             Id = branch.Id,
@@ -24,7 +24,9 @@ namespace SaborExpress.Modules.Branches.Mappings
             Address = branch.Address,
             Phone = branch.Phone,
             Status = branch.Status,
-            EmployeeCount = employeeCount
+            EmployeeCount = employeeCount,
+            Latitude = branch.Latitude,
+            Longitude = branch.Longitude
         };
     }
 }

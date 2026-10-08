@@ -17,10 +17,15 @@ namespace SaborExpress.Modules.Employees.Models
 
         public string? Phone { get; set; }
         public string? Address { get; set; }
-        public string? Photo { get; set; }
+        public string? Vehicle { get; set; }
+        public string? Plate { get; set; }
         public int? BranchId { get; set; }
         public Branch? Branch { get; set; }
         public string Status { get; set; } = "Activo";
+
+        // NUEVO: toggle online/offline, solo relevante para Repartidor.
+        // Para otros roles queda en true por defecto y se ignora.
+        public bool IsAvailable { get; set; } = true;
 
         public decimal BasePay { get; set; } = 0;
 

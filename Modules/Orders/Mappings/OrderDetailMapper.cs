@@ -18,8 +18,10 @@ namespace SaborExpress.Modules.Orders.Mappings
                 UnitPrice = orderDetail.UnitPrice,
                 SubTotal = orderDetail.SubTotal,
                 Notes = orderDetail.Notes,
+                IsToGo = orderDetail.IsToGo,
+                BatchNumber = orderDetail.BatchNumber,
                 Status = orderDetail.Status,
-                LastModifiedByEmployeeId = orderDetail.LastModifiedByEmployeeId,
+                LastModifiedByEmployeeId = orderDetail.LastModifiedByEmployeeId ?? 0,
                 LastModifiedByEmployeeName = orderDetail.LastModifiedByEmployee == null
                     ? null
                     : $"{orderDetail.LastModifiedByEmployee.Name} {orderDetail.LastModifiedByEmployee.LastName}".Trim()

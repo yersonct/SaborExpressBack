@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using SaborExpress.Modules.Notifications.DTOs;
 using SaborExpress.Modules.Notifications.Interfaces;
 using SaborExpress.Shared.Extensions;
+using SaborExpress.Shared.Constants;
 
 namespace SaborExpress.Controllers
 {
@@ -39,9 +40,9 @@ namespace SaborExpress.Controllers
             return Ok(new { unreadCount = count });
         }
 
-        [HttpPost]
-        [Authorize(Roles = "Gerente,Administrador")]
-        public async Task<IActionResult> Create([FromBody] CreateNotificationDto dto)
+    [HttpPost]
+    [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador}")]
+    public async Task<IActionResult> Create([FromBody] CreateNotificationDto dto)
         {
             var result = await _service.CreateManualAsync(dto);
             return StatusCode(201, result);

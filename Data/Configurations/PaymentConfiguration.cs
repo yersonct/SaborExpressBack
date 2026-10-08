@@ -20,7 +20,7 @@ namespace SaborExpress.Data.Configurations
                 .IsRequired();
 
             builder.HasOne(x => x.Order)
-                .WithMany()
+                .WithMany(o => o.Payments)
                 .HasForeignKey(x => x.OrderId)
                 .OnDelete(DeleteBehavior.Restrict);
 
