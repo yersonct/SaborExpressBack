@@ -75,8 +75,7 @@ var app = builder.Build();
 
 await app.MigrarYSembrarBaseDeDatosAsync();
 
-if (app.Environment.IsDevelopment())
-    app.UseSwaggerConfiguration();
+app.UseSwaggerConfiguration();
 app.UseStaticFiles();
 app.UseCors("AllowAll");
 
