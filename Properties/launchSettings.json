@@ -8,13 +8,13 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
 
-        "ConnectionStrings__PostgresConnection": "Host=localhost;Port=5432;Database=SaborExpress;Username=postgres;Password=Cuellar12345.",
+        "ConnectionStrings__PostgresConnection": "Host=ep-young-tooth-b706bpfd.c-13.us-east-1.aws.neon.tech;Port=5432;Database=neondb;Username=neondb_owner;Password=npg_jSTGY3v4eBAE;SSL Mode=Require;Trust Server Certificate=truecx",
 
         "JwtSettings__SecretKey": "EstaEsUnaClaveSecretaMuyLargaYSeguraParaElProyectoInstitucional2026!",
 
         "EmailSettings__Host": "smtp.gmail.com",
         "EmailSettings__Port": "587",
-        "EmailSettings__Username": "yersonstivencuellarrubiano@gmail.com",
+        "EmailSettings__Username": "yersonstivencuellarrubiano@gmail.com",  
         "EmailSettings__LastName": "Cuellar Rubiano",
         "EmailSettings__Password": "mvsj zgwj zlms etdu",
         "RefreshTokenExpirationHours": "12",
