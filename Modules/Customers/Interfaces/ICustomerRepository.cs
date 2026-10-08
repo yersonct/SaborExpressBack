@@ -9,5 +9,10 @@ namespace SaborExpress.Modules.Customers.Interfaces
         Task<Customer?> GetByUserIdAsync(int userId);
         Task<List<Customer>> GetAllAsync();
         Task UpdateAsync(Customer customer);
+
+        // Puente Customer.Id -> User.Id, usado por notificaciones (crear una
+        // notificación exige el UserId, pero los pedidos solo tienen CustomerId).
+        Task<int?> GetUserIdByCustomerIdAsync(int customerId);
+        Task<string?> GetEmailByUserIdAsync(int userId);
     }
 }

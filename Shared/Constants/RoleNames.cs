@@ -9,6 +9,7 @@
         public const string Cajero = "CAJERO";
         public const string Mesero = "MESERO";
         public const string Cocinero = "COCINERO";
+        public const string AuxiliarCocina = "AUXILIAR_COCINA";
 
     }
 }

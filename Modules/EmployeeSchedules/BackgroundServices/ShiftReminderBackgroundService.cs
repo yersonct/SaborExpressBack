@@ -3,6 +3,7 @@ using SaborExpress.Modules.EmployeeSchedules.Models;
 using SaborExpress.Modules.Employees.Interfaces;
 using SaborExpress.Modules.Notifications.Enum;
 using SaborExpress.Modules.Notifications.Interfaces;
+using SaborExpress.Shared.Helpers;
 
 namespace SaborExpress.Modules.EmployeeSchedules.BackgroundServices
 {
@@ -29,6 +30,13 @@ namespace SaborExpress.Modules.EmployeeSchedules.BackgroundServices
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            // Espera el intervalo completo ANTES de la primera corrida. Antes,
+            // este chequeo se disparaba de inmediato cada vez que el backend
+            // se reiniciaba (muy frecuente en desarrollo), aumentando el riesgo
+            // de duplicar/clonar turnos de hoy con el rol viejo si la fecha
+            // calculada quedaba desfasada en ese instante.
+            await Task.Delay(CheckInterval, stoppingToken);
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
@@ -61,9 +69,9 @@ namespace SaborExpress.Modules.EmployeeSchedules.BackgroundServices
             IEmployeeRepository employeeRepository,
             IUserNotificationService notificationService)
         {
-            var now = DateTime.Now;
-            var windowEnd = now.AddMinutes(MinutesBeforeEndToNotify);
-            var tomorrow = DateOnly.FromDateTime(now.AddDays(1));
+        var now = ColombiaTime.Now;
+        var windowEnd = now.AddMinutes(MinutesBeforeEndToNotify);
+        var tomorrow = DateOnly.FromDateTime(now.AddDays(1));
 
             var shiftsEndingSoon = await scheduleRepository.GetShiftsEndingSoonAsync(now, windowEnd);
 
@@ -88,8 +96,8 @@ namespace SaborExpress.Modules.EmployeeSchedules.BackgroundServices
 
                 await notificationService.CreateBulkAsync(
                     userIds: adminUserIds,
-                    title: "Turno sin programar para manana",
-                    message: $"El turno de {employeeName} ({schedule.Role?.Name}) termina hoy y no tiene turno asignado para manana. Si no defines uno nuevo, se repetira el mismo turno automaticamente.",
+                    title: "Turno sin programar para mañana",
+                    message: $"El turno de {employeeName} ({schedule.Role?.Name}) termina hoy y no tiene turno asignado para mañana. Si no defines uno nuevo, se repetira el mismo turno automaticamente.",
                     type: NotificationType.ShiftEndingSoon,
                     relatedEntityType: "EmployeeSchedule",
                     relatedEntityId: schedule.Id
@@ -104,8 +112,9 @@ namespace SaborExpress.Modules.EmployeeSchedules.BackgroundServices
 
         private async Task AutoRenewShiftsAsync(IEmployeeScheduleRepository scheduleRepository)
         {
-            var tomorrow = DateOnly.FromDateTime(DateTime.Now.AddDays(1));
-            var endedShifts = await scheduleRepository.GetShiftsEndedTodayAsync();
+            var now = ColombiaTime.Now;
+            var tomorrow = DateOnly.FromDateTime(now.AddDays(1));
+            var endedShifts = await scheduleRepository.GetShiftsEndedTodayAsync(now);
 
             foreach (var schedule in endedShifts)
             {

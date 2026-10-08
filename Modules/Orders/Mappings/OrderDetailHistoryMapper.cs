@@ -16,7 +16,7 @@ namespace SaborExpress.Modules.Orders.Mappings
                 OldValue = history.OldValue,
                 NewValue = history.NewValue,
                 Reason = history.Reason,
-                ChangedByEmployeeId = history.ChangedByEmployeeId,
+                ChangedByEmployeeId = history.ChangedByEmployeeId ?? 0,
                 ChangedByEmployeeName = history.ChangedByEmployee == null
                     ? null
                     : $"{history.ChangedByEmployee.Name} {history.ChangedByEmployee.LastName}".Trim(),

@@ -29,12 +29,27 @@ namespace SaborExpress.Modules.Branches.Repositories
         public async Task<Branch?> GetByIdAsync(int id)
             => await _context.Branches.FirstOrDefaultAsync(b => b.Id == id);
 
+        public async Task<Branch?> GetByPublicKitchenCodeAsync(string code)
+            => await _context.Branches.FirstOrDefaultAsync(b => b.PublicKitchenCode == code);
+
         public async Task UpdateAsync(Branch branch)
         {
             _context.Branches.Update(branch);
             await _context.SaveChangesAsync();
         }
 
+        public async Task<bool> HasTablesAsync(int branchId)
+            => await _context.Tables.AnyAsync(t => t.BranchId == branchId);
+
+        public async Task<bool> HasOrdersAsync(int branchId)
+            => await _context.Orders.AnyAsync(o => o.BranchId == branchId);
+
+        public async Task<bool> HasSchedulesAsync(int branchId)
+            => await _context.EmployeeSchedules.AnyAsync(s => s.BranchId == branchId);
+        public async Task<List<Branch>> GetAllActiveWithCoordinatesAsync()
+        => await _context.Branches
+            .Where(b => b.Status)
+            .ToListAsync();
         public async Task DeleteAsync(Branch branch)
         {
             _context.Branches.Remove(branch);
@@ -50,7 +65,9 @@ namespace SaborExpress.Modules.Branches.Repositories
                     Address = b.Address,
                     Phone = b.Phone,
                     Status = b.Status,
-                    EmployeeCount = b.Employees.Count()   // se traduce a un COUNT en SQL, no carga los empleados
+                    EmployeeCount = b.Employees.Count(),
+                    Latitude = b.Latitude,
+                    Longitude = b.Longitude
                 })
                 .ToListAsync();
 
@@ -64,7 +81,9 @@ namespace SaborExpress.Modules.Branches.Repositories
                     Address = b.Address,
                     Phone = b.Phone,
                     Status = b.Status,
-                    EmployeeCount = b.Employees.Count()
+                    EmployeeCount = b.Employees.Count(),
+                    Latitude = b.Latitude,
+                    Longitude = b.Longitude
                 })
                 .FirstOrDefaultAsync();
 

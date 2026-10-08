@@ -11,12 +11,18 @@ namespace SaborExpress.Modules.Branches.Interfaces
 
         // Para editar/borrar: solo la entidad, sin cargar empleados (no se necesitan para mutar)
         Task<Branch?> GetByIdAsync(int id);
+        Task<Branch?> GetByPublicKitchenCodeAsync(string code);
         Task UpdateAsync(Branch branch);
         Task DeleteAsync(Branch branch);
 
         // Para listados/lectura: proyección liviana con el conteo calculado en SQL
         Task<List<BranchSummary>> GetAllSummariesAsync();
+        Task<List<Branch>> GetAllActiveWithCoordinatesAsync();
         Task<BranchSummary?> GetSummaryByIdAsync(int id);
         Task<int> GetEmployeeCountAsync(int branchId);
+
+        Task<bool> HasTablesAsync(int branchId);
+        Task<bool> HasOrdersAsync(int branchId);
+        Task<bool> HasSchedulesAsync(int branchId);
     }
 }

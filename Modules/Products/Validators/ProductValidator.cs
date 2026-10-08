@@ -8,15 +8,20 @@ namespace SaborExpress.Modules.Products.Validators
     {
         private readonly IProductRepository _productRepository;
         private readonly ICategoryRepository _categoryRepository;
+        private readonly SaborExpress.Modules.Branches.Interfaces.IBranchRepository _branchRepository;
         private const int MaxNameLength = 100;
         private const int MaxDescriptionLength = 500;
         private const long MaxPhotoSizeBytes = 5 * 1024 * 1024;
         private static readonly string[] AllowedPhotoTypes = { "image/jpeg", "image/png", "image/webp" };
 
-        public ProductValidator(IProductRepository productRepository, ICategoryRepository categoryRepository)
+        public ProductValidator(
+            IProductRepository productRepository,
+            ICategoryRepository categoryRepository,
+            SaborExpress.Modules.Branches.Interfaces.IBranchRepository branchRepository)
         {
             _productRepository = productRepository;
             _categoryRepository = categoryRepository;
+            _branchRepository = branchRepository;
         }
 
         public async Task ValidateCreateAsync(ProductCreateDto dto)
@@ -38,6 +43,9 @@ namespace SaborExpress.Modules.Products.Validators
 
             if (await _categoryRepository.GetByIdAsync(dto.CategoryId) is null)
                 throw new ArgumentException("La categoría seleccionada no existe");
+
+            if (dto.BranchId.HasValue && await _branchRepository.GetByIdAsync(dto.BranchId.Value) is null)
+                throw new ArgumentException("La sede seleccionada no existe");
 
             if (await _productRepository.ExistsByNameAsync(dto.Name))
                 throw new ArgumentException("Ya existe un producto con ese nombre");
@@ -64,6 +72,9 @@ namespace SaborExpress.Modules.Products.Validators
 
             if (await _categoryRepository.GetByIdAsync(dto.CategoryId) is null)
                 throw new ArgumentException("La categoría seleccionada no existe");
+
+            if (dto.BranchId.HasValue && await _branchRepository.GetByIdAsync(dto.BranchId.Value) is null)
+                throw new ArgumentException("La sede seleccionada no existe");
 
             if (await _productRepository.ExistsByNameAsync(dto.Name, excludeId: id))
                 throw new ArgumentException("Ya existe otro producto con ese nombre");

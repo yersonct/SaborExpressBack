@@ -56,6 +56,8 @@ namespace SaborExpress.Data
         public DbSet<UserPreference> UserPreferences =>Set<UserPreference>();
 
         public DbSet<BranchSetting> Configurations  => Set<BranchSetting>();
+        public DbSet<BranchOperationalSettings> BranchOperationalSettings => Set<BranchOperationalSettings>();
+        public DbSet<UserSettings> UserSettings => Set<UserSettings>();
 
         public DbSet<EmailConfirmationCode> EmailConfirmationCodes => Set<EmailConfirmationCode>();
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();

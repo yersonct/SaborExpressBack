@@ -15,6 +15,7 @@ namespace SaborExpress.Modules.Reviews.Interfaces
 
         Task<(double Average, int Count)> GetBranchSummaryAsync(int branchId);
         Task<int?> GetEmployeeBranchIdAsync(int employeeId);
+        Task<int?> GetOrderBranchIdAsync(int orderId);
 
         Task<bool> OrderExistsAndIsReviewableAsync(int orderId);
         Task<bool> OrderHasReviewAsync(int orderId);

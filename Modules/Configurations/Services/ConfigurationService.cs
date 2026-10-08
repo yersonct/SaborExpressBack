@@ -87,7 +87,15 @@ namespace SaborExpress.Modules.Configurations.Services
 
             return ConfigurationMapper.ToResponse(configuration);
         }
+                public Task<int?> GetEmployeeBranchIdAsync(int employeeId)
+        {
+            return _configurationRepository.GetEmployeeBranchIdAsync(employeeId);
+        }
 
+        public Task<int?> GetBranchIdByConfigurationIdAsync(int configurationId)
+        {
+            return _configurationRepository.GetBranchIdByConfigurationIdAsync(configurationId);
+        }
         public async Task DeleteAsync(int id)
         {
             var configuration = await _configurationRepository.GetByIdAsync(id);

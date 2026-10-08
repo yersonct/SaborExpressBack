@@ -34,6 +34,23 @@ namespace SaborExpress.Modules.Auth.Repositories
             return Task.CompletedTask;
         }
 
+        public async Task<EmployeeActivationCode?> GetByTokenAsync(string token)
+        {
+            return await _context.EmployeeActivationCodes
+                .Include(x => x.User)
+                .FirstOrDefaultAsync(x => x.Code == token);
+        }
+
+        public async Task InvalidatePendingAsync(int userId)
+        {
+            var pending = await _context.EmployeeActivationCodes
+                .Where(x => x.UserId == userId && !x.IsUsed)
+                .ToListAsync();
+
+            foreach (var c in pending)
+                c.IsUsed = true;
+        }
+
         public async Task SaveChangesAsync()
         {
             await _context.SaveChangesAsync();

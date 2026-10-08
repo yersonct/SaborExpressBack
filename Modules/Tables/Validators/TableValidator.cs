@@ -47,10 +47,10 @@ namespace SaborExpress.Modules.Tables.Validators
 
         public void ValidateDelete(Table table)
         {
-            if (table.Status == TableStatus.Occupied || table.Status == TableStatus.Reserved)
+            if (table.Status == TableStatus.Occupied)
                 throw new ArgumentException(
-                    $"No se puede dar de baja una mesa en estado {table.Status}. " +
-                    "Cambia el estado a Disponible primero.");
+                    "No se puede eliminar una mesa que está Ocupada. " +
+                    "Cambia su estado a Disponible primero.");
         }
     }
 }

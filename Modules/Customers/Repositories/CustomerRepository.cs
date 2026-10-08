@@ -33,5 +33,17 @@ namespace SaborExpress.Modules.Customers.Repositories
             _context.Customers.Update(customer);
             await _context.SaveChangesAsync();
         }
+        public async Task<string?> GetEmailByUserIdAsync(int userId)
+            => await _context.Users
+                .Where(u => u.Id == userId)
+                .Select(u => u.Email)
+                .FirstOrDefaultAsync();
+        public async Task<int?> GetUserIdByCustomerIdAsync(int customerId)
+        {
+            return await _context.Customers
+                .Where(c => c.Id == customerId)
+                .Select(c => (int?)c.UserId)
+                .FirstOrDefaultAsync();
+        }
     }
 }

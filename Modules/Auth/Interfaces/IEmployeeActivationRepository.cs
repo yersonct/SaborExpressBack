@@ -8,6 +8,8 @@ namespace SaborExpress.Modules.Auth.Interfaces
         Task<EmployeeActivationCode?> GetLatestByUserIdAsync(int userId);
         Task AddAsync(EmployeeActivationCode code);
         Task UpdateAsync(EmployeeActivationCode code);
+        Task<EmployeeActivationCode?> GetByTokenAsync(string token);
+        Task InvalidatePendingAsync(int userId);
         Task SaveChangesAsync();
     }
 }

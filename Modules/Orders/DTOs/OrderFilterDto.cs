@@ -8,5 +8,6 @@ namespace SaborExpress.Modules.Orders.DTOs
     {
         public int? BranchId { get; set; }
         public OrderStatus? Status { get; set; }
+         public int? EmployeeId { get; set; }
     }
 }

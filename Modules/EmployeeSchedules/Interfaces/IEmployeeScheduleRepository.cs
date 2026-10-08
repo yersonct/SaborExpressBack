@@ -18,7 +18,16 @@ namespace SaborExpress.Modules.EmployeeSchedules.Interfaces
         Task<List<EmployeeSchedule>> GetShiftsEndingSoonAsync(DateTime fromTime, DateTime toTime);
         Task MarkReminderSentAsync(int scheduleId);
 
-        // Nuevo: turnos de hoy que ya terminaron (para el paso de auto-renovacion)
-        Task<List<EmployeeSchedule>> GetShiftsEndedTodayAsync();
+        Task<List<EmployeeSchedule>> GetShiftsEndedTodayAsync(DateTime now);
+
+        Task<List<EmployeeSchedule>> GetActiveCookShiftsToNotifyAsync(DateTime now);
+        Task MarkKitchenLinkSentAsync(int scheduleId, string accessToken);
+
+        Task<EmployeeSchedule?> GetActiveScheduleByTokenAsync(string token, DateTime now);
+
+        Task<List<int>> GetEmployeeIdsWithSchedulesAsync();
+
+        Task<List<int>> GetRequiredRoleIdsAsync(int employeeId, DateOnly fromDate);
+        Task<List<int>> GetAllRoleIdsEverAssignedAsync(int employeeId);           
     }
 }

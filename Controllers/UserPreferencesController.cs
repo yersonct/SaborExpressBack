@@ -1,4 +1,5 @@
 // Controllers/UserPreferencesController.cs
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SaborExpress.Modules.UserPreferences.DTOs;
@@ -83,9 +84,9 @@ namespace SaborExpress.Controllers
 
         private int GetCurrentUserId()
         {
-            var claim = User.FindFirst("UserId")?.Value;
+            var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (!int.TryParse(claim, out var id))
-                throw new UnauthorizedAccessException("Token inválido o sin claim UserId");
+                throw new UnauthorizedAccessException("Token inválido: no contiene el identificador del usuario.");
             return id;
         }
     }

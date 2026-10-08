@@ -1,9 +1,5 @@
 namespace SaborExpress.Modules.Branches.Models
 {
-    /// <summary>
-    /// Proyección liviana para listados: trae el conteo de empleados calculado
-    /// directamente en SQL (COUNT), sin cargar la lista completa de Employee a memoria.
-    /// </summary>
     public class BranchSummary
     {
         public int Id { get; set; }
@@ -12,5 +8,7 @@ namespace SaborExpress.Modules.Branches.Models
         public string? Phone { get; set; }
         public bool Status { get; set; }
         public int EmployeeCount { get; set; }
+        public decimal Latitude { get; set; }
+        public decimal Longitude { get; set; }
     }
 }

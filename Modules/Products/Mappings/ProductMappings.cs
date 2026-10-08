@@ -12,6 +12,8 @@ namespace SaborExpress.Modules.Products.Mappings
                 Id = product.Id,
                 CategoryId = product.CategoryId,
                 CategoryName = product.Category?.Name ?? string.Empty,
+                BranchId = product.BranchId,
+                BranchName = product.Branch?.Name,
                 Name = product.Name,
                 Description = product.Description,
                 Price = product.Price,
@@ -27,6 +29,7 @@ namespace SaborExpress.Modules.Products.Mappings
             return new Product
             {
                 CategoryId = dto.CategoryId,
+                BranchId = dto.BranchId,
                 Name = dto.Name,
                 Description = dto.Description,
                 Price = dto.Price,
@@ -40,6 +43,7 @@ namespace SaborExpress.Modules.Products.Mappings
         public static void ApplyUpdate(this Product product, ProductUpdateDto dto, string? photoPath)
         {
             product.CategoryId = dto.CategoryId;
+            product.BranchId = dto.BranchId;
             product.Name = dto.Name;
             product.Description = dto.Description;
             product.Price = dto.Price;

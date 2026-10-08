@@ -1,12 +1,13 @@
 // Modules/Payments/DTOs/WompiWebhookDto.cs
+using System.Text.Json.Serialization;
+
 namespace SaborExpress.Modules.Payments.DTOs
 {
-    // Estructura simplificada del payload real de Wompi (evento "transaction.updated")
     public class WompiWebhookDto
     {
         public string Event { get; set; } = string.Empty;
         public WompiWebhookDataDto Data { get; set; } = new();
-        public string Signature { get; set; } = string.Empty; // se valida aparte, viene en el header o el body según config
+        // Se quitó "Signature": la firma se valida con el JSON crudo en WompiClient
     }
 
     public class WompiWebhookDataDto
@@ -16,9 +17,11 @@ namespace SaborExpress.Modules.Payments.DTOs
 
     public class WompiTransactionDto
     {
-        public string Id { get; set; } = string.Empty;         // WompiTransactionId
-        public string Reference { get; set; } = string.Empty;  // nuestro WompiReference
-        public string Status { get; set; } = string.Empty;     // "APPROVED", "DECLINED", "VOIDED", "ERROR"
+        public string Id { get; set; } = string.Empty;
+        public string Reference { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+
+        [JsonPropertyName("amount_in_cents")]
         public int AmountInCents { get; set; }
     }
 }

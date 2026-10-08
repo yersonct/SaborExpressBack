@@ -52,6 +52,7 @@ namespace SaborExpress.Controllers
             await _branchService.DeleteAsync(id);
             return NoContent();
         }
+        
 
         private int GetCurrentUserId()
         {
@@ -59,6 +60,27 @@ namespace SaborExpress.Controllers
                 ?? throw new UnauthorizedAccessException("Token inválido: no contiene el identificador del usuario.");
 
             return int.Parse(claim.Value);
+        }
+
+        [HttpGet("public")]
+        public async Task<IActionResult> GetPublic() => Ok(await _branchService.GetPublicActiveAsync());
+
+        // GET /api/Branches/nearest?latitude=X&longitude=Y — sede más cercana
+        // a las coordenadas de la dirección elegida por el cliente.
+        [HttpGet("nearest")]
+        public async Task<IActionResult> GetNearest(
+            [FromQuery] decimal latitude,
+            [FromQuery] decimal longitude)
+        {
+            var branch = await _branchService.FindNearestBranchAsync(latitude, longitude);
+            return Ok(new PublicBranchDto
+            {
+                Id = branch.Id,
+                Name = branch.Name,
+                Address = branch.Address,
+                Latitude = branch.Latitude,
+                Longitude = branch.Longitude,
+            });
         }
     }
 }

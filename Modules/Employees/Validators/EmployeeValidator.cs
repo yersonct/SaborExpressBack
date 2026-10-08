@@ -39,44 +39,37 @@ namespace SaborExpress.Modules.Employees.Validators
             if (string.IsNullOrWhiteSpace(dto.Email))
                 throw new ArgumentException("El correo es obligatorio");
 
-            if (dto.RoleIds == null || dto.RoleIds.Count == 0)
-                throw new ArgumentException("Debe asignar al menos un rol al empleado");
-
             if (await _employeeRepository.ExistsByDocumentAsync(dto.Document))
                 throw new ArgumentException("Ya existe un empleado con ese documento");
 
             if (await _authRepository.ExistsByEmailAsync(dto.Email))
                 throw new ArgumentException("Ya existe un usuario registrado con ese correo");
 
-            var roles = await ValidateRoleIdsExistAsync(dto.RoleIds);
             await ValidateBranchExistsAsync(dto.BranchId);
 
+            // Nota: aún no se conoce el rol del empleado (se asigna al crear su
+            // primer turno), así que aquí no se puede exigir CV todavía. Esa
+            // validación se hace en EmployeeScheduleService al asignar el rol.
             ValidateCvFile(dto.Cv);
-
-            // En creación, nunca hay un CV existente todavía -> siempre se exige si el rol lo requiere.
-            ValidateCvRequirement(roles, dto.Cv, hasExistingCv: false);
         }
 
         // Nuevo parámetro: hasExistingCv. Lo llena EmployeeService, que ya tiene
         // cargado el Employee (y por tanto sabe si employee.CvFile != null) antes
         // de llamar a este validador.
-        public async Task ValidateUpdateAsync(UpdateEmployeeDto dto, int currentUserId, bool hasExistingCv)
+         public async Task ValidateUpdateAsync(UpdateEmployeeDto dto, int currentUserId, bool hasExistingCv)
         {
             if (string.IsNullOrWhiteSpace(dto.Name))
                 throw new ArgumentException("El nombre completo es obligatorio");
-
-            if (dto.RoleIds == null || dto.RoleIds.Count == 0)
-                throw new ArgumentException("Debe asignar al menos un rol al empleado");
 
             if (!string.IsNullOrWhiteSpace(dto.Email) &&
                 await _authRepository.ExistsByEmailAsync(dto.Email, currentUserId))
                 throw new ArgumentException("Ya existe un usuario registrado con ese correo");
 
-            var roles = await ValidateRoleIdsExistAsync(dto.RoleIds);
             await ValidateBranchExistsAsync(dto.BranchId);
 
+            // El rol ya no se toca desde aquí: nace y se valida (incluyendo CV)
+            // exclusivamente al crear el primer turno con ese rol.
             ValidateCvFile(dto.Cv);
-            ValidateCvRequirement(roles, dto.Cv, hasExistingCv);
         }
 
         private async Task<List<Role>> ValidateRoleIdsExistAsync(List<int> roleIds)

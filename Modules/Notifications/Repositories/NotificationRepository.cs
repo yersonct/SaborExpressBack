@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SaborExpress.Data;
 using SaborExpress.Modules.Notifications.Interfaces;
 using SaborExpress.Modules.Notifications.Models;
+using SaborExpress.Shared.Constants;
 
 namespace SaborExpress.Modules.Notifications.Repositories
 {
@@ -54,6 +55,22 @@ namespace SaborExpress.Modules.Notifications.Repositories
             return await _context.Employees
                 .Where(e => e.BranchId == branchId && e.Status != "Retirado")
                 .Select(e => e.UserId)
+                .ToListAsync();
+        }
+
+        // Destinatarios de una reseña: todos los Gerentes + los Administradores de esa sede
+        public async Task<List<int>> GetReviewRecipientUserIdsAsync(int branchId)
+        {
+            return await _context.Users
+                .Where(u => u.Status
+                    && (u.Employee == null || u.Employee.Status != "Retirado")
+                    && (
+                        u.UserRoles.Any(ur => ur.Role.Name == RoleNames.Gerente)
+                        || (u.Employee != null
+                            && u.Employee.BranchId == branchId
+                            && u.UserRoles.Any(ur => ur.Role.Name == RoleNames.Administrador))
+                    ))
+                .Select(u => u.Id)
                 .ToListAsync();
         }
 

@@ -107,9 +107,7 @@ namespace SaborExpress.Modules.Tables.Services
             await EnsureCanManageTableAsync(table.BranchId, currentUserId);
             _validator.ValidateDelete(table);
 
-            table.Status = TableStatus.Inactive;
-
-            await _tableRepository.UpdateAsync(table);
+            await _tableRepository.DeleteAsync(table);
             await _tableRepository.SaveChangesAsync();
         }
 
@@ -151,5 +149,6 @@ namespace SaborExpress.Modules.Tables.Services
             if (!canUpdateStatus)
                 throw new InvalidOperationException("No tienes permiso para cambiar el estado de las mesas ahora mismo.");
         }
+
     }
 }

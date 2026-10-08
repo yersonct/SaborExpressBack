@@ -25,6 +25,8 @@ namespace SaborExpress.Modules.EmployeeSchedules.Models
         public TimeOnly EndTime { get; set; }
 
         public bool ReminderSent { get; set; } = false;
+        public bool KitchenLinkSent { get; set; } = false;
+        public string? KitchenAccessToken { get; set; }
 
         public ScheduleStatus Status { get; set; } = ScheduleStatus.Programado;
 

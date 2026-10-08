@@ -1,5 +1,4 @@
-﻿// Modules/Auth/Interfaces/IEmployeeActivationService.cs
-using SaborExpress.Modules.Auth.DTOs;
+﻿using SaborExpress.Modules.Auth.DTOs;
 
 namespace SaborExpress.Modules.Auth.Interfaces
 {
@@ -7,5 +6,6 @@ namespace SaborExpress.Modules.Auth.Interfaces
     {
         Task SendActivationCodeAsync(int userId, string email, string employeeName);
         Task ActivateAccountAsync(ActivateAccountDto dto);
+        Task ResendActivationCodeAsync(ResendActivationDto dto);
     }
 }

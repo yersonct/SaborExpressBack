@@ -17,7 +17,6 @@ namespace SaborExpress.Modules.Employees.Mappings
                 Email = employee.User?.Email,
                 Phone = employee.Phone,
                 Address = employee.Address,
-                Photo = employee.Photo,
                 RoleNames = employee.User?.UserRoles?
                     .Select(ur => ur.Role?.Name ?? string.Empty)
                     .Where(name => !string.IsNullOrEmpty(name))

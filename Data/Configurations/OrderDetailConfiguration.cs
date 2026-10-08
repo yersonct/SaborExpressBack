@@ -37,8 +37,8 @@ namespace SaborExpress.Data.Configurations
                 .OnDelete(DeleteBehavior.Restrict);
 
             builder.Property(x => x.LastModifiedByEmployeeId)
-                .HasColumnName("last_modified_by_employee_id")
-                .IsRequired();
+                .HasColumnName("last_modified_by_employee_id");
+            
 
             builder.HasOne(x => x.LastModifiedByEmployee)
                 .WithMany()
@@ -62,6 +62,16 @@ namespace SaborExpress.Data.Configurations
             builder.Property(x => x.Notes)
                 .HasColumnName("notes")
                 .HasMaxLength(255);
+
+            builder.Property(x => x.IsToGo)
+                .HasColumnName("is_to_go")
+                .IsRequired()
+                .HasDefaultValue(false);
+
+            builder.Property(x => x.BatchNumber)
+                .HasColumnName("batch_number")
+                .IsRequired()
+                .HasDefaultValue(1);
 
             builder.Property(x => x.Status)
                 .HasColumnName("status")

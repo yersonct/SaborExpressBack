@@ -65,6 +65,33 @@ namespace SaborExpress.Modules.Addresses.Repositories
             _context.Addresses.Remove(address);
             return Task.CompletedTask;
         }
+        public async Task<Address?> GetDefaultByCustomerIdAsync(int customerId)
+        {
+            return await _context.Addresses
+                .FirstOrDefaultAsync(x => x.CustomerId == customerId && x.IsDefault);
+        }
+
+        public async Task<Address?> GetMostRecentByCustomerIdAsync(int customerId, int? excludeAddressId = null)
+        {
+            return await _context.Addresses
+                .Where(x => x.CustomerId == customerId &&
+                            (!excludeAddressId.HasValue || x.Id != excludeAddressId.Value))
+                .OrderByDescending(x => x.Id)
+                .FirstOrDefaultAsync();
+        }
+
+        // Solo modifica la entidad; se guarda con el SaveChangesAsync del servicio,
+        // así todo queda en una sola transacción.
+        public async Task SetCustomerAddressTextAsync(int customerId, string? addressText)
+        {
+            var customer = await _context.Customers.FirstOrDefaultAsync(c => c.Id == customerId);
+            if (customer == null) return;
+
+            // Customers.Address admite máximo 200 caracteres.
+            customer.Address = addressText is { Length: > 200 }
+                ? addressText[..200]
+                : addressText;
+        }
 
         public async Task SaveChangesAsync()
         {

@@ -1,5 +1,6 @@
 // Modules/Addresses/Interfaces/IAddressService.cs
 using SaborExpress.Modules.Addresses.DTOs;
+using SaborExpress.Modules.Addresses.Models;
 
 namespace SaborExpress.Modules.Addresses.Interfaces
 {
@@ -11,5 +12,8 @@ namespace SaborExpress.Modules.Addresses.Interfaces
         Task<AddressResponseDto> UpdateAsync(int id, UpdateAddressDto dto, int customerId);
         Task<AddressResponseDto> SetDefaultAsync(int id, int customerId);
         Task DeleteAsync(int id, int customerId);
+        Task<AddressResponseDto?> GetDefaultForCustomerAsync(int customerId);
+
+
     }
 }

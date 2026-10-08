@@ -1,5 +1,7 @@
 // Modules/Reviews/Services/ReviewService.cs
 using SaborExpress.Modules.Auth.Interfaces;
+using SaborExpress.Modules.Notifications.Enum;
+using SaborExpress.Modules.Notifications.Interfaces;
 using SaborExpress.Modules.Reviews.DTOs;
 using SaborExpress.Modules.Reviews.Interfaces;
 using SaborExpress.Modules.Reviews.Mappings;
@@ -15,15 +17,24 @@ namespace SaborExpress.Modules.Reviews.Services
         private readonly IReviewRepository _reviewRepository;
         private readonly ReviewValidator _validator;
         private readonly IAuthRepository _authRepository;
+        private readonly IUserNotificationService _notificationService;
+        private readonly INotificationRepository _notificationRepository;
+        private readonly ILogger<ReviewService> _logger;
 
         public ReviewService(
             IReviewRepository reviewRepository,
             ReviewValidator validator,
-            IAuthRepository authRepository)
+            IAuthRepository authRepository,
+            IUserNotificationService notificationService,
+            INotificationRepository notificationRepository,
+            ILogger<ReviewService> logger)
         {
             _reviewRepository = reviewRepository;
             _validator = validator;
             _authRepository = authRepository;
+            _notificationService = notificationService;
+            _notificationRepository = notificationRepository;
+            _logger = logger;
         }
 
         public async Task<ReviewResponseDto> CreateAsync(CreateReviewDto dto, int customerId)
@@ -43,7 +54,46 @@ namespace SaborExpress.Modules.Reviews.Services
             await _reviewRepository.SaveChangesAsync();
 
             var created = await _reviewRepository.GetByIdAsync(review.Id);
-            return ReviewMapper.ToResponse(created!);
+            var response = ReviewMapper.ToResponse(created!);
+
+            await NotifyManagersAsync(response);
+
+            return response;
+        }
+
+        // Avisa a Gerentes y Administradores de la sede. Si falla, la reseña igual queda guardada.
+        private async Task NotifyManagersAsync(ReviewResponseDto review)
+        {
+            try
+            {
+                var branchId = await _reviewRepository.GetOrderBranchIdAsync(review.OrderId);
+                if (branchId == null) return;
+
+                var recipients = await _notificationRepository.GetReviewRecipientUserIdsAsync(branchId.Value);
+                if (recipients.Count == 0) return;
+
+                var customer = string.IsNullOrWhiteSpace(review.CustomerName) ? "Un cliente" : review.CustomerName;
+                var message = $"{customer} calificó el pedido #{review.OrderId} con {review.Rating}/5.";
+
+                if (!string.IsNullOrWhiteSpace(review.Comment))
+                {
+                    var comment = review.Comment.Trim();
+                    if (comment.Length > 120) comment = comment[..120] + "...";
+                    message += $" Comentario: {comment}";
+                }
+
+                await _notificationService.CreateBulkAsync(
+                    recipients,
+                    "Nueva reseña",
+                    message,
+                    NotificationType.ReviewReceived,
+                    "Order",
+                    review.OrderId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "No se pudo notificar la reseña del pedido {OrderId}", review.OrderId);
+            }
         }
 
         public async Task<ReviewResponseDto> UpdateAsync(int id, UpdateReviewDto dto, int customerId)

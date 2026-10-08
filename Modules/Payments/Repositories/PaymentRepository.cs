@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SaborExpress.Data;
 using SaborExpress.Modules.Payments.Interfaces;
 using SaborExpress.Modules.Payments.Models;
+using SaborExpress.Modules.Payments.Enum;
 
 namespace SaborExpress.Modules.Payments.Repositories
 {
@@ -19,7 +20,18 @@ namespace SaborExpress.Modules.Payments.Repositories
         {
             return await _context.Payments
                 .Include(x => x.Cashier)
+                .Include(x => x.Order)
                 .FirstOrDefaultAsync(x => x.Id == id);
+        }
+                public async Task<List<Payment>> GetPendingWompiSinceAsync(DateTime since)
+        {
+            return await _context.Payments
+                .Include(x => x.Order)
+                .Where(p => p.Method == PaymentMethod.Wompi
+                         && p.Status == PaymentStatus.Pending
+                         && p.WompiReference != null
+                         && p.PaidAt >= since)
+                .ToListAsync();
         }
 
         public async Task<List<Payment>> GetByOrderIdAsync(int orderId)
@@ -48,6 +60,16 @@ namespace SaborExpress.Modules.Payments.Repositories
                 query = query.Where(x => x.PaidAt <= toDate.Value);
 
             return await query
+                .OrderByDescending(x => x.PaidAt)
+                .ToListAsync();
+        }
+
+        // NUEVO — cierre de caja: pagos que ESTE cajero registró desde una fecha (hoy, normalmente).
+        public async Task<List<Payment>> GetByCashierSinceAsync(int cashierId, DateTime since)
+        {
+            return await _context.Payments
+                .Include(x => x.Cashier)
+                .Where(x => x.CashierId == cashierId && x.PaidAt >= since)
                 .OrderByDescending(x => x.PaidAt)
                 .ToListAsync();
         }

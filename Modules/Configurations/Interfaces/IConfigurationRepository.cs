@@ -10,6 +10,8 @@ namespace SaborExpress.Modules.Configurations.Interfaces
         Task<List<BranchSetting>> GetByBranchIdAsync(int branchId);
         Task<BranchSetting?> GetByKeyAsync(int? branchId, string key);
         Task<bool> BranchExistsAsync(int branchId);
+        Task<int?> GetEmployeeBranchIdAsync(int employeeId);
+        Task<int?> GetBranchIdByConfigurationIdAsync(int configurationId);
         Task<bool> ExistsByBranchAndKeyAsync(int? branchId, string key, int? excludeId = null);
 
         Task AddAsync(BranchSetting configuration);

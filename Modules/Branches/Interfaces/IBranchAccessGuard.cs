@@ -8,5 +8,6 @@ namespace SaborExpress.Modules.Branches.Interfaces
     {
         Task<int?> GetOwnBranchIdAsync(int userId);
         Task EnsureCanAccessBranchAsync(int branchId, int userId);
+        Task<bool> IsGerenteAsync(int userId);
     }
 }

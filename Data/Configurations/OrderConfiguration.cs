@@ -94,6 +94,10 @@ namespace SaborExpress.Data.Configurations
                 .HasColumnName("notes")
                 .HasMaxLength(500);
 
+            builder.Property(x => x.GuestName)
+                .HasColumnName("guest_name")
+                .HasMaxLength(150);
+
             builder.Property(x => x.CreatedAt)
                 .HasColumnName("created_at")
                 .IsRequired();

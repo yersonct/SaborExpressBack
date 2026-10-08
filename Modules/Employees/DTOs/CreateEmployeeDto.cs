@@ -10,7 +10,6 @@ namespace SaborExpress.Modules.Employees.DTOs
         public string Email { get; set; } = string.Empty;
         public string? Phone { get; set; }
         public string? Address { get; set; }
-        public List<int> RoleIds { get; set; } = new();
         public int? BranchId { get; set; }
         public decimal BasePay { get; set; }
 

@@ -63,7 +63,7 @@ namespace SaborExpress.Controllers
         }
 
         [HttpGet("branch/{branchId:int}/summary")]
-        [Authorize(Roles = "GERENTE")]
+        [Authorize(Roles = "GERENTE,ADMINISTRADOR")]
         public async Task<IActionResult> GetBranchSummary(int branchId)
         {
             var result = await _reviewService.GetBranchSummaryAsync(branchId);

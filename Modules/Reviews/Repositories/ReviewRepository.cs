@@ -83,6 +83,14 @@ namespace SaborExpress.Modules.Reviews.Repositories
                 .FirstOrDefaultAsync();
         }
 
+        public async Task<int?> GetOrderBranchIdAsync(int orderId)
+        {
+            return await _context.Orders
+                .Where(o => o.Id == orderId)
+                .Select(o => (int?)o.BranchId)
+                .FirstOrDefaultAsync();
+        }
+
         public async Task<bool> OrderExistsAndIsReviewableAsync(int orderId)
         {
             return await _context.Orders

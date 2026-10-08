@@ -110,7 +110,10 @@ namespace SaborExpress.Configuration
                     if (string.IsNullOrEmpty(rawToken))
                         rawToken = context.HttpContext.Request.Query["access_token"].ToString();
 
-                    if (string.IsNullOrEmpty(user.Token) || user.Token != rawToken)
+                    var config = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+                    var singleSession = config.GetValue("Auth:SingleSession", true);
+
+                    if (singleSession && (string.IsNullOrEmpty(user.Token) || user.Token != rawToken))
                     {
                         context.Fail("Tu sesión ya no es válida: se inició sesión en otro dispositivo.");
                     }

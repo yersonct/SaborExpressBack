@@ -4,6 +4,7 @@ using SaborExpress.Modules.Products.Mappings;
 using SaborExpress.Modules.Products.Validators;
 using SaborExpress.Shared.Constants;
 using SaborExpress.Shared.Interfaces;
+using Microsoft.AspNetCore.Http;
 
 namespace SaborExpress.Modules.Products.Services
 {
@@ -23,9 +24,9 @@ namespace SaborExpress.Modules.Products.Services
             _authorizationService = authorizationService;
         }
 
-        public async Task<List<ProductResponseDto>> GetAllAsync()
+        public async Task<List<ProductResponseDto>> GetAllAsync(int? branchId = null)
         {
-            var products = await _repository.GetAllAsync();
+            var products = await _repository.GetAllAsync(branchId);
             return products.Select(p => p.ToResponseDto()).ToList();
         }
 
@@ -77,7 +78,7 @@ namespace SaborExpress.Modules.Products.Services
             await _repository.DeleteAsync(product);
         }
 
-        private async Task<string> SavePhotoAsync(Microsoft.AspNetCore.Http.IFormFile photo)
+        private async Task<string> SavePhotoAsync(IFormFile photo)
         {
             var fileName = $"{Guid.NewGuid()}{Path.GetExtension(photo.FileName)}";
             var folderPath = Path.Combine("wwwroot", "uploads", "products");

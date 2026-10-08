@@ -5,7 +5,5 @@ namespace SaborExpress.Modules.Tables.Enum
     {
         Available,   // Libre
         Occupied,    // Ocupada
-        Reserved,    // Reservada
-        Inactive     // Dada de baja
     }
 }

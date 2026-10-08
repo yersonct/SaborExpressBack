@@ -13,6 +13,8 @@ namespace SaborExpress.Modules.Orders.DTOs
         public decimal UnitPrice { get; set; }
         public decimal SubTotal { get; set; }
         public string? Notes { get; set; }
+        public bool IsToGo { get; set; }
+        public int BatchNumber { get; set; }
         public OrderDetailStatus Status { get; set; }
         public int LastModifiedByEmployeeId { get; set; }
         public string? LastModifiedByEmployeeName { get; set; }

@@ -69,7 +69,6 @@ namespace SaborExpress.Controllers
             await _tableService.DeleteAsync(id, currentUserId);
             return NoContent();
         }
-
         private int GetCurrentUserId()
         {
             var claim = User.FindFirst(ClaimTypes.NameIdentifier)

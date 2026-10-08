@@ -23,6 +23,10 @@ namespace SaborExpress.Modules.Auth.Repositories
                 .Include(rt => rt.User)
                     .ThenInclude(u => u.UserRoles)
                         .ThenInclude(ur => ur.Role)
+                .Include(rt => rt.User)
+                    .ThenInclude(u => u.Employee)
+                .Include(rt => rt.User)
+                    .ThenInclude(u => u.Customer)
                 .FirstOrDefaultAsync(rt => rt.Token == token && !rt.IsRevoked && rt.ExpiresAt > DateTime.UtcNow);
         }
 

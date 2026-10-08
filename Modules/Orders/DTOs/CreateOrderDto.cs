@@ -3,13 +3,19 @@ using SaborExpress.Modules.Orders.Enum;
 
 namespace SaborExpress.Modules.Orders.DTOs
 {
-    // EmployeeId sale del usuario autenticado, no del body.
     public class CreateOrderDto
     {
         public int? CustomerId { get; set; }
         public int? TableId { get; set; }
-        public int BranchId { get; set; }
+
+        // Ahora opcional: obligatorio para todo excepto Delivery,
+        // donde se calcula internamente a partir de AddressId.
+        public int? BranchId { get; set; }
+
+        public int? AddressId { get; set; }
+
         public OrderType OrderType { get; set; }
         public string? Notes { get; set; }
+        public string? GuestName { get; set; }
     }
 }
