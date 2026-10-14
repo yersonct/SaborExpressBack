@@ -7,6 +7,7 @@ using SaborExpress.Modules.UserRoles.Mappings;
 using SaborExpress.Modules.UsersRoles.Models;
 using SaborExpress.Shared.Constants;
 using SaborExpress.Shared.Extensions;
+using SaborExpress.Shared.Interfaces;
 
 namespace SaborExpress.Modules.UserRoles.Services
 {
@@ -15,15 +16,21 @@ namespace SaborExpress.Modules.UserRoles.Services
         private readonly IUserRoleRepository _userRoleRepository;
         private readonly IAuthRepository _authRepository;
         private readonly IRoleRepository _roleRepository;
+        private readonly IRefreshTokenRepository _refreshTokenRepository;
+        private readonly IRealtimeNotifier _realtime;
 
         public UserRoleService(
             IUserRoleRepository userRoleRepository,
             IAuthRepository authRepository,
-            IRoleRepository roleRepository)
+            IRoleRepository roleRepository,
+            IRefreshTokenRepository refreshTokenRepository,
+            IRealtimeNotifier realtime)
         {
             _userRoleRepository = userRoleRepository;
             _authRepository = authRepository;
             _roleRepository = roleRepository;
+            _refreshTokenRepository = refreshTokenRepository;
+            _realtime = realtime;
         }
 
         public async Task<UserRoleResponseDto> AssignAsync(CreateUserRoleDto dto, int currentUserId)
@@ -49,7 +56,8 @@ namespace SaborExpress.Modules.UserRoles.Services
             if (user.Employee == null)
                 throw new InvalidOperationException("Solo se pueden asignar roles a usuarios que son empleados.");
 
-            // Un Administrador (no Gerente) tiene restricciones adicionales
+            // Un Administrador solo puede asignar roles operativos a empleados
+            // de su sede. Los roles de gestión se reservan para el Gerente.
             if (!esGerente && esAdministrador)
             {
                 if (role.Name == RoleNames.Administrador || role.Name == RoleNames.Gerente)
@@ -85,8 +93,9 @@ namespace SaborExpress.Modules.UserRoles.Services
             await _userRoleRepository.AddAsync(userRole);
 
             var created = await _userRoleRepository.GetAsync(dto.UserId, dto.RoleId)
-                ?? throw new InvalidOperationException("Error al crear la asignaci�n de rol.");
+                ?? throw new InvalidOperationException("Error al crear la asignación de rol.");
 
+            await ForceLogoutAfterRoleChangeAsync(dto.UserId);
             return UserRoleMapper.ToResponse(created);
         }
 
@@ -104,7 +113,7 @@ namespace SaborExpress.Modules.UserRoles.Services
             var role = await _roleRepository.GetByIdAsync(roleId)
                 ?? throw new KeyNotFoundException("El rol no existe.");
 
-            // Un Administrador (no Gerente) tiene las mismas restricciones que al asignar
+            // Un Administrador solo puede quitar roles operativos de su sede.
             if (!esGerente && esAdministrador)
             {
                 if (role.Name == RoleNames.Administrador || role.Name == RoleNames.Gerente)
@@ -139,6 +148,14 @@ namespace SaborExpress.Modules.UserRoles.Services
             }
 
             await _userRoleRepository.RemoveAsync(userRole);
+            await ForceLogoutAfterRoleChangeAsync(userId);
+        }
+
+        private async Task ForceLogoutAfterRoleChangeAsync(int userId)
+        {
+            await _refreshTokenRepository.RevokeAllForUserAsync(userId);
+            await _authRepository.ClearSessionTokensAsync(new[] { userId });
+            await _realtime.ForceLogoutAsync(userId, "role-changed");
         }
 
         public async Task<List<UserRoleResponseDto>> GetAllAsync()

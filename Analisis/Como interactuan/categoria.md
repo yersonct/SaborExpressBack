@@ -53,7 +53,7 @@ Backend responde con TODAS las categorías, sin ningún filtro por rol
 |---|---|
 | **Cliente** | Ve las categorías como pestañas/secciones al navegar el menú para pedir domicilio |
 | **Mesero** | Ve las categorías al tomar un pedido en mesa, para ubicar rápido el plato que el cliente pidió |
-| **Cocinero** | Las usa de forma indirecta al revisar `DailyMenu`, organizadas por categoría |
+| **Cocinero** | Consulta los productos del catálogo para preparar los pedidos |
 | **Cajero** | Rara vez las consulta directo — normalmente ve el pedido ya armado, no arma el pedido él mismo |
 | **Repartidor** | No las usa — su flujo empieza en `Deliveries`, no toca el menú |
 | **Administrador / Gerente** | Las consultan también al gestionar el catálogo de productos, para saber en qué categoría meter cada plato nuevo |

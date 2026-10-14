@@ -9,7 +9,7 @@ namespace SaborExpress.Modules.Payments.Interfaces
         Task<Payment?> GetByWompiReferenceAsync(string reference); // nuevo
         Task<List<Payment>> GetByOrderIdAsync(int orderId);
         Task<List<Payment>> GetAllAsync(int? branchId, DateTime? fromDate, DateTime? toDate);
-        Task<List<Payment>> GetByCashierSinceAsync(int cashierId, DateTime since); 
+        Task<List<Payment>> GetByCashierInRangeAsync(int cashierId, DateTime fromUtc, DateTime toUtc);
         Task<List<Payment>> GetPendingWompiSinceAsync(DateTime since);
         Task<bool> OrderExistsAsync(int orderId);
         Task AddAsync(Payment payment);

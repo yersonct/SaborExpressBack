@@ -39,6 +39,17 @@ namespace SaborExpress.Modules.Auth.Repositories
             return await query.FirstOrDefaultAsync(u => u.Id == id);
         }
 
+        public async Task<(bool Exists, string? Token)> GetSessionInfoAsync(int id)
+        {
+            var row = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.Id == id)
+                .Select(u => new { u.Token })
+                .FirstOrDefaultAsync();
+
+            return row == null ? (false, null) : (true, row.Token);
+        }
+
         public async Task AddAsync(User user)
         {
             await _context.Users.AddAsync(user);
@@ -69,6 +80,14 @@ namespace SaborExpress.Modules.Auth.Repositories
                 .Where(u => u.Employee != null && u.Employee.Id == employeeId)
                 .Select(u => (int?)u.Id)
                 .FirstOrDefaultAsync();
+        }
+
+        public async Task ClearSessionTokensAsync(IEnumerable<int> userIds)
+        {
+            var ids = userIds.ToList();
+            await _context.Users
+                .Where(u => ids.Contains(u.Id))
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.Token, (string?)null));
         }
     }
 }

@@ -73,7 +73,7 @@ namespace SaborExpress.Controllers
                 var adminBranchId = await _configurationService.GetEmployeeBranchIdAsync(currentEmployeeId);
 
                 if (dto.BranchId == null || adminBranchId != dto.BranchId)
-                    return Forbid("Solo puedes crear configuración para tu propia sede");
+                    return StatusCode(StatusCodes.Status403Forbidden, new { error = "Solo puedes crear configuración para tu propia sede" });
             }
 
             var result = await _configurationService.CreateAsync(dto);
@@ -91,7 +91,7 @@ namespace SaborExpress.Controllers
                 var targetBranchId = await _configurationService.GetBranchIdByConfigurationIdAsync(id);
 
                 if (targetBranchId == null || adminBranchId != targetBranchId)
-                    return Forbid("Solo puedes editar la configuración de tu propia sede");
+                    return StatusCode(StatusCodes.Status403Forbidden, new { error = "Solo puedes editar la configuración de tu propia sede" });
             }
 
             var result = await _configurationService.UpdateAsync(id, dto);

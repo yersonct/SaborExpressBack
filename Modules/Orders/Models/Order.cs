@@ -33,7 +33,12 @@ namespace SaborExpress.Modules.Orders.Models
         public OrderChannel Channel { get; set; } = OrderChannel.Mostrador;
         public OrderStatus Status { get; set; } = OrderStatus.Pending;
         public decimal SubTotal { get; set; }
-        public decimal Tax { get; set; }
+          public decimal Tax { get; set; }
+        public decimal TaxRate { get; set; }      // porcentaje aplicado (8 = 8 %)
+        // False en pedidos históricos (impuesto calculado por encima del subtotal).
+        // Los pedidos nuevos usan precios al público con Impoconsumo incluido.
+        public bool TaxIncludedInPrice { get; set; }
+        public decimal DeliveryFee { get; set; }  // solo > 0 en pedidos a domicilio
         public decimal Total { get; set; }
         public string? Notes { get; set; }
         

@@ -252,28 +252,12 @@ Todo el mundo (cliente o empleado) pasa por aquí antes de hacer cualquier otra 
 
 ---
 
-## 19. DailyMenu — El menú del día
-
-| Endpoint | Para qué sirve | Ejemplo de interacción |
-|---|---|---|
-| `GET /api/daily-menu/branch/{branchId}/today` | Ver qué hay disponible hoy (lo que ve el cliente/mesero al pedir) | Ana abre la app y solo ve los platos que sí están disponibles hoy en su sede |
-| `GET /api/daily-menu/branch/{branchId}/date/{date}` | Planear el menú de una fecha futura | El Gerente arma desde hoy el menú del almuerzo de mañana |
-| `GET /api/daily-menu/{id}` | Ver el detalle de una entrada puntual del menú | Se revisa si "Ajiaco" está disponible para la franja de almuerzo |
-| `POST /api/daily-menu` | Agregar un producto puntual al menú de un día | Se agrega "Sancocho" al almuerzo de hoy |
-| `POST /api/daily-menu/bulk` | Reemplazar de una vez todo el menú del día | El Gerente carga los 8 platos del almuerzo de hoy en un solo request |
-| `PUT /api/daily-menu/{id}` | Editar una entrada del menú del día | Se cambia la franja de un plato de "Almuerzo" a "Cena" |
-| `PATCH /api/daily-menu/{id}/toggle` | Prender/apagar rápido un plato a media jornada | Se acabó el plato del día y el cocinero lo apaga sin borrar el registro |
-| `DELETE /api/daily-menu/{id}` | Quitar un producto del menú de ese día | Se retira un plato que se programó por error |
-
----
-
 ## Ejemplo de flujo completo: un pedido de principio a fin
 
 Para que veas cómo se conectan varios módulos en un solo caso real:
 
 ```
-1. Ana abre la app → GET /api/daily-menu/branch/1/today
-   (ve qué platos hay disponibles hoy)
+1. Ana abre la app y consulta los productos disponibles en el catálogo de su sede
 
 2. Ana hace su pedido → POST /api/Orders
    (se crea el pedido con su primera línea)
