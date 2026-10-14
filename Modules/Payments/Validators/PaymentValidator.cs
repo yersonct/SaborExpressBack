@@ -63,6 +63,9 @@ namespace SaborExpress.Modules.Payments.Validators
             if (string.IsNullOrWhiteSpace(dto.Reason))
                 throw new ArgumentException("Debe indicar el motivo del reembolso");
 
+            if (dto.Reason.Trim().Length > 500)
+                throw new ArgumentException("El motivo no puede superar los 500 caracteres");
+
             if (payment.Status == PaymentStatus.Refunded)
                 throw new ArgumentException("Este pago ya fue reembolsado");
 

@@ -9,8 +9,10 @@ namespace SaborExpress.Modules.Employees.Interfaces
         Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int currentUserId);
         Task<EmployeeResponseDto> UpdateAsync(int id, UpdateEmployeeDto dto, int currentUserId);
         Task DeactivateAsync(int id, int currentUserId);
+        Task DeletePermanentlyAsync(int id, int currentUserId);
         Task<(byte[] Archivo, string NombreArchivo, string ContentType)?> GetCvAsync(int id);
         Task<EmployeeMeResponseDto> SetMyAvailabilityAsync(int employeeId, bool isAvailable);
+        Task UpdateMyLocationAsync(int employeeId, decimal latitude, decimal longitude);
 
         Task<EmployeeMeResponseDto> GetMeAsync(int employeeId);
         Task<EmployeeMeResponseDto> UpdateMeAsync(int employeeId, UpdateEmployeeMeDto dto);

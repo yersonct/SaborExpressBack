@@ -11,7 +11,10 @@ namespace SaborExpress.Modules.Invoices.DTOs
         public string? BranchName { get; set; }
         public string? CustomerName { get; set; }
         public decimal SubTotal { get; set; }
-        public decimal Tax { get; set; }
+           public decimal Tax { get; set; }
+        public decimal TaxRate { get; set; }
+        public bool TaxIncludedInPrice { get; set; }
+        public decimal DeliveryFee { get; set; }
         public decimal Total { get; set; }
         public bool IsVoided { get; set; }
         public DateTime IssuedAt { get; set; }

@@ -110,6 +110,9 @@ namespace SaborExpress.Modules.Deliveries.Repositories
                 .Select(e => new DeliveryPersonLoad
                 {
                     EmployeeId = e.Id,
+                    CurrentLatitude = e.CurrentLatitude,
+                    CurrentLongitude = e.CurrentLongitude,
+                    LocationUpdatedAt = e.LocationUpdatedAt,
                     ActiveDeliveryCount = _context.Deliveries
                         .Count(d => d.DeliveryPersonId == e.Id
                             && d.Status != DeliveryStatus.Delivered

@@ -14,6 +14,7 @@ namespace SaborExpress.Modules.EmployeeSchedules.Mappings
                 EmployeeName = entity.Employee != null
                     ? $"{entity.Employee.Name} {entity.Employee.LastName}"
                     : string.Empty,
+                EmployeeBranchId = entity.Employee?.BranchId,
                 BranchId = entity.BranchId,
                 BranchName = entity.Branch?.Name ?? string.Empty,
                 RoleId = entity.RoleId,

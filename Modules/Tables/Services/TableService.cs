@@ -17,14 +17,20 @@ namespace SaborExpress.Modules.Tables.Services
         private readonly ITableRepository _tableRepository;
         private readonly TableValidator _validator;
         private readonly IAuthRepository _authRepository;
-        private readonly IAuthorizationService _authorizationService;   
+        private readonly IAuthorizationService _authorizationService;
+        private readonly IRealtimeNotifier _realtime;
+        private readonly ITableAvailabilityService _tableAvailabilityService;
 
         public TableService(
             ITableRepository tableRepository,
             TableValidator validator,
             IAuthRepository authRepository,
-            IAuthorizationService authorizationService)                
+            IAuthorizationService authorizationService,
+            IRealtimeNotifier realtime,
+            ITableAvailabilityService tableAvailabilityService)
         {
+            _tableAvailabilityService = tableAvailabilityService;
+            _realtime = realtime;
             _tableRepository = tableRepository;
             _validator = validator;
             _authRepository = authRepository;
@@ -59,6 +65,7 @@ namespace SaborExpress.Modules.Tables.Services
 
             await _tableRepository.AddAsync(table);
             await _tableRepository.SaveChangesAsync();
+            await _realtime.TablesChangedAsync();
 
             var created = await _tableRepository.GetByIdAsync(table.Id);
             return TableMapper.ToResponse(created!);
@@ -77,6 +84,7 @@ namespace SaborExpress.Modules.Tables.Services
 
             await _tableRepository.UpdateAsync(table);
             await _tableRepository.SaveChangesAsync();
+            await _realtime.TablesChangedAsync();
 
             return TableMapper.ToResponse(table);
         }
@@ -90,10 +98,14 @@ namespace SaborExpress.Modules.Tables.Services
             await EnsureCanUpdateTableStatusAsync(table.BranchId, currentUserId);   
             _validator.ValidateStatusChange(table, dto);
 
+            if (dto.Status == TableStatus.Available)
+                await _tableAvailabilityService.EnsureCanSetAvailableAsync(id);
+
             table.Status = dto.Status;
 
             await _tableRepository.UpdateAsync(table);
             await _tableRepository.SaveChangesAsync();
+            await _realtime.TablesChangedAsync();
 
             return TableMapper.ToResponse(table);
         }
@@ -109,6 +121,7 @@ namespace SaborExpress.Modules.Tables.Services
 
             await _tableRepository.DeleteAsync(table);
             await _tableRepository.SaveChangesAsync();
+            await _realtime.TablesChangedAsync();
         }
 
         // Para Create/Update/Delete: estructura de la mesa en sí.
@@ -139,7 +152,7 @@ namespace SaborExpress.Modules.Tables.Services
             if (currentUser.Employee?.BranchId != branchId)
                 throw new InvalidOperationException("Solo puedes gestionar mesas de la sede a la que perteneces.");
 
-            if (currentUser.HasRole(RoleNames.Administrador))
+            if (currentUser.HasRole(RoleNames.Administrador) || currentUser.HasRole(RoleNames.Cajero))
                 return;
 
             var employeeId = currentUser.Employee?.Id

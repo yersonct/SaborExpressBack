@@ -13,15 +13,18 @@ namespace SaborExpress.Modules.Payments.Mappings
                 Id = payment.Id,
                 OrderId = payment.OrderId,
                 CashierId = payment.CashierId,
-                CashierName = payment.Cashier == null
-                    ? null
-                    : $"{payment.Cashier.Name} {payment.Cashier.LastName}".Trim(),
+                CashierName = payment.Cashier != null
+                    ? $"{payment.Cashier.Name} {payment.Cashier.LastName}".Trim()
+                    : payment.Order?.Customer != null
+                        ? $"{payment.Order.Customer.Name} {payment.Order.Customer.LastName}".Trim()
+                        : payment.Order?.GuestName,
                 Method = payment.Method,
                 Amount = payment.Amount,
                 Status = payment.Status,
                 PaidAt = payment.PaidAt,
                 WompiReference = payment.WompiReference,
-                WompiTransactionId = payment.WompiTransactionId
+                WompiTransactionId = payment.WompiTransactionId,
+                RefundReason = payment.RefundReason
             };
         }
     }

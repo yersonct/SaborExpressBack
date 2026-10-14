@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SaborExpress.Data;
+using SaborExpress.Shared.Helpers;
 using SaborExpress.Modules.Employees.Interfaces;
 using SaborExpress.Modules.Employees.Models;
 using SaborExpress.Shared.Constants; 
@@ -38,7 +39,9 @@ namespace SaborExpress.Modules.Employees.Repositories
             var query = _context.Employees.AsQueryable();
             query = AplicarFiltroEstado(query, estado);
 
-            return await ProjectToListItem(query).ToListAsync();
+            var items = await ProjectToListItem(query).ToListAsync();
+            await ApplyTodayShiftAsync(items);
+            return items;
         }
 
         public async Task<List<EmployeeListItem>> GetAllByBranchLightAsync(int branchId, string estado = "activo")
@@ -49,27 +52,76 @@ namespace SaborExpress.Modules.Employees.Repositories
 
             query = AplicarFiltroEstado(query, estado);
 
-            return await ProjectToListItem(query).ToListAsync();
+            var items = await ProjectToListItem(query).ToListAsync();
+            await ApplyTodayShiftAsync(items);
+            return items;
         }
 
-        private static IQueryable<EmployeeListItem> ProjectToListItem(IQueryable<Employee> query)
+private static IQueryable<EmployeeListItem> ProjectToListItem(IQueryable<Employee> query)
+{
+    return query.Select(e => new EmployeeListItem
+    {
+        Id = e.Id,
+        UserId = e.UserId,
+        Name = e.Name,
+        LastName = e.LastName,
+        Document = e.Document,
+        Email = e.User.Email,
+        Phone = e.Phone,
+        Address = e.Address,
+        RoleNames = e.User.UserRoles.Select(ur => ur.Role.Name).ToList(),
+        BranchId = e.BranchId,
+        Status = e.Status,
+        BasePay = e.BasePay,
+        HasCv = e.CvFile != null && e.CvFile.Length > 0
+    });
+}
+
+// Rol y sede salen SOLO del turno de hoy (hora Colombia).
+// Si hay varios: el activo ahora, si no el próximo, si no el último.
+        private async Task ApplyTodayShiftAsync(List<EmployeeListItem> items)
         {
-            return query.Select(e => new EmployeeListItem
+            if (items.Count == 0) return;
+
+            var now = ColombiaTime.Now;
+            var today = DateOnly.FromDateTime(now);
+            var nowTime = TimeOnly.FromDateTime(now);
+            var ids = items.Select(i => i.Id).ToList();
+
+            var shifts = await _context.EmployeeSchedules
+                .Where(s => ids.Contains(s.EmployeeId) && s.ShiftDate == today)
+                .Select(s => new
+                {
+                    s.EmployeeId,
+                    RoleName = s.Role.Name,
+                    BranchName = s.Branch.Name,
+                    s.StartTime,
+                    s.EndTime
+                })
+                .ToListAsync();
+
+            foreach (var item in items)
             {
-                Id = e.Id,
-                UserId = e.UserId,
-                Name = e.Name,
-                LastName = e.LastName,
-                Document = e.Document,
-                Email = e.User.Email,
-                Phone = e.Phone,
-                Address = e.Address,
-                RoleNames = e.User.UserRoles.Select(ur => ur.Role.Name).ToList(),
-                BranchId = e.BranchId,
-                Status = e.Status,
-                BasePay = e.BasePay,
-                HasCv = e.CvFile != null && e.CvFile.Length > 0
-            });
+                var mine = shifts.Where(s => s.EmployeeId == item.Id).ToList();
+
+                var active = mine.FirstOrDefault(s => s.StartTime <= nowTime && nowTime <= s.EndTime);
+                var upcoming = mine.Where(s => s.StartTime > nowTime).OrderBy(s => s.StartTime).FirstOrDefault();
+                var last = mine.OrderByDescending(s => s.EndTime).FirstOrDefault();
+
+                var chosen = active ?? upcoming ?? last;
+                var visible = active ?? upcoming;
+
+                item.TodayShiftState =
+                    active != null ? "Active" :
+                    upcoming != null ? "Upcoming" :
+                    last != null ? "Ended" : "None";
+
+                // Con el turno terminado o sin turno, no se muestra ningún rol
+                item.TodayRoleNames = visible == null
+                    ? new List<string>()
+                    : new List<string> { visible.RoleName };
+                item.TodayBranchName = chosen?.BranchName;
+            }
         }
 
         private static IQueryable<Employee> AplicarFiltroEstado(IQueryable<Employee> query, string estado)

@@ -12,15 +12,18 @@ namespace SaborExpress.Modules.Invoices.Models
         public int PaymentId { get; set; } // FK - 1 a 1 con Payment
         public Payment Payment { get; set; } = null!;
 
-        public int OrderId { get; set; } // FK - denormalizado para consultas rápidas
+        public int OrderId { get; set; } // FK - denormalizado para consultas rï¿½pidas
         public Order Order { get; set; } = null!;
 
-        public int BranchId { get; set; } // FK - dueña de la numeración consecutiva
+        public int BranchId { get; set; } // FK - dueï¿½a de la numeraciï¿½n consecutiva
         public Branch Branch { get; set; } = null!;
 
         public string InvoiceNumber { get; set; } = string.Empty; // ej: SUC001-000123
         public decimal SubTotal { get; set; }
-        public decimal Tax { get; set; }
+             public decimal Tax { get; set; }
+        public decimal TaxRate { get; set; }
+        public bool TaxIncludedInPrice { get; set; }
+        public decimal DeliveryFee { get; set; }
         public decimal Total { get; set; }
 
         public bool IsVoided { get; set; } = false;

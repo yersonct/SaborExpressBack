@@ -526,25 +526,6 @@ consecutiva por sucursal — sin integración DIAN por ahora.
 **Se relaciona con:** `Payment` (1 a 1 — una factura por pago conf)
 
 ---
-## 26. DailyMenu (`DailyMenuItem`) — ✅ COMPLETADO
-
-**Qué es:** el menú disponible por sucursal, fecha y franja (desayuno/almuerzo/cena). Permite que el Gerente/Administrador elija qué platos se ofrecen ese día, y que Cliente/Mesero solo vean lo disponible al tomar el pedido.
-
-**Se relaciona con:** `Branch` (muchos a 1), `Product` (muchos a 1).
-
-| Método | Endpoint | Quién | Para qué |
-|---|---|---|---|
-| GET | `/api/daily-menu/branch/{branchId}/today` | Cualquier autenticado (Cliente, Mesero, Gerente...) | Lo que Cliente/Mesero ven para tomar el pedido — filtra automáticamente por fecha de hoy, y opcionalmente `?period=Almuerzo` |
-| GET | `/api/daily-menu/branch/{branchId}/date/{date}` | Gerente/Administrador | Ver o planear el menú de una fecha específica (ej. armar el de mañana desde hoy) |
-| GET | `/api/daily-menu/{id}` | Gerente/Administrador | Ver el detalle de una entrada puntual |
-| POST | `/api/daily-menu` | Gerente/Administrador | Agregar **un** producto puntual al menú de un día/franja |
-| POST | `/api/daily-menu/bulk` | Gerente/Administrador | Reemplazar de una vez **todo** el menú de una sucursal+fecha+franja con una lista de productos (el caso de uso real: "el almuerzo de hoy son estos 8 platos") |
-| PUT | `/api/daily-menu/{id}` | Gerente/Administrador | Editar fecha/franja/disponibilidad de una entrada |
-| PATCH | `/api/daily-menu/{id}/toggle` | Gerente/Administrador | Prender/apagar rápido a media jornada (ej. "se acabó el plato del día", sin editar todo el registro) |
-| DELETE | `/api/daily-menu/{id}` | Gerente/Administrador | Quitar un producto del menú de ese día |
-
-**Estado:**
-
 ## Resumen final — las 23 entidades reales + 4 módulos nuevos/pendientes
 
 | # | Entidad (`DbSet` real) | Estado general |

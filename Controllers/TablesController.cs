@@ -52,7 +52,7 @@ namespace SaborExpress.Controllers
             return Ok(result);
         }
 
-        [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador},{RoleNames.Mesero}")]
+        [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador},{RoleNames.Mesero},{RoleNames.Cajero}")]
         [HttpPatch("{id:int}/status")]
         public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateTableStatusDto dto)
         {

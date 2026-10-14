@@ -25,5 +25,10 @@ namespace SaborExpress.Shared.Helpers
         }
 
         public static DateTime Now => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, Zone);
+
+        public static DateTime ToUtc(DateTime colombiaLocalTime) =>
+            TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(colombiaLocalTime, DateTimeKind.Unspecified),
+                Zone);
     }
 }

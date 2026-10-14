@@ -18,7 +18,6 @@ using SaborExpress.Modules.Addresses.Models;
 using SaborExpress.Modules.UserPreferences.Models;
 using SaborExpress.Modules.EmployeeSchedules.Models;
 using SaborExpress.Modules.Configurations.Models;
-using SaborExpress.Modules.DailyMenu.Models;
 using SaborExpress.Modules.Invoices.Models;
 using SaborExpress.Modules.Notifications.Models;
 namespace SaborExpress.Data
@@ -62,10 +61,10 @@ namespace SaborExpress.Data
         public DbSet<EmailConfirmationCode> EmailConfirmationCodes => Set<EmailConfirmationCode>();
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
         public DbSet<EmployeeSchedule> EmployeeSchedules => Set<EmployeeSchedule>();
-        public DbSet<DailyMenuItem> DailyMenuItems => Set<DailyMenuItem>();
         public DbSet<Invoice> Invoices => Set<Invoice>();
         public DbSet<EmployeeActivationCode> EmployeeActivationCodes => Set<EmployeeActivationCode>();
         public DbSet<Notification> Notifications  => Set<Notification>();
+        public DbSet<PushDevice> PushDevices => Set<PushDevice>();
         
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

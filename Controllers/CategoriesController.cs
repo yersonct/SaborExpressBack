@@ -21,20 +21,26 @@ namespace SaborExpress.Controllers
         // 👇 Pública: la usa la carta digital para saber qué categorías están activas
         [AllowAnonymous]
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] bool includeInactive = false)
         {
-            var categories = await _service.GetAllAsync();
+            var categories = await _service.GetAllAsync(
+                includeInactive && CanManageCatalog());
             return Ok(categories);
         }
 
         [AllowAnonymous]
         [HttpGet("{id}")]
-        public async Task<IActionResult> GetById(int id)
+        public async Task<IActionResult> GetById(int id, [FromQuery] bool includeInactive = false)
         {
-            var category = await _service.GetByIdAsync(id);
+            var category = await _service.GetByIdAsync(
+                id,
+                includeInactive && CanManageCatalog());
             if (category is null) return NotFound();
             return Ok(category);
         }
+
+        private bool CanManageCatalog() =>
+            User.IsInRole(RoleNames.Gerente) || User.IsInRole(RoleNames.Administrador);
 
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador}")]
         [HttpPost]

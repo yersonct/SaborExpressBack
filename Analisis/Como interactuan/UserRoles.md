@@ -229,5 +229,5 @@ no el `id` del empleado.
 
 1. `UserRoles` no es una pantalla propia — es una sección dentro del detalle de un empleado.
 2. Usa siempre `userId`, no `employeeId`.
-3. El backend ya valida todas las reglas de negocio (sede, Administrador único, duplicados) — el front solo muestra el mensaje de error tal cual llega.
+3. El backend valida todas las reglas de negocio (sede, Administrador único, duplicados) — el front solo muestra el mensaje de error tal cual llega.
 4. Después de asignar o quitar un rol, siempre recargar la lista (`getByUser`) para reflejar el estado real.

@@ -11,6 +11,9 @@ namespace SaborExpress.Modules.EmployeeSchedules.Interfaces
         Task<List<EmployeeSchedule>> GetByEmployeeAndDateAsync(int employeeId, DateOnly date);
         Task<EmployeeSchedule> AddAsync(EmployeeSchedule schedule);
         Task UpdateAsync(EmployeeSchedule schedule);
+        // Deja los turnos de hoy y futuros listos para que SaveChanges del mismo
+        // AppDbContext guarde junto con la configuración de la sede.
+        Task<bool> ApplyBranchHoursToUpcomingAsync(int branchId, DateOnly fromDate, TimeOnly startTime, TimeOnly endTime);
         Task DeleteAsync(EmployeeSchedule schedule);
         Task<bool> EmployeeExistsAsync(int employeeId);
         Task<bool> BranchExistsAsync(int branchId);
