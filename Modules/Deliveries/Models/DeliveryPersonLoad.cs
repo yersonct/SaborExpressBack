@@ -6,5 +6,8 @@ namespace SaborExpress.Modules.Deliveries.Models
     {
         public int EmployeeId { get; set; }
         public int ActiveDeliveryCount { get; set; }
+        public decimal? CurrentLatitude { get; set; }
+        public decimal? CurrentLongitude { get; set; }
+        public DateTime? LocationUpdatedAt { get; set; }
     }
 }

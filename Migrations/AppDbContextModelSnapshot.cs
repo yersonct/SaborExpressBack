@@ -372,11 +372,41 @@ namespace SaborExpress.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("description");
 
+                    b.Property<string>("DescriptionEn")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description_en");
+
+                    b.Property<string>("DescriptionFr")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description_fr");
+
+                    b.Property<string>("DescriptionPt")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description_pt");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
+
+                    b.Property<string>("NameEn")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_en");
+
+                    b.Property<string>("NameFr")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_fr");
+
+                    b.Property<string>("NamePt")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_pt");
 
                     b.Property<bool>("Status")
                         .ValueGeneratedOnAdd()
@@ -401,14 +431,6 @@ namespace SaborExpress.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<bool>("AcceptsDelivery")
-                        .HasColumnType("boolean")
-                        .HasColumnName("accepts_delivery");
-
-                    b.Property<bool>("AcceptsDineIn")
-                        .HasColumnType("boolean")
-                        .HasColumnName("accepts_dine_in");
-
                     b.Property<int>("BranchId")
                         .HasColumnType("integer")
                         .HasColumnName("branch_id");
@@ -425,17 +447,15 @@ namespace SaborExpress.Migrations
                         .HasColumnType("decimal(5,2)")
                         .HasColumnName("delivery_radius_km");
 
-                    b.Property<decimal>("MinOrderAmount")
-                        .HasColumnType("decimal(12,2)")
-                        .HasColumnName("min_order_amount");
+                    b.Property<int>("MaxActiveDeliveriesPerCourier")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(4)
+                        .HasColumnName("max_active_deliveries_per_courier");
 
                     b.Property<TimeOnly>("OpeningTime")
                         .HasColumnType("time")
                         .HasColumnName("opening_time");
-
-                    b.Property<decimal>("SuggestedTipPercent")
-                        .HasColumnType("decimal(5,2)")
-                        .HasColumnName("suggested_tip_percent");
 
                     b.Property<decimal>("TaxRate")
                         .HasColumnType("decimal(5,2)")
@@ -553,41 +573,6 @@ namespace SaborExpress.Migrations
                         .IsUnique();
 
                     b.ToTable("customers", (string)null);
-                });
-
-            modelBuilder.Entity("SaborExpress.Modules.DailyMenu.Models.DailyMenuItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("BranchId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("Date")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsAvailable")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("MealPeriod")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ProductId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BranchId");
-
-                    b.HasIndex("ProductId");
-
-                    b.ToTable("DailyMenuItems");
                 });
 
             modelBuilder.Entity("SaborExpress.Modules.Deliveries.Models.Delivery", b =>
@@ -736,6 +721,14 @@ namespace SaborExpress.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<decimal?>("CurrentLatitude")
+                        .HasColumnType("decimal(10,7)")
+                        .HasColumnName("current_latitude");
+
+                    b.Property<decimal?>("CurrentLongitude")
+                        .HasColumnType("decimal(10,7)")
+                        .HasColumnName("current_longitude");
+
                     b.Property<string>("CvContentType")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -757,12 +750,18 @@ namespace SaborExpress.Migrations
                         .HasColumnName("document");
 
                     b.Property<bool>("IsAvailable")
-                        .HasColumnType("boolean");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("LastName")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
                         .HasColumnName("last_name");
+
+                    b.Property<DateTime?>("LocationUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("location_updated_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -775,11 +774,6 @@ namespace SaborExpress.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("phone");
 
-                    b.Property<string>("Plate")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("plate");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -791,11 +785,6 @@ namespace SaborExpress.Migrations
                     b.Property<int>("UserId")
                         .HasColumnType("integer")
                         .HasColumnName("user_id");
-
-                    b.Property<string>("Vehicle")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("vehicle");
 
                     b.HasKey("Id");
 
@@ -821,6 +810,10 @@ namespace SaborExpress.Migrations
                     b.Property<int>("BranchId")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("DeliveryFee")
+                        .HasColumnType("decimal(12,2)")
+                        .HasColumnName("delivery_fee");
+
                     b.Property<string>("InvoiceNumber")
                         .IsRequired()
                         .HasColumnType("text");
@@ -842,6 +835,14 @@ namespace SaborExpress.Migrations
 
                     b.Property<decimal>("Tax")
                         .HasColumnType("numeric");
+
+                    b.Property<bool>("TaxIncludedInPrice")
+                        .HasColumnType("boolean")
+                        .HasColumnName("tax_included_in_price");
+
+                    b.Property<decimal>("TaxRate")
+                        .HasColumnType("decimal(5,2)")
+                        .HasColumnName("tax_rate");
 
                     b.Property<decimal>("Total")
                         .HasColumnType("numeric");
@@ -906,6 +907,65 @@ namespace SaborExpress.Migrations
                     b.ToTable("Notifications");
                 });
 
+            modelBuilder.Entity("SaborExpress.Modules.Notifications.Models.PushDevice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ExpoPushToken")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("expo_push_token");
+
+                    b.Property<string>("NotificationProfile")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("waiter")
+                        .HasColumnName("notification_profile");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("platform");
+
+                    b.Property<bool>("SoundEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("sound_enabled");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.Property<bool>("VibrationEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("vibration_enabled");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpoPushToken")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("push_devices", (string)null);
+                });
+
             modelBuilder.Entity("SaborExpress.Modules.Orders.Models.Order", b =>
                 {
                     b.Property<int>("Id")
@@ -935,6 +995,10 @@ namespace SaborExpress.Migrations
                     b.Property<int?>("CustomerId")
                         .HasColumnType("integer")
                         .HasColumnName("customer_id");
+
+                    b.Property<decimal>("DeliveryFee")
+                        .HasColumnType("decimal(12,2)")
+                        .HasColumnName("delivery_fee");
 
                     b.Property<int?>("EmployeeId")
                         .HasColumnType("integer")
@@ -973,6 +1037,14 @@ namespace SaborExpress.Migrations
                     b.Property<decimal>("Tax")
                         .HasColumnType("decimal(10,2)")
                         .HasColumnName("tax");
+
+                    b.Property<bool>("TaxIncludedInPrice")
+                        .HasColumnType("boolean")
+                        .HasColumnName("tax_included_in_price");
+
+                    b.Property<decimal>("TaxRate")
+                        .HasColumnType("decimal(5,2)")
+                        .HasColumnName("tax_rate");
 
                     b.Property<decimal>("Total")
                         .HasColumnType("decimal(10,2)")
@@ -1187,6 +1259,11 @@ namespace SaborExpress.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("paid_at");
 
+                    b.Property<string>("RefundReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("refund_reason");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -1283,11 +1360,38 @@ namespace SaborExpress.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<string>("DescriptionEn")
+                        .HasColumnType("text")
+                        .HasColumnName("description_en");
+
+                    b.Property<string>("DescriptionFr")
+                        .HasColumnType("text")
+                        .HasColumnName("description_fr");
+
+                    b.Property<string>("DescriptionPt")
+                        .HasColumnType("text")
+                        .HasColumnName("description_pt");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
                         .HasColumnName("name");
+
+                    b.Property<string>("NameEn")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("name_en");
+
+                    b.Property<string>("NameFr")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("name_fr");
+
+                    b.Property<string>("NamePt")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("name_pt");
 
                     b.Property<string>("Photo")
                         .HasMaxLength(255)
@@ -1665,25 +1769,6 @@ namespace SaborExpress.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("SaborExpress.Modules.DailyMenu.Models.DailyMenuItem", b =>
-                {
-                    b.HasOne("SaborExpress.Modules.Branches.Models.Branch", "Branch")
-                        .WithMany()
-                        .HasForeignKey("BranchId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("SaborExpress.Modules.Products.Models.Product", "Product")
-                        .WithMany()
-                        .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Branch");
-
-                    b.Navigation("Product");
-                });
-
             modelBuilder.Entity("SaborExpress.Modules.Deliveries.Models.Delivery", b =>
                 {
                     b.HasOne("SaborExpress.Modules.Addresses.Models.Address", "Address")
@@ -1784,6 +1869,17 @@ namespace SaborExpress.Migrations
                 });
 
             modelBuilder.Entity("SaborExpress.Modules.Notifications.Models.Notification", b =>
+                {
+                    b.HasOne("SaborExpress.Modules.Auth.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SaborExpress.Modules.Notifications.Models.PushDevice", b =>
                 {
                     b.HasOne("SaborExpress.Modules.Auth.Models.User", "User")
                         .WithMany()

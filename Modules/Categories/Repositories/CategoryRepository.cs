@@ -14,9 +14,13 @@ namespace SaborExpress.Modules.Categories.Repositories
             _context = context;
         }
 
-        public async Task<List<Category>> GetAllAsync()
+        public async Task<List<Category>> GetAllAsync(bool includeInactive = false)
         {
-            return await _context.Categories.AsNoTracking().ToListAsync();
+            var query = _context.Categories.AsNoTracking();
+            if (!includeInactive)
+                query = query.Where(category => category.Status);
+
+            return await query.ToListAsync();
         }
 
         public async Task<Category?> GetByIdAsync(int id)

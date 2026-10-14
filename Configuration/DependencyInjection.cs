@@ -92,11 +92,6 @@ using SaborExpress.Modules.Notifications.Repositories;
 using SaborExpress.Modules.Notifications.Services;
 using SaborExpress.Shared.BackgroundServices;
 
-using SaborExpress.Modules.DailyMenu.Interfaces;
-using SaborExpress.Modules.DailyMenu.Repositories;
-using SaborExpress.Modules.DailyMenu.Services;
-using SaborExpress.Modules.DailyMenu.Validators;
-
 using SaborExpress.Modules.Invoices.Interfaces;
 using SaborExpress.Modules.Invoices.Repositories;
 using SaborExpress.Modules.Invoices.Services;
@@ -136,7 +131,6 @@ namespace SaborExpress.Configuration
             services.AddEmailConfirmationModule();
             services.AddNotificationsModule();
             services.AddBackgroundEmailQueueModule();
-            services.AddDailyMenuModule();
             services.AddInvoicesModule();
             return services;
         }
@@ -166,6 +160,7 @@ namespace SaborExpress.Configuration
         {
             services.AddScoped<INotificationService, NotificationService>();
             services.AddScoped<IAuthorizationService, AuthorizationService>();
+            services.AddScoped<IRealtimeNotifier, RealtimeNotifier>();
             return services;
         }
 
@@ -286,6 +281,7 @@ namespace SaborExpress.Configuration
         {
             services.AddScoped<ITableRepository, TableRepository>();
             services.AddScoped<ITableService, TableService>();
+            services.AddScoped<ITableAvailabilityService, TableAvailabilityService>();
             services.AddScoped<TableValidator>();
 
             return services;
@@ -381,6 +377,12 @@ namespace SaborExpress.Configuration
         {
             services.AddScoped<INotificationRepository, NotificationRepository>();
             services.AddScoped<IUserNotificationService, UserNotificationService>();
+            services.AddHttpClient();
+            services.AddSingleton<ExpoPushNotificationQueue>();
+            services.AddSingleton<IExpoPushNotificationQueue>(provider =>
+                provider.GetRequiredService<ExpoPushNotificationQueue>());
+            services.AddHostedService<ExpoPushNotificationQueue>(provider =>
+                provider.GetRequiredService<ExpoPushNotificationQueue>());
 
             return services;
         }
@@ -391,15 +393,6 @@ namespace SaborExpress.Configuration
 
             return services;
         }
-        private static IServiceCollection AddDailyMenuModule(this IServiceCollection services)
-        {
-            services.AddScoped<IDailyMenuRepository, DailyMenuRepository>();
-            services.AddScoped<IDailyMenuService, DailyMenuService>();
-            services.AddScoped<DailyMenuValidator>();
-
-            return services;
-        }
-
         private static IServiceCollection AddInvoicesModule(this IServiceCollection services)
         {
             services.AddScoped<IInvoiceRepository, InvoiceRepository>();

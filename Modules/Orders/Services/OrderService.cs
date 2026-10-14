@@ -22,6 +22,7 @@ using SaborExpress.Modules.Payments.Enum;
 using SaborExpress.Modules.Employees.Interfaces;
 using SaborExpress.Modules.Notifications.Interfaces;
 using SaborExpress.Modules.Deliveries.Enum;
+using SaborExpress.Shared.Helpers;
 
 namespace SaborExpress.Modules.Orders.Services
 {
@@ -44,6 +45,8 @@ namespace SaborExpress.Modules.Orders.Services
         private readonly IUserNotificationService _notificationService;
         private readonly IPaymentRepository _paymentRepository;
         private readonly IDeliveryRepository _deliveryRepository;
+        private readonly IRealtimeNotifier _realtime;
+        private readonly IBranchOperationalSettingsRepository _settingsRepository;
 
         public OrderService(
             IOrderRepository orderRepository,
@@ -62,8 +65,12 @@ namespace SaborExpress.Modules.Orders.Services
             IEmployeeRepository employeeRepository,
             IUserNotificationService notificationService,
             IPaymentRepository paymentRepository,
-            IDeliveryRepository deliveryRepository)
+            IDeliveryRepository deliveryRepository,
+          IRealtimeNotifier realtime,
+            IBranchOperationalSettingsRepository settingsRepository)
         {
+            _settingsRepository = settingsRepository;
+            _realtime = realtime;
             _orderRepository = orderRepository;
             _orderDetailRepository = orderDetailRepository;
             _statusHistoryRepository = statusHistoryRepository;
@@ -88,7 +95,15 @@ namespace SaborExpress.Modules.Orders.Services
 
         await EnsureBranchIsOpenAsync(resolvedBranchId);
 
-        await _validator.ValidateCreateAsync(dto, employeeId, resolvedBranchId);
+         await _validator.ValidateCreateAsync(dto, employeeId, resolvedBranchId);
+
+        var settings = await _settingsRepository.GetByBranchIdAsync(resolvedBranchId)
+            ?? throw new InvalidOperationException(
+                "La sede aún no tiene configurados el Impoconsumo y la tarifa de domicilio. " +
+                "Pide al administrador que los configure en Ajustes del Restaurante.");
+
+        if (dto.OrderType == OrderType.Delivery)
+            await EnsureWithinDeliveryRadiusAsync(resolvedBranchId, dto.AddressId!.Value, settings.DeliveryRadiusKm);
 
         Table? table = null;
         if (dto.TableId.HasValue)
@@ -117,6 +132,9 @@ namespace SaborExpress.Modules.Orders.Services
             Status = OrderStatus.Pending,
             SubTotal = 0,
             Tax = 0,
+            TaxRate = settings.TaxRate,
+            TaxIncludedInPrice = true,
+            DeliveryFee = dto.OrderType == OrderType.Delivery ? settings.DeliveryFee : 0m,
             Total = 0
         };
 
@@ -140,13 +158,15 @@ namespace SaborExpress.Modules.Orders.Services
         });
         await _statusHistoryRepository.SaveChangesAsync();
 
+        await _realtime.OrdersChangedAsync();
+        await _realtime.TablesChangedAsync();
         await NotifyNewOrderAsync(order);
 
         var created = await _orderRepository.GetByIdAsync(order.Id);
         return OrderMapper.ToResponse(created!);
     }
 
-    // Avisa a Administrador/Gerente (siempre) y a Cocinero (para el sonido en
+    // Avisa a Administrador/Gerente (siempre), Cajero y Cocinero (para el sonido en
     // el tablero de cocina). Auxiliar de Cocina NO se incluye a propósito: ve
     // el mismo tablero via polling, pero sin sonido, ya que no es quien actúa
     // sobre el pedido.
@@ -163,19 +183,19 @@ namespace SaborExpress.Modules.Orders.Services
         var gerenteIds = await _employeeRepository.GetUserIdsByRolesAsync(RoleNames.Gerente);
         var cocineroIds = await _employeeRepository.GetUserIdsByBranchAndRolesAsync(
             order.BranchId, RoleNames.Cocinero);
+        var cajeroIds = await _employeeRepository.GetUserIdsByBranchAndRolesAsync(
+            order.BranchId, RoleNames.Cajero);
 
-        var userIds = adminIds.Concat(gerenteIds).Concat(cocineroIds).Distinct();
+        var userIds = adminIds.Concat(gerenteIds).Concat(cocineroIds).Concat(cajeroIds).Distinct().ToList();
+        if (userIds.Count == 0) return;
 
-        foreach (var userId in userIds)
-        {
-            await _notificationService.CreateAsync(
-                userId,
-                "Pedido nuevo",
-                $"Llegó el pedido #{order.Id}.",
-                NotificationType.OrderCreated,
-                relatedEntityType: "Order",
-                relatedEntityId: order.Id);
-        }
+        await _notificationService.CreateBulkAsync(
+            userIds,
+            "Pedido nuevo",
+            "Llegó un pedido nuevo.",
+            NotificationType.OrderCreated,
+            relatedEntityType: "Order",
+            relatedEntityId: order.Id);
     }
 
 // NUEVO
@@ -207,7 +227,8 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
         return dto.BranchId.Value;
     }
 
-    // Delivery: el cliente manda AddressId, la sede se calcula sola.
+    // Delivery: valida la dirección y respeta la sede activa elegida por el cliente;
+    // si no envía una sede, mantiene la asignación automática a la más cercana.
     if (!dto.AddressId.HasValue)
         throw new ArgumentException("Un pedido a domicilio debe indicar una dirección.");
 
@@ -216,6 +237,19 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
 
     if (dto.CustomerId.HasValue && address.CustomerId != dto.CustomerId.Value)
         throw new ArgumentException("La dirección no pertenece a este cliente.");
+
+    if (isClienteChannel && dto.BranchId.HasValue)
+    {
+        var activeBranches = await _branchRepository.GetAllActiveWithCoordinatesAsync();
+        var selectedBranch = activeBranches.FirstOrDefault(
+            branch => branch.Id == dto.BranchId.Value);
+
+        if (selectedBranch is null)
+            throw new InvalidOperationException(
+                "La sede seleccionada no está disponible. Elige otra sede e inténtalo de nuevo.");
+
+        return selectedBranch.Id;
+    }
 
     var nearestBranch = await _branchService.FindNearestBranchAsync(address.Latitude, address.Longitude);
     return nearestBranch.Id;
@@ -255,7 +289,12 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                     ?? throw new InvalidOperationException("El usuario actual no tiene un perfil de empleado asociado.");
             }
 
-            var orders = await _orderRepository.GetAllAsync(effectiveBranchId, filter.Status, effectiveEmployeeId);
+            var orders = await _orderRepository.GetAllAsync(
+                effectiveBranchId,
+                filter.Status,
+                effectiveEmployeeId,
+                filter.FromDate,
+                filter.ToDate);
             return orders.Select(OrderMapper.ToSummary).ToList();
         }
 
@@ -278,6 +317,14 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
 
             var orders = await _orderRepository.GetByBranchIdAsync(branchId);
             return orders.Select(OrderMapper.ToSummary).ToList();
+        }
+
+        public async Task<List<OccupiedTableWaiterDto>> GetOccupiedTableWaitersByBranchIdAsync(
+            int branchId,
+            int currentUserId)
+        {
+            await EnsureCanAccessBranchAsync(branchId, currentUserId);
+            return await _orderRepository.GetOccupiedTableWaitersByBranchIdAsync(branchId);
         }
 
         // Sin autenticación: pensado para un monitor de cocina fijo (tablet/TV) que
@@ -309,6 +356,8 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
 
             await _orderRepository.UpdateAsync(order);
             await _orderRepository.SaveChangesAsync();
+            await _realtime.OrdersChangedAsync();
+            await _realtime.TablesChangedAsync();
 
             var updated = await _orderRepository.GetByIdAsync(order.Id);
             return OrderMapper.ToResponse(updated!);
@@ -321,6 +370,13 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                 throw new ArgumentException("El pedido no existe");
 
             await EnsureCanUpdateStatusAsync(employeeId);
+
+            if (order.Channel == OrderChannel.App
+                && order.Status == OrderStatus.Pending
+                && dto.Status == OrderStatus.Confirmed)
+            {
+                await EnsureCashierConfirmsCustomerOrderAsync(employeeId);
+            }
 
             _validator.ValidateStatusChange(order, dto);
 
@@ -342,7 +398,9 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
 
             // NUEVO: pago contra entrega confirmado manualmente por el cajero
             if (dto.Status == OrderStatus.Confirmed && order.OrderType == OrderType.Delivery)
-                await _deliveryAssignmentService.AssignAutomaticallyAsync(order.Id);
+                await _deliveryAssignmentService.AssignPendingForBranchAsync(order.BranchId);
+
+            await _realtime.OrdersChangedAsync();
 
             if (dto.Status == OrderStatus.Ready)
                 await NotifyOrderReadyAsync(order);
@@ -357,17 +415,15 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
         {
             var userIds = await _employeeRepository.GetUserIdsByBranchAndRolesAsync(
                 order.BranchId, RoleNames.Mesero, RoleNames.Cajero);
+            if (userIds.Count == 0) return;
 
-            foreach (var userId in userIds)
-            {
-                await _notificationService.CreateAsync(
-                    userId,
-                    "Pedido listo",
-                    $"El pedido #{order.Id} está listo para despachar.",
-                    SaborExpress.Modules.Notifications.Enum.NotificationType.OrderReady,
-                    relatedEntityType: "Order",
-                    relatedEntityId: order.Id);
-            }
+            await _notificationService.CreateBulkAsync(
+                userIds,
+                "Pedido listo",
+                "Un pedido está listo para despachar.",
+                SaborExpress.Modules.Notifications.Enum.NotificationType.OrderReady,
+                relatedEntityType: "Order",
+                relatedEntityId: order.Id);
         }
 
                public async Task<OrderResponseDto> CancelAsync(int id, CancelOrderDto dto, int employeeId)
@@ -407,6 +463,57 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
             var result = await CancelCoreAsync(order, dto, null);
             await NotifyOrderCancelledAsync(order, byCustomer: true);
             return result;
+        }
+
+        // El cliente eligió pagar en efectivo contra entrega: avisa al personal
+        // que debe confirmar el pedido (el pedido sigue Pending hasta entonces).
+        public async Task ConfirmCashDeliveryAsync(int id, int currentUserId)
+        {
+            var order = await _orderRepository.GetByIdAsync(id)
+                ?? throw new ArgumentException("El pedido no existe");
+
+            var user = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            if (user.Customer == null || order.CustomerId != user.Customer.Id)
+                throw new InvalidOperationException("Este pedido no te pertenece.");
+
+            if (order.OrderType != OrderType.Delivery || order.Channel != OrderChannel.App)
+                throw new InvalidOperationException("Este pedido no es un domicilio hecho desde la app.");
+
+            if (order.Status != OrderStatus.Pending)
+                throw new InvalidOperationException("Este pedido ya no está pendiente de confirmación.");
+
+            if (order.Total <= 0)
+                throw new InvalidOperationException("El pedido no tiene productos.");
+
+            var payments = await _paymentRepository.GetByOrderIdAsync(order.Id);
+            if (payments.Any(p => p.Status == PaymentStatus.Completed))
+                throw new InvalidOperationException("Este pedido ya está pagado.");
+
+            try
+            {
+                var adminIds = await _employeeRepository.GetUserIdsByBranchAndRolesAsync(
+                    order.BranchId, RoleNames.Cajero, RoleNames.Administrador);
+                var gerenteIds = await _employeeRepository.GetUserIdsByRolesAsync(RoleNames.Gerente);
+
+                foreach (var userId in adminIds.Concat(gerenteIds).Distinct())
+                {
+                    await _notificationService.CreateAsync(
+                        userId,
+                        "Pedido nuevo",
+                        "Llegó un pedido a domicilio (pago en efectivo). Falta confirmarlo.",
+                        NotificationType.OrderCreated,
+                        relatedEntityType: "Order",
+                        relatedEntityId: order.Id);
+                }
+            }
+            catch
+            {
+                // El pedido ya existe; un fallo al notificar no debe romper el flujo del cliente.
+            }
+
+            await _realtime.OrdersChangedAsync();
         }
 
         // Lógica común de cancelación (empleado o cliente)
@@ -472,6 +579,9 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
             });
             await _statusHistoryRepository.SaveChangesAsync();
 
+            await _realtime.OrdersChangedAsync();
+            await _realtime.TablesChangedAsync();
+
             var cancelled = await _orderRepository.GetByIdAsync(order.Id);
             return OrderMapper.ToResponse(cancelled!);
         }
@@ -502,7 +612,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                     await _notificationService.CreateAsync(
                         userId,
                         "Pedido cancelado",
-                        $"El pedido #{order.Id} fue cancelado.",
+                        "Un pedido fue cancelado.",
                         NotificationType.OrderStatusChanged,
                         relatedEntityType: "Order",
                         relatedEntityId: order.Id);
@@ -512,6 +622,23 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
             {
                 // La cancelación ya quedó guardada; un fallo al notificar no debe romperla.
             }
+        }
+
+                private async Task EnsureWithinDeliveryRadiusAsync(int branchId, int addressId, decimal radiusKm)
+        {
+            var branch = await _branchRepository.GetByIdAsync(branchId)
+                ?? throw new KeyNotFoundException("La sede no existe.");
+            var address = await _addressRepository.GetByIdAsync(addressId)
+                ?? throw new ArgumentException("La dirección indicada no existe.");
+
+            var km = GeoDistance.Km(
+                (double)branch.Latitude, (double)branch.Longitude,
+                (double)address.Latitude, (double)address.Longitude);
+
+            if (km > (double)radiusKm)
+                throw new InvalidOperationException(
+                    $"Tu dirección está a {km:0.0} km de la sede {branch.Name} y el radio de entrega es de {radiusKm:0.#} km. " +
+                    "No podemos llevar el pedido a esa dirección.");
         }
 
         private async Task EnsureBranchIsOpenAsync(int branchId)
@@ -556,6 +683,17 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
             var canUpdateStatus = await _authorizationService.CanPerformActionAsync(employeeId, PermissionNames.ActualizarEstadoPedido);
             if (!canUpdateStatus)
                 throw new InvalidOperationException("No tienes permiso para cambiar el estado de este pedido.");
+        }
+
+        private async Task EnsureCashierConfirmsCustomerOrderAsync(int employeeId)
+        {
+            var employee = await _employeeRepository.GetByIdAsync(employeeId);
+            var isCashier = employee?.User?.UserRoles.Any(userRole =>
+                userRole.Role.Name == RoleNames.Cajero) ?? false;
+
+            if (!isCashier)
+                throw new InvalidOperationException(
+                    "Solo el cajero puede confirmar un pedido realizado por el cliente.");
         }
 
         private async Task EnsureCanCancelAsync(int employeeId)

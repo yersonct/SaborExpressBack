@@ -9,7 +9,6 @@ namespace SaborExpress.Modules.Permissions.Models
         Tables,
         Deliveries,
         Products,
-        DailyMenu,
         Reviews,
         Reports
     }

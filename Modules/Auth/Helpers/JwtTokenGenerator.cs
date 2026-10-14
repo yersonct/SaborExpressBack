@@ -5,6 +5,7 @@ using SaborExpress.Modules.Auth.Models;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using SaborExpress.Shared.Constants;
 
 namespace SaborExpress.Modules.Auth.Helpers
 {
@@ -17,9 +18,9 @@ namespace SaborExpress.Modules.Auth.Helpers
             _jwtSettings = jwtSettings.Value;
         }
 
-        public string Generate(User user, string identifier)
+        public string Generate(User user, string identifier, bool actAsClient = false)
         {
-            var claims = ConstruirClaims(user, identifier);
+            var claims = ConstruirClaims(user, identifier, actAsClient);
             var descriptor = ConstruirDescriptor(claims);
 
             var handler = new JwtSecurityTokenHandler();
@@ -27,7 +28,7 @@ namespace SaborExpress.Modules.Auth.Helpers
             return handler.WriteToken(token);
         }
 
-        private static List<Claim> ConstruirClaims(User user, string identifier)
+        private static List<Claim> ConstruirClaims(User user, string identifier, bool actAsClient)
         {
             var claims = new List<Claim>
             {
@@ -37,6 +38,10 @@ namespace SaborExpress.Modules.Auth.Helpers
 
             foreach (var userRole in user.UserRoles)
                 claims.Add(new Claim(ClaimTypes.Role, userRole.Role.Name));
+
+            // Empleado operativo sin turno activo: usa la app como cliente
+            if (actAsClient && !user.UserRoles.Any(ur => ur.Role.Name == RoleNames.Cliente))
+                claims.Add(new Claim(ClaimTypes.Role, RoleNames.Cliente));
 
             // NUEVO: si el usuario es cliente, agregar su CustomerId al token
             if (user.Customer != null)

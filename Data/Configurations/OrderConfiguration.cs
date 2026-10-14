@@ -85,6 +85,10 @@ namespace SaborExpress.Data.Configurations
                 .HasColumnType("decimal(10,2)")
                 .IsRequired();
 
+            builder.Property(x => x.TaxRate).HasColumnName("tax_rate").HasColumnType("decimal(5,2)").IsRequired();
+            builder.Property(x => x.TaxIncludedInPrice).HasColumnName("tax_included_in_price").IsRequired();
+            builder.Property(x => x.DeliveryFee).HasColumnName("delivery_fee").HasColumnType("decimal(12,2)").IsRequired();
+
             builder.Property(x => x.Total)
                 .HasColumnName("total")
                 .HasColumnType("decimal(10,2)")

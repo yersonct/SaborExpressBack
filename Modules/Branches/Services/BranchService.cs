@@ -3,6 +3,10 @@ using SaborExpress.Modules.Branches.Interfaces;
 using SaborExpress.Modules.Branches.Mappings;
 using SaborExpress.Modules.Branches.Models;
 using SaborExpress.Modules.Branches.Validators;
+using SaborExpress.Modules.Auth.Interfaces;
+using SaborExpress.Modules.Employees.Interfaces;
+using SaborExpress.Shared.Constants;
+using SaborExpress.Shared.Interfaces;
 
 namespace SaborExpress.Modules.Branches.Services
 {
@@ -12,17 +16,29 @@ namespace SaborExpress.Modules.Branches.Services
         private readonly BranchValidator _validator;
         private readonly IBranchAccessGuard _accessGuard;
         private readonly IGeocodingService _geocodingService;
+        private readonly IAuthRepository _authRepository;
+        private readonly IEmployeeRepository _employeeRepository;
+        private readonly IRefreshTokenRepository _refreshTokenRepository;
+        private readonly IRealtimeNotifier _realtime;
 
         public BranchService(
             IBranchRepository branchRepository,
             BranchValidator validator,
             IBranchAccessGuard accessGuard,
-            IGeocodingService geocodingService)
+            IGeocodingService geocodingService,
+            IAuthRepository authRepository,
+            IEmployeeRepository employeeRepository,
+            IRefreshTokenRepository refreshTokenRepository,
+            IRealtimeNotifier realtime)
         {
             _branchRepository = branchRepository;
             _validator = validator;
             _accessGuard = accessGuard;
             _geocodingService = geocodingService;
+            _authRepository = authRepository;
+            _employeeRepository = employeeRepository;
+            _refreshTokenRepository = refreshTokenRepository;
+            _realtime = realtime;
         }
 
         public async Task<BranchResponseDto> CreateAsync(CreateBranchDto dto)
@@ -52,6 +68,7 @@ namespace SaborExpress.Modules.Branches.Services
             // insertar (AddAsync ya guarda y asigna el Id autoincremental).
             branch.PublicKitchenCode = GeneratePublicKitchenCode(branch);
             await _branchRepository.UpdateAsync(branch);
+            await _realtime.PublicBranchesChangedAsync();
 
             // Una sede recién creada nunca tiene empleados todavía.
             return BranchMapper.ToResponse(branch, employeeCount: 0);
@@ -77,6 +94,7 @@ namespace SaborExpress.Modules.Branches.Services
                     Id = s.Id,
                     Name = s.Name,
                     Address = s.Address,
+                    Phone = s.Phone,
                     Latitude = s.Latitude,
                     Longitude = s.Longitude,
                 })
@@ -99,12 +117,15 @@ namespace SaborExpress.Modules.Branches.Services
 
             // Solo el Gerente puede activar/desactivar una sede.
             // Si un Administrador manda otro valor, se rechaza.
+            var wasDeactivated = false;
+
             if (branch.Status != dto.Status)
             {
                 if (!await _accessGuard.IsGerenteAsync(currentUserId))
                     throw new InvalidOperationException(
                         "Solo el Gerente puede activar o desactivar una sede.");
 
+                wasDeactivated = branch.Status && !dto.Status;
                 branch.Status = dto.Status;
             }
 
@@ -120,9 +141,35 @@ namespace SaborExpress.Modules.Branches.Services
             }
 
             await _branchRepository.UpdateAsync(branch);
+            await _realtime.PublicBranchesChangedAsync();
+
+            if (wasDeactivated)
+                await CloseOperationalSessionsAsync(branch.Id);
 
             var employeeCount = await _branchRepository.GetEmployeeCountAsync(branch.Id);
             return BranchMapper.ToResponse(branch, employeeCount);
+        }
+
+        // Al desactivar una sede, se cierran las sesiones del personal operativo.
+        // Gerente y Administrador no se tocan: ellos siguen usando el panel web.
+        private async Task CloseOperationalSessionsAsync(int branchId)
+        {
+            var staff = await _employeeRepository.GetUserIdsByBranchAndRolesAsync(
+                branchId, RoleNames.Mesero, RoleNames.Cajero, RoleNames.Cocinero, RoleNames.Repartidor);
+
+            var panelUsers = await _employeeRepository.GetUserIdsByBranchAndRolesAsync(
+                branchId, RoleNames.Administrador, RoleNames.Gerente);
+
+            var toClose = staff.Except(panelUsers).ToList();
+            if (toClose.Count == 0) return;
+
+            await _authRepository.ClearSessionTokensAsync(toClose);
+
+            foreach (var userId in toClose)
+            {
+                await _refreshTokenRepository.RevokeAllForUserAsync(userId);
+                await _realtime.ForceLogoutAsync(userId, "branch-disabled");
+            }
         }
 
         public async Task DeleteAsync(int id)
@@ -150,6 +197,7 @@ namespace SaborExpress.Modules.Branches.Services
                     "Usa la opción de editar para desactivarla (Status) en su lugar.");
 
             await _branchRepository.DeleteAsync(branch);
+            await _realtime.PublicBranchesChangedAsync();
         }
 
         public async Task<BranchResponseDto> GetByIdAsync(int id)

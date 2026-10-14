@@ -15,11 +15,16 @@ namespace SaborExpress.Modules.Deliveries.Controllers
     {
         private readonly IDeliveryService _deliveryService;
         private readonly IDeliveryRepository _deliveryRepository;
+        private readonly IDeliveryAssignmentService _deliveryAssignmentService;
 
-        public DeliveriesController(IDeliveryService deliveryService, IDeliveryRepository deliveryRepository)
+        public DeliveriesController(
+            IDeliveryService deliveryService,
+            IDeliveryRepository deliveryRepository,
+            IDeliveryAssignmentService deliveryAssignmentService)
         {
             _deliveryService = deliveryService;
             _deliveryRepository = deliveryRepository;
+            _deliveryAssignmentService = deliveryAssignmentService;
         }
 
 
@@ -42,6 +47,15 @@ namespace SaborExpress.Modules.Deliveries.Controllers
             return Ok(result);
         }
 
+        [HttpGet("customer/orders/{orderId:int}/tracking")]
+        [Authorize(Roles = RoleNames.Cliente)]
+        public async Task<IActionResult> GetCustomerTracking(int orderId)
+        {
+            var customerId = this.GetCurrentCustomerId();
+            var result = await _deliveryService.GetCustomerTrackingAsync(orderId, customerId);
+            return Ok(result);
+        }
+
         [HttpGet("employee/{deliveryPersonId}")]
         public async Task<IActionResult> GetByDeliveryPersonId(int deliveryPersonId)
         {
@@ -53,13 +67,23 @@ namespace SaborExpress.Modules.Deliveries.Controllers
             if (isRepartidor && !isGerente && !isAdmin && deliveryPersonId != currentEmployeeId)
                 return StatusCode(403, new { message = "No puedes ver las entregas de otro repartidor" });
 
+            // Reintenta asignar los pedidos confirmados que quedaron pendientes cuando
+            // este repartidor abre/refresca su lista. Esto recupera pedidos confirmados
+            // antes de que hubiera un repartidor disponible.
+            if (isRepartidor && deliveryPersonId == currentEmployeeId)
+            {
+                var employeeBranchId = await _deliveryRepository.GetEmployeeBranchIdAsync(currentEmployeeId);
+                if (employeeBranchId.HasValue)
+                    await _deliveryAssignmentService.AssignPendingForBranchAsync(employeeBranchId.Value);
+            }
+
             if (isAdmin && !isGerente)
             {
                 var adminBranchId = await _deliveryRepository.GetEmployeeBranchIdAsync(currentEmployeeId);
                 var targetBranchId = await _deliveryRepository.GetEmployeeBranchIdAsync(deliveryPersonId);
 
                 if (adminBranchId == null || targetBranchId == null || adminBranchId != targetBranchId)
-                    return Forbid("Ese repartidor no pertenece a tu sede");
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Ese repartidor no pertenece a tu sede" });
             }
 
             var result = await _deliveryService.GetByDeliveryPersonIdAsync(deliveryPersonId);
@@ -76,7 +100,7 @@ namespace SaborExpress.Modules.Deliveries.Controllers
                 var adminBranchId = await _deliveryRepository.GetEmployeeBranchIdAsync(currentEmployeeId);
 
                 if (adminBranchId != branchId)
-                    return Forbid("Solo puedes ver los repartos de tu propia sede");
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Solo puedes ver los repartos de tu propia sede" });
             }
 
             var result = await _deliveryService.GetByBranchIdAsync(branchId);

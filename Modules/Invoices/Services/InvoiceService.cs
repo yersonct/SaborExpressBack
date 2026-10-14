@@ -42,7 +42,10 @@ namespace SaborExpress.Modules.Invoices.Services
                 BranchId = branchId,
                 InvoiceNumber = invoiceNumber,
                 SubTotal = order.SubTotal,
-                Tax = order.Tax,
+               Tax = order.Tax,
+                TaxRate = order.TaxRate,
+                TaxIncludedInPrice = order.TaxIncludedInPrice,
+                DeliveryFee = order.DeliveryFee,
                 Total = order.Total,
                 IssuedAt = DateTime.UtcNow
             };
