@@ -10,6 +10,11 @@ using SaborExpress.Shared.BackgroundServices;
 using SaborExpress.Modules.Branches.Interfaces;
 using SaborExpress.Modules.Branches.Services;
 using SaborExpress.Shared.Authorization;
+using SaborExpress.Shared.Localization;
+using SaborExpress.Shared.Middleware;
+
+// Carga el archivo .env ANTES de crear el builder
+DotNetEnv.Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,9 +39,15 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddSingleton<IApiMessageLocalizer, ApiMessageLocalizer>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<ApiExceptionFilter>();
+builder.Services.AddScoped<ApiMessageLocalizationFilter>();
+
 builder.Services.AddControllers(options =>
 {
-    options.Filters.Add<ApiExceptionFilter>();
+    options.Filters.AddService<ApiExceptionFilter>();
+    options.Filters.AddService<ApiMessageLocalizationFilter>();
 })
 .AddJsonOptions(options =>
 {
@@ -58,7 +69,11 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddDependencies();
 builder.Services.AddHttpClient<IGeocodingService, GeocodingService>();
 builder.Services.AddSwaggerConfiguration();
-builder.Services.AddSignalR()
+builder.Services.AddSignalR(options =>
+{
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+})
     .AddJsonProtocol(options =>
     {
         // Mismo formato que la API REST: enums como texto ("PaymentConfirmed"), no como número
@@ -73,6 +88,8 @@ builder.Services.AddHostedService<WompiPendingPaymentsSyncService>();
 
 var app = builder.Build();
 
+app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
+
 await app.MigrarYSembrarBaseDeDatosAsync();
 
 if (app.Environment.IsDevelopment())
@@ -81,9 +98,11 @@ app.UseStaticFiles();
 app.UseCors("AllowAll");
 
 app.UseAuthentication();
+app.UseMiddleware<WebRequestRealtimeMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications"); // ← NUEVO
+app.MapHub<PublicMenuHub>("/hubs/public-menu");
 
 app.Run();
 

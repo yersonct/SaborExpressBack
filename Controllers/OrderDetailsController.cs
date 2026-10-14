@@ -60,6 +60,17 @@ namespace SaborExpress.Controllers
             var result = await _orderDetailService.UpdateAsync(id, dto, employeeId);
             return Ok(result);
         }
+
+        [HttpPatch("order-details/{id:int}/to-go")]
+        public async Task<IActionResult> UpdateToGo(
+            int id,
+            [FromBody] UpdateOrderDetailToGoDto dto)
+        {
+            var employeeId = this.GetCurrentEmployeeId();
+            var result = await _orderDetailService.UpdateToGoAsync(id, dto, employeeId);
+            return Ok(result);
+        }
+
         [HttpPatch("order-details/{id:int}/void")]
         public async Task<IActionResult> Void(int id, [FromBody] VoidOrderDetailDto dto)
         {

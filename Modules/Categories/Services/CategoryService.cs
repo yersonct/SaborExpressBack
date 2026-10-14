@@ -3,6 +3,7 @@ using SaborExpress.Modules.Categories.Interfaces;
 using SaborExpress.Modules.Categories.Mappings;
 using SaborExpress.Modules.Categories.Validators;
 using Microsoft.EntityFrameworkCore;
+using SaborExpress.Shared.Interfaces;
 
 namespace SaborExpress.Modules.Categories.Services
 {
@@ -10,22 +11,30 @@ namespace SaborExpress.Modules.Categories.Services
     {
         private readonly ICategoryRepository _repository;
         private readonly CategoryValidator _validator;
+        private readonly IRealtimeNotifier _realtime;
 
-        public CategoryService(ICategoryRepository repository, CategoryValidator validator)
+        public CategoryService(
+            ICategoryRepository repository,
+            CategoryValidator validator,
+            IRealtimeNotifier realtime)
         {
             _repository = repository;
             _validator = validator;
+            _realtime = realtime;
         }
 
-        public async Task<List<CategoryResponseDto>> GetAllAsync()
+        public async Task<List<CategoryResponseDto>> GetAllAsync(bool includeInactive = false)
         {
-            var categories = await _repository.GetAllAsync();
+            var categories = await _repository.GetAllAsync(includeInactive);
             return categories.Select(c => c.ToResponseDto()).ToList();
         }
 
-        public async Task<CategoryResponseDto?> GetByIdAsync(int id)
+        public async Task<CategoryResponseDto?> GetByIdAsync(int id, bool includeInactive = false)
         {
             var category = await _repository.GetByIdAsync(id);
+            if (!includeInactive && category is { Status: false })
+                return null;
+
             return category?.ToResponseDto();
         }
 
@@ -34,6 +43,8 @@ namespace SaborExpress.Modules.Categories.Services
             await _validator.ValidateCreateAsync(dto);
             var entity = dto.ToEntity();
             var created = await _repository.AddAsync(entity);
+            await _realtime.ProductsChangedAsync();
+            await _realtime.PublicMenuChangedAsync();
             return created.ToResponseDto();
         }
 
@@ -49,6 +60,8 @@ namespace SaborExpress.Modules.Categories.Services
             // este UpdateAsync es técnicamente redundante — EF ya detecta el cambio solo.
             // Se deja explícito de todos modos por claridad de intención en el código.
             await _repository.UpdateAsync(category);
+            await _realtime.ProductsChangedAsync();
+            await _realtime.PublicMenuChangedAsync();
         }
 
         public async Task DeleteAsync(int id)
@@ -62,6 +75,8 @@ namespace SaborExpress.Modules.Categories.Services
             try
             {
                 await _repository.DeleteAsync(category);
+                await _realtime.ProductsChangedAsync();
+                await _realtime.PublicMenuChangedAsync();
             }
             catch (DbUpdateException)
             {

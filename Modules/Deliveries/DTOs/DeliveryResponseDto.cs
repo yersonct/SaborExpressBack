@@ -31,6 +31,11 @@ namespace SaborExpress.Modules.Deliveries.DTOs
 
         // NUEVO: lo que el repartidor necesita ver del pedido del cliente
         public string? OrderNotes { get; set; }
+        public decimal SubTotal { get; set; }
+        public decimal Tax { get; set; }
+        public decimal TaxRate { get; set; }
+        public bool TaxIncludedInPrice { get; set; }
+        public decimal DeliveryFee { get; set; }
         public decimal Total { get; set; }
         public decimal AmountPaid { get; set; }
         public decimal AmountPending { get; set; }

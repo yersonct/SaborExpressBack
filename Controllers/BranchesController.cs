@@ -62,6 +62,7 @@ namespace SaborExpress.Controllers
             return int.Parse(claim.Value);
         }
 
+        [AllowAnonymous]
         [HttpGet("public")]
         public async Task<IActionResult> GetPublic() => Ok(await _branchService.GetPublicActiveAsync());
 

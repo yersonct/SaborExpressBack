@@ -14,6 +14,7 @@ using SaborExpress.Modules.Orders.Interfaces;
 using SaborExpress.Modules.Payments.Enum;
 using SaborExpress.Modules.Payments.Interfaces;
 using SaborExpress.Modules.Payments.Models;
+using SaborExpress.Modules.Customers.Interfaces;
 
 namespace SaborExpress.Modules.Deliveries.Services
 {
@@ -27,6 +28,9 @@ namespace SaborExpress.Modules.Deliveries.Services
     private readonly IUserNotificationService _notificationService;
     private readonly INotificationRepository _notificationRepository;
     private readonly ILogger<DeliveryService> _logger;
+    private readonly IRealtimeNotifier _realtime;
+    private readonly ICustomerRepository _customerRepository;
+    private readonly IDeliveryAssignmentService _deliveryAssignmentService;
 
     public DeliveryService(
         IDeliveryRepository deliveryRepository,
@@ -36,7 +40,10 @@ namespace SaborExpress.Modules.Deliveries.Services
         IAuthorizationService authorizationService,
         IUserNotificationService notificationService,
         INotificationRepository notificationRepository,
-        ILogger<DeliveryService> logger)
+        ILogger<DeliveryService> logger,
+        IRealtimeNotifier realtime,
+        ICustomerRepository customerRepository,
+        IDeliveryAssignmentService deliveryAssignmentService)
     {
         _deliveryRepository = deliveryRepository;
         _orderRepository = orderRepository;
@@ -46,6 +53,9 @@ namespace SaborExpress.Modules.Deliveries.Services
         _notificationService = notificationService;
         _notificationRepository = notificationRepository;
         _logger = logger;
+        _realtime = realtime;
+        _customerRepository = customerRepository;
+        _deliveryAssignmentService = deliveryAssignmentService;
     }
 
 // DeliveryService.CreateAsync — reemplaza el método actual
@@ -83,6 +93,7 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
 
     await _deliveryRepository.AddAsync(delivery);
     await _deliveryRepository.SaveChangesAsync();
+    await _realtime.DeliveriesChangedAsync();
 
     var created = await _deliveryRepository.GetByIdAsync(delivery.Id);
     return DeliveryMapper.ToResponse(created!);
@@ -94,6 +105,32 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
         {
             var deliveries = await _deliveryRepository.GetByOrderIdAsync(orderId);
             return deliveries.Select(DeliveryMapper.ToResponse).ToList();
+        }
+
+        public async Task<CustomerDeliveryTrackingDto> GetCustomerTrackingAsync(int orderId, int customerId)
+        {
+            var deliveries = await _deliveryRepository.GetByOrderIdAsync(orderId);
+            var delivery = deliveries.FirstOrDefault(d => d.Order?.CustomerId == customerId);
+            if (delivery == null)
+                throw new KeyNotFoundException("No se encontró el seguimiento de este pedido.");
+
+            var now = DateTime.UtcNow;
+            var employee = delivery.DeliveryPerson;
+            var isLocationFresh = delivery.Status == DeliveryStatus.InTransit
+                && employee?.CurrentLatitude != null
+                && employee.CurrentLongitude != null
+                && employee.LocationUpdatedAt >= now.AddSeconds(-45)
+                && employee.LocationUpdatedAt <= now.AddSeconds(30);
+
+            return new CustomerDeliveryTrackingDto
+            {
+                OrderId = delivery.OrderId,
+                DeliveryId = delivery.Id,
+                Status = delivery.Status,
+                CourierLatitude = isLocationFresh ? employee!.CurrentLatitude : null,
+                CourierLongitude = isLocationFresh ? employee!.CurrentLongitude : null,
+                LocationUpdatedAt = isLocationFresh ? employee!.LocationUpdatedAt : null
+            };
         }
 
         public async Task<List<DeliveryResponseDto>> GetByDeliveryPersonIdAsync(int deliveryPersonId)
@@ -159,8 +196,63 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
             await _deliveryRepository.UpdateAsync(delivery);
             await _deliveryRepository.SaveChangesAsync();
 
+            // El cajero ve al instante que salió o se entregó (y el cobro en efectivo)
+            await _realtime.OrdersChangedAsync();
+            await _realtime.DeliveriesChangedAsync();
+            await NotifyCustomerDeliveryProgressAsync(delivery);
+
+            if (dto.Status == DeliveryStatus.Delivered)
+            {
+                try
+                {
+                    // El repartidor liberó un cupo; intenta asignar el siguiente pedido
+                    // confirmado que siga esperando en la sede.
+                    await _deliveryAssignmentService.AssignPendingForBranchAsync(delivery.Order.BranchId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "No se pudieron reasignar pedidos pendientes tras entregar el pedido {OrderId}.",
+                        delivery.OrderId);
+                }
+            }
+
             var updated = await _deliveryRepository.GetByIdAsync(delivery.Id);
             return DeliveryMapper.ToResponse(updated!);
+        }
+
+        // Avisa al cliente cuando el repartidor sale y cuando entrega.
+        // Si falla, el cambio de estado ya quedó guardado.
+        private async Task NotifyCustomerDeliveryProgressAsync(Delivery delivery)
+        {
+            try
+            {
+                if (delivery.Status != DeliveryStatus.InTransit
+                    && delivery.Status != DeliveryStatus.Delivered)
+                    return;
+
+                var customerId = delivery.Order.CustomerId;
+                if (!customerId.HasValue) return;
+
+                var customerUserId = await _customerRepository.GetUserIdByCustomerIdAsync(customerId.Value);
+                if (customerUserId == null) return;
+
+                var inTransit = delivery.Status == DeliveryStatus.InTransit;
+
+                await _notificationService.CreateAsync(
+                    customerUserId.Value,
+                    inTransit ? "Tu pedido va en camino" : "Pedido entregado",
+                    inTransit
+                        ? "Tu pedido ya salió hacia tu dirección."
+                        : "Tu pedido fue entregado. ¡Buen provecho!",
+                    NotificationType.OrderStatusChanged,
+                    relatedEntityType: "Order",
+                    relatedEntityId: delivery.OrderId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "No se pudo notificar al cliente el avance del pedido {OrderId}", delivery.OrderId);
+            }
         }
 
         // El cliente califica al repartidor una sola vez, cuando el pedido ya fue entregado.
@@ -191,6 +283,7 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
 
             await _deliveryRepository.UpdateAsync(delivery);
             await _deliveryRepository.SaveChangesAsync();
+            await _realtime.ReviewsChangedAsync();
 
             await NotifyRatingAsync(delivery, dto.Score, delivery.CustomerRatingComment);
 
@@ -220,7 +313,7 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
 
                 await _notificationService.CreateBulkAsync(
                     recipients,
-                    $"Calificación del pedido #{delivery.OrderId}",
+                    "Calificación de un pedido",
                     message,
                     NotificationType.ReviewReceived,
                     "Order",

@@ -27,6 +27,13 @@ namespace SaborExpress.Data.Configurations
                 .HasColumnName("description")
                 .HasMaxLength(500);
 
+            builder.Property(x => x.NameEn).HasColumnName("name_en").HasMaxLength(100);
+            builder.Property(x => x.NamePt).HasColumnName("name_pt").HasMaxLength(100);
+            builder.Property(x => x.NameFr).HasColumnName("name_fr").HasMaxLength(100);
+            builder.Property(x => x.DescriptionEn).HasColumnName("description_en").HasMaxLength(500);
+            builder.Property(x => x.DescriptionPt).HasColumnName("description_pt").HasMaxLength(500);
+            builder.Property(x => x.DescriptionFr).HasColumnName("description_fr").HasMaxLength(500);
+
             builder.Property(x => x.Status)
                 .HasColumnName("status")
                 .HasDefaultValue(true);

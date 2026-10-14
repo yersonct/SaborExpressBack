@@ -12,6 +12,9 @@ namespace SaborExpress.Modules.Employees.DTOs
         public string? Address { get; set; }
         public string? Photo { get; set; }
         public List<string> RoleNames { get; set; } = new();
+        public List<string> TodayRoleNames { get; set; } = new();
+        public string? TodayBranchName { get; set; }
+        public string TodayShiftState { get; set; } = "None";
         public int? BranchId { get; set; }
         public string Status { get; set; } = string.Empty;
         public decimal BasePay { get; set; }

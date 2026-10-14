@@ -4,7 +4,7 @@ namespace SaborExpress.Modules.Categories.Interfaces
 {
     public interface ICategoryRepository
     {
-        Task<List<Category>> GetAllAsync();
+        Task<List<Category>> GetAllAsync(bool includeInactive = false);
         Task<Category?> GetByIdAsync(int id);
         Task<Category> AddAsync(Category category);
         Task UpdateAsync(Category category);

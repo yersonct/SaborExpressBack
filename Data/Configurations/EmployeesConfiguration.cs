@@ -32,15 +32,25 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.Phone).HasColumnName("phone").HasMaxLength(20);
             builder.Property(x => x.Address).HasColumnName("address").HasMaxLength(255);
-            builder.Property(x => x.Vehicle).HasColumnName("vehicle").HasMaxLength(100);
-            builder.Property(x => x.Plate).HasColumnName("plate").HasMaxLength(20);
-
             builder.Property(x => x.BranchId).HasColumnName("branch_id");
 
             builder.Property(x => x.Status)
                 .HasColumnName("status")
                 .HasMaxLength(15)
                 .HasDefaultValue("Activo");
+
+            builder.Property(x => x.IsAvailable)
+                .HasDefaultValue(true);
+
+            builder.Property(x => x.CurrentLatitude)
+                .HasColumnName("current_latitude")
+                .HasColumnType("decimal(10,7)");
+            builder.Property(x => x.CurrentLongitude)
+                .HasColumnName("current_longitude")
+                .HasColumnType("decimal(10,7)");
+            builder.Property(x => x.LocationUpdatedAt)
+                .HasColumnName("location_updated_at")
+                .HasColumnType("timestamp with time zone");
 
             builder.Property(x => x.BasePay)
                 .HasColumnName("base_pay")

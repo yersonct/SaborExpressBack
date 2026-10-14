@@ -11,7 +11,7 @@ sobre las líneas de ese pedido, según su rol y su turno activo.
 **Dónde lo usa:** pantalla "Pedido — Mesa 5", mientras el pedido está abierto.
 
 **Qué puede hacer:**
-- **Agregar un plato** al pedido (elige producto del menú del día, cantidad, notas como "sin cebolla") → aparece una línea nueva en la cuenta, y el total del pedido se actualiza solo.
+- **Agregar un plato** al pedido (elige un producto del catálogo, cantidad y notas como "sin cebolla") → aparece una línea nueva en la cuenta, y el total del pedido se actualiza solo.
 - **Editar una línea** que todavía no llegó a cocina (cambiar cantidad o la nota) — por ejemplo, el cliente pidió 2 Hamburguesas y ahora quiere 3.
 - **Anular una línea** si el cliente se arrepintió antes de que se prepare — tiene que escribir el motivo ("cliente cambió de opinión").
 
