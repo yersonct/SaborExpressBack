@@ -29,6 +29,7 @@ namespace SaborExpress.Modules.Employees.Services
         private readonly AppDbContext _context;
         private readonly IDeliveryAssignmentService _deliveryAssignmentService;
         private readonly ILogger<EmployeeService> _logger;
+private readonly IRealtimeNotifier _realtime;
         public EmployeeService(
             IEmployeeRepository employeeRepository,
             EmployeeValidator employeeValidator,
@@ -39,11 +40,13 @@ namespace SaborExpress.Modules.Employees.Services
             IRefreshTokenRepository refreshTokenRepository,
             AppDbContext context,
             IDeliveryAssignmentService deliveryAssignmentService,
-            ILogger<EmployeeService> logger
+            ILogger<EmployeeService> logger,
+IRealtimeNotifier realtime
             )
         {
             _deliveryAssignmentService = deliveryAssignmentService;
             _logger = logger;
+_realtime = realtime;
             _employeeRepository = employeeRepository;
             _employeeValidator = employeeValidator;
             _authRepository = authRepository;
@@ -137,6 +140,9 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
 
             EnsureSameBranch(currentUser, employee);
 
+            if (!EsGerente(currentUser) && employee.BranchId != dto.BranchId)
+                throw new InvalidOperationException("Solo el Gerente puede cambiar la sede de un empleado.");
+
             var hasExistingCv = employee.CvFile != null && employee.CvFile.Length > 0;   // 👈 nuevo
             await _employeeValidator.ValidateUpdateAsync(dto, employee.UserId, hasExistingCv);   // 👈 se agrega el parámetro
 
@@ -157,7 +163,27 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
             // 👇 nuevo: si cambió de sede, su token viejo tiene el BranchId
             // desactualizado — lo forzamos a re-loguearse revocando sus refresh-tokens.
             if (branchChanged)
+            {
+                // Los turnos de hoy en adelante acompañan al empleado a su nueva sede;
+                // los anteriores permanecen en la sede donde ocurrieron.
+                if (dto.BranchId.HasValue)
+                {
+                    var today = DateOnly.FromDateTime(ColombiaTime.Now);
+                    var futureSchedules = await _context.EmployeeSchedules
+                        .Where(s => s.EmployeeId == id && s.ShiftDate >= today)
+                        .ToListAsync();
+
+                    foreach (var schedule in futureSchedules)
+                        schedule.BranchId = dto.BranchId.Value;
+
+                    if (futureSchedules.Count > 0)
+                        await _context.SaveChangesAsync();
+                }
+
                 await _refreshTokenRepository.RevokeAllForUserAsync(employee.UserId);
+                await _authRepository.ClearSessionTokensAsync(new[] { employee.UserId });
+                await _realtime.ForceLogoutAsync(employee.UserId, "branch-changed");
+            }
 
             return EmployeeMapper.ToResponse(employee);
         }
@@ -185,6 +211,91 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
             }
 
             await _employeeRepository.UpdateAsync(employee);
+            await _refreshTokenRepository.RevokeAllForUserAsync(employee.UserId);
+            await _authRepository.ClearSessionTokensAsync(new[] { employee.UserId });
+            await _realtime.ForceLogoutAsync(employee.UserId, "employee-suspended");
+        }
+
+        public async Task DeletePermanentlyAsync(int id, int currentUserId)
+        {
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            var canDeleteEmployees = EsGerente(currentUser)
+                || currentUser.UserRoles.Any(ur => ur.Role.Name == RoleNames.Administrador);
+            if (!canDeleteEmployees)
+                throw new InvalidOperationException("Solo un gerente o administrador puede eliminar empleados.");
+
+            await using var transaction = await _context.Database.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable);
+
+            var employee = await _employeeRepository.GetByIdAsync(id)
+                ?? throw new KeyNotFoundException("El empleado no existe.");
+
+            EnsureSameBranch(currentUser, employee);
+
+            if (employee.UserId == currentUserId)
+                throw new InvalidOperationException("No puedes eliminar tu propia cuenta.");
+
+            if (await _context.Customers.AnyAsync(c => c.UserId == employee.UserId))
+                throw new InvalidOperationException("Esta cuenta también está registrada como cliente. Suspéndela para conservar sus datos de cliente.");
+
+            var deliveries = await _context.Deliveries
+                .Where(d => d.DeliveryPersonId == id)
+                .ToListAsync();
+            if (deliveries.Any(d =>
+                    d.Status == DeliveryStatus.Assigned || d.Status == DeliveryStatus.InTransit))
+                throw new InvalidOperationException("Reasigna o finaliza las entregas activas antes de eliminar al empleado.");
+
+            var orders = await _context.Orders
+                .Where(o => o.EmployeeId == id)
+                .ToListAsync();
+            if (orders.Any(o =>
+                    o.Status != OrderStatus.Delivered && o.Status != OrderStatus.Cancelled))
+                throw new InvalidOperationException("Finaliza o reasigna los pedidos activos antes de eliminar al empleado.");
+
+            var schedules = await _context.EmployeeSchedules
+                .Where(s => s.EmployeeId == id)
+                .ToListAsync();
+            _context.EmployeeSchedules.RemoveRange(schedules);
+
+            _context.Deliveries.RemoveRange(deliveries);
+
+            foreach (var order in orders)
+                order.EmployeeId = null;
+
+            var payments = await _context.Payments
+                .Where(p => p.CashierId == id)
+                .ToListAsync();
+            foreach (var payment in payments)
+                payment.CashierId = null;
+
+            var orderDetails = await _context.OrderDetails
+                .Where(d => d.LastModifiedByEmployeeId == id)
+                .ToListAsync();
+            foreach (var detail in orderDetails)
+                detail.LastModifiedByEmployeeId = null;
+
+            var statusHistories = await _context.OrderStatusHistories
+                .Where(h => h.ChangedByEmployeeId == id)
+                .ToListAsync();
+            foreach (var history in statusHistories)
+                history.ChangedByEmployeeId = null;
+
+            var detailHistories = await _context.OrderDetailHistories
+                .Where(h => h.ChangedByEmployeeId == id)
+                .ToListAsync();
+            foreach (var history in detailHistories)
+                history.ChangedByEmployeeId = null;
+
+            // Retiene los pedidos y pagos como historial, sin conservar la asociación personal.
+            await _context.SaveChangesAsync();
+
+            _context.Users.Remove(employee.User);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            await _realtime.ForceLogoutAsync(employee.UserId, "employee-deleted");
         }
 
         public async Task<(byte[] Archivo, string NombreArchivo, string ContentType)?> GetCvAsync(int id)
@@ -200,36 +311,83 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
             var employee = await _employeeRepository.GetByIdAsync(employeeId)
                 ?? throw new KeyNotFoundException("Empleado no encontrado.");
 
-            var today = DateTime.UtcNow.Date;
-            var tomorrow = today.AddDays(1);
+            var todayInColombia = ColombiaTime.Now.Date;
+            var todayUtc = ColombiaTime.ToUtc(todayInColombia);
+            var tomorrowUtc = ColombiaTime.ToUtc(todayInColombia.AddDays(1));
 
             var tablesAttendedToday = await _context.Orders
                 .Where(o => o.EmployeeId == employeeId
-                    && o.CreatedAt >= today
-                    && o.CreatedAt < tomorrow
+                    && o.TableId.HasValue
+                    && o.OrderType == OrderType.DineIn
+                    && o.CreatedAt >= todayUtc
+                    && o.CreatedAt < tomorrowUtc
+                    && o.Status != OrderStatus.Cancelled)
+                .CountAsync();
+
+            var toGoOrdersToday = await _context.Orders
+                .Where(o => o.EmployeeId == employeeId
+                    && o.OrderType == OrderType.ToGo
+                    && o.CreatedAt >= todayUtc
+                    && o.CreatedAt < tomorrowUtc
                     && o.Status != OrderStatus.Cancelled)
                 .CountAsync();
 
             var paymentsToday = await _context.Payments
                 .Where(p => p.CashierId == employeeId
-                    && p.PaidAt >= today
-                    && p.PaidAt < tomorrow
+                    && p.PaidAt >= todayUtc
+                    && p.PaidAt < tomorrowUtc
                     && p.Status == SaborExpress.Modules.Payments.Enum.PaymentStatus.Completed)
                 .ToListAsync();
 
-            // NUEVO — Paso 6: viajes completados (histórico, no solo hoy).
+            // El perfil de domicilio muestra solo actividad de hoy en hora Colombia.
             var tripsCompleted = await _context.Deliveries
-                .Where(d => d.DeliveryPersonId == employeeId && d.Status == DeliveryStatus.Delivered)
+                .Where(d => d.DeliveryPersonId == employeeId
+                    && d.Status == DeliveryStatus.Delivered
+                    && d.DeliveredAt >= todayUtc
+                    && d.DeliveredAt < tomorrowUtc)
                 .CountAsync();
 
-            // Promedio de TODAS las calificaciones que los clientes le dieron a este
-            // repartidor. Si aún no tiene ninguna, queda null (la app muestra "—").
+            // Promedio de las calificaciones recibidas hoy. Si aún no tiene ninguna,
+            // queda null (la app muestra "—").
             var averageRating = await _context.Deliveries
-                .Where(d => d.DeliveryPersonId == employeeId && d.CustomerRating != null)
+                .Where(d => d.DeliveryPersonId == employeeId
+                    && d.CustomerRating != null
+                    && d.RatedAt >= todayUtc
+                    && d.RatedAt < tomorrowUtc)
                 .AverageAsync(d => (double?)d.CustomerRating);
 
             if (averageRating.HasValue)
                 averageRating = Math.Round(averageRating.Value, 1);
+
+            // Sede del turno de HOY (hora Colombia). Si hay varios: el activo ahora,
+            // si no el próximo, si no el último. Sin turno hoy: la sede base.
+            var nowCo = ColombiaTime.Now;
+            var todayCo = DateOnly.FromDateTime(nowCo);
+            var nowTimeCo = TimeOnly.FromDateTime(nowCo);
+
+            var todayShifts = await _context.EmployeeSchedules
+                .Where(s => s.EmployeeId == employeeId && s.ShiftDate == todayCo)
+                .Select(s => new
+                {
+                    s.BranchId,
+                    BranchName = s.Branch.Name,
+                    RoleName = s.Role.Name,
+                    s.StartTime,
+                    s.EndTime
+                })
+                .ToListAsync();
+
+            var activeShift   = todayShifts.FirstOrDefault(s => s.StartTime <= nowTimeCo && nowTimeCo <= s.EndTime);
+            var upcomingShift = todayShifts.Where(s => s.StartTime > nowTimeCo).OrderBy(s => s.StartTime).FirstOrDefault();
+            var lastShift     = todayShifts.OrderByDescending(s => s.EndTime).FirstOrDefault();
+
+            var currentShift = activeShift ?? upcomingShift ?? lastShift; // para la sede
+            var visibleShift = activeShift ?? upcomingShift;              // para el rol
+
+            var shiftState =
+                activeShift   != null ? "Active"   :
+                upcomingShift != null ? "Upcoming" :
+                lastShift     != null ? "Ended"    : "None";
 
             return new EmployeeMeResponseDto
             {
@@ -238,17 +396,18 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
                 LastName = employee.LastName,
                 Email = employee.User?.Email,
                 Phone = employee.Phone,
-                BranchId = employee.BranchId,
-                BranchName = employee.Branch?.Name,
+                BranchId = currentShift?.BranchId ?? employee.BranchId,
+                BranchName = currentShift?.BranchName ?? employee.Branch?.Name,
                 RoleNames = employee.User?.UserRoles.Select(ur => ur.Role.Name).ToList() ?? new(),
                 TablesAttendedToday = tablesAttendedToday,
+                ToGoOrdersToday = toGoOrdersToday,
                 IsAvailable = employee.IsAvailable,
                 PaymentsCollectedToday = paymentsToday.Count,
                 AmountCollectedToday = paymentsToday.Sum(p => p.Amount),
-                Vehicle = employee.Vehicle,
-                Plate = employee.Plate,
                 TripsCompleted = tripsCompleted,
-                AverageRating = averageRating
+                AverageRating = averageRating,
+                TodayRoleName = visibleShift?.RoleName,
+                TodayShiftState = shiftState
             };
         }
         public async Task<EmployeeMeResponseDto> SetMyAvailabilityAsync(int employeeId, bool isAvailable)
@@ -275,6 +434,63 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
 
             return await GetMeAsync(employeeId);
         }
+
+        public async Task UpdateMyLocationAsync(int employeeId, decimal latitude, decimal longitude)
+        {
+            if (latitude is < -90 or > 90)
+                throw new ArgumentException("La latitud debe estar entre -90 y 90.");
+            if (longitude is < -180 or > 180)
+                throw new ArgumentException("La longitud debe estar entre -180 y 180.");
+
+            var employee = await _employeeRepository.GetByIdAsync(employeeId)
+                ?? throw new KeyNotFoundException("Empleado no encontrado.");
+
+            var isCourier = employee.User?.UserRoles.Any(ur => ur.Role.Name == RoleNames.Repartidor) ?? false;
+            if (!isCourier)
+                throw new UnauthorizedAccessException("Solo un repartidor puede reportar su ubicación.");
+
+            var now = DateTime.UtcNow;
+            var locationWasStale = !employee.LocationUpdatedAt.HasValue
+                || employee.LocationUpdatedAt.Value < now.AddMinutes(-5);
+            employee.CurrentLatitude = latitude;
+            employee.CurrentLongitude = longitude;
+            employee.LocationUpdatedAt = now;
+            await _employeeRepository.UpdateAsync(employee);
+
+            if (employee.IsAvailable && employee.BranchId.HasValue && locationWasStale)
+            {
+                try
+                {
+                    await _deliveryAssignmentService.AssignPendingForBranchAsync(employee.BranchId.Value);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "No se pudieron asignar pedidos pendientes después de recibir ubicación del repartidor {EmployeeId}.",
+                        employeeId);
+                }
+            }
+
+            var trackingRecipients = await (
+                from delivery in _context.Deliveries
+                join order in _context.Orders on delivery.OrderId equals order.Id
+                join customer in _context.Customers on order.CustomerId equals customer.Id
+                where delivery.DeliveryPersonId == employeeId
+                    && delivery.Status == DeliveryStatus.InTransit
+                    && order.Status != OrderStatus.Cancelled
+                select new { delivery.Id, delivery.OrderId, customer.UserId }
+            ).ToListAsync();
+
+            await Task.WhenAll(trackingRecipients.Select(recipient =>
+                _realtime.DeliveryLocationUpdatedAsync(
+                    recipient.UserId,
+                    recipient.OrderId,
+                    recipient.Id,
+                    latitude,
+                    longitude,
+                    now)));
+        }
+
         public async Task<EmployeeMeResponseDto> UpdateMeAsync(int employeeId, UpdateEmployeeMeDto dto)
         {
             var employee = await _employeeRepository.GetByIdAsync(employeeId)
@@ -283,9 +499,6 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
             employee.Name = dto.Name;
             employee.LastName = dto.LastName;
             employee.Phone = dto.Phone;
-            employee.Vehicle = dto.Vehicle;
-            employee.Plate = dto.Plate;
-
             await _employeeRepository.UpdateAsync(employee);
 
             return await GetMeAsync(employeeId);

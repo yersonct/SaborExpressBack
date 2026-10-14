@@ -18,8 +18,7 @@ namespace SaborExpress.Shared.Constants
         public const string VerReportes = "VER_REPORTES";
 
         // Menú
-        public const string GestionarMenu = "GESTIONAR_MENU";
-        public const string ActivarDesactivarPlato = "ACTIVAR_DESACTIVAR_PLATO";
+        public const string ActivarDesactivarProducto = "ACTIVAR_DESACTIVAR_PRODUCTO";
 
         // Pedidos
         public const string CrearPedido = "CREAR_PEDIDO";

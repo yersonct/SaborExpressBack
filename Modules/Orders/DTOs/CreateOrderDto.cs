@@ -8,8 +8,8 @@ namespace SaborExpress.Modules.Orders.DTOs
         public int? CustomerId { get; set; }
         public int? TableId { get; set; }
 
-        // Ahora opcional: obligatorio para todo excepto Delivery,
-        // donde se calcula internamente a partir de AddressId.
+        // Delivery usa la sede más cercana cuando se omite; la app de cliente
+        // puede enviar otra sede y el servidor valida que esté activa y cubra la dirección.
         public int? BranchId { get; set; }
 
         public int? AddressId { get; set; }

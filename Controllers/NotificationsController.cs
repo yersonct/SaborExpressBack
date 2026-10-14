@@ -19,6 +19,31 @@ namespace SaborExpress.Controllers
             _service = service;
         }
 
+        [HttpPut("push-device")]
+        [Authorize(Roles = $"{RoleNames.Mesero},{RoleNames.Cajero},{RoleNames.Repartidor}")]
+        public async Task<IActionResult> RegisterPushDevice([FromBody] PushDeviceRegistrationDto dto)
+        {
+            var canRegisterProfile =
+                (string.Equals(dto.NotificationProfile, "cashier", StringComparison.OrdinalIgnoreCase)
+                    && User.IsInRole(RoleNames.Cajero))
+                || (string.Equals(dto.NotificationProfile, "waiter", StringComparison.OrdinalIgnoreCase)
+                    && User.IsInRole(RoleNames.Mesero))
+                || (string.Equals(dto.NotificationProfile, "delivery", StringComparison.OrdinalIgnoreCase)
+                    && User.IsInRole(RoleNames.Repartidor));
+            if (!canRegisterProfile) return Forbid();
+
+            await _service.RegisterPushDeviceAsync(this.GetCurrentUserId(), dto);
+            return NoContent();
+        }
+
+        [HttpPost("push-device/unregister")]
+        [Authorize(Roles = $"{RoleNames.Mesero},{RoleNames.Cajero},{RoleNames.Repartidor}")]
+        public async Task<IActionResult> UnregisterPushDevice([FromBody] UnregisterPushDeviceDto dto)
+        {
+            await _service.UnregisterPushDeviceAsync(this.GetCurrentUserId(), dto.ExpoPushToken);
+            return NoContent();
+        }
+
         [HttpGet("user/{userId:int}")]
         public async Task<IActionResult> GetByUser(int userId, [FromQuery] bool? unreadOnly)
         {

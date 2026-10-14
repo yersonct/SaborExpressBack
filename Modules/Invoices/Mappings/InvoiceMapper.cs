@@ -18,7 +18,10 @@ namespace SaborExpress.Modules.Invoices.Mappings
                 BranchName = invoice.Branch?.Name,
                 CustomerName = invoice.Order?.Customer?.Name,
                 SubTotal = invoice.SubTotal,
-                Tax = invoice.Tax,
+                     Tax = invoice.Tax,
+                TaxRate = invoice.TaxRate,
+                TaxIncludedInPrice = invoice.TaxIncludedInPrice,
+                DeliveryFee = invoice.DeliveryFee,
                 Total = invoice.Total,
                 IsVoided = invoice.IsVoided,
                 IssuedAt = invoice.IssuedAt

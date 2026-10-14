@@ -14,7 +14,7 @@ namespace SaborExpress.Modules.Products.Repositories
             _context = context;
         }
 
-        public async Task<List<Product>> GetAllAsync(int? branchId = null)
+        public async Task<List<Product>> GetAllAsync(int? branchId = null, bool includeInactive = false)
         {
             var query = _context.Products
                 .Include(p => p.Category)
@@ -28,6 +28,9 @@ namespace SaborExpress.Modules.Products.Repositories
                 // para no romper el catálogo actual mientras vas asignando sedes poco a poco.
                 query = query.Where(p => p.BranchId == branchId.Value);
             }
+
+            if (!includeInactive)
+                query = query.Where(p => p.Status && p.Category.Status);
 
             return await query.ToListAsync();
         }
@@ -67,13 +70,18 @@ namespace SaborExpress.Modules.Products.Repositories
 
             return await query.AnyAsync();
         }
-        public async Task<List<Product>> GetByCategoryIdAsync(int categoryId)
+        public async Task<List<Product>> GetByCategoryIdAsync(int categoryId, bool includeInactive = false)
         {
-            return await _context.Products
+            var query = _context.Products
                 .Include(p => p.Category)
                 .Where(p => p.CategoryId == categoryId)
                 .AsNoTracking()
-                .ToListAsync();
+                .AsQueryable();
+
+            if (!includeInactive)
+                query = query.Where(p => p.Status && p.Category.Status);
+
+            return await query.ToListAsync();
         }
 
         public async Task<bool> HasOrderItemsAsync(int productId)

@@ -27,17 +27,32 @@ namespace SaborExpress.Data.SeedData
                 await context.SaveChangesAsync();
             }
 
-            var yaExisteGerente = await context.UserRoles
-                .AnyAsync(ur => ur.RoleId == gerenteRole.Id);
-
-            if (yaExisteGerente)
-                return;
-
             var email = configuration["InitialManager:Email"];
             var password = configuration["InitialManager:Password"];
             var fullName = configuration["InitialManager:FullName"];
             var document = configuration["InitialManager:Document"];
             var LastName = configuration["InitialManager:LastName"];
+            var phone = configuration["InitialManager:Phone"]?.Trim();
+
+            var existingManager = await context.Employees
+                .FirstOrDefaultAsync(e => e.User.UserRoles.Any(ur => ur.RoleId == gerenteRole.Id));
+
+            if (existingManager != null)
+            {
+                if (string.IsNullOrWhiteSpace(existingManager.Phone) && !string.IsNullOrWhiteSpace(phone))
+                {
+                    existingManager.Phone = phone;
+                    await context.SaveChangesAsync();
+                }
+
+                return;
+            }
+
+            var yaExisteGerente = await context.UserRoles
+                .AnyAsync(ur => ur.RoleId == gerenteRole.Id);
+
+            if (yaExisteGerente)
+                return;
 
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
                 throw new InvalidOperationException(
@@ -48,6 +63,7 @@ namespace SaborExpress.Data.SeedData
                 Name = fullName ?? "Gerente General",
                 Document = document ?? "0000000000",
                 LastName = LastName ?? "Apellido",
+                Phone = string.IsNullOrWhiteSpace(phone) ? null : phone,
                 Status = "Activo",
                 User = new User
                 {

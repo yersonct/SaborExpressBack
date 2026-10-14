@@ -96,7 +96,8 @@ namespace SaborExpress.Modules.UserPreferences.Services
 
             return new LanguageResponseDto
             {
-                Language = preference?.Value ?? LanguageOptions.DefaultLanguage
+                Language = preference?.Value ?? LanguageOptions.DefaultLanguage,
+                IsConfigured = preference is not null
             };
         }
 

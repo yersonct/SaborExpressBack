@@ -93,9 +93,9 @@ namespace SaborExpress.Configuration
                     var authRepository = context.HttpContext.RequestServices
                         .GetRequiredService<IAuthRepository>();
 
-                    var user = await authRepository.GetByIdWithRelationsAsync(userId);
+                    var (exists, dbToken) = await authRepository.GetSessionInfoAsync(userId);
 
-                    if (user == null)
+                    if (!exists)
                     {
                         context.Fail("Usuario no encontrado.");
                         return;
@@ -113,7 +113,7 @@ namespace SaborExpress.Configuration
                     var config = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
                     var singleSession = config.GetValue("Auth:SingleSession", true);
 
-                    if (singleSession && (string.IsNullOrEmpty(user.Token) || user.Token != rawToken))
+                    if (singleSession && (string.IsNullOrEmpty(dbToken) || dbToken != rawToken))
                     {
                         context.Fail("Tu sesión ya no es válida: se inició sesión en otro dispositivo.");
                     }

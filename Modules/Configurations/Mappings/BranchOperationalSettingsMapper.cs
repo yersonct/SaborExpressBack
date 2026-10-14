@@ -5,23 +5,31 @@ namespace SaborExpress.Modules.Configurations.Mappings
 {
     public static class BranchOperationalSettingsMapper
     {
-        public static BranchOperationalSettingsResponseDto ToResponse(BranchOperationalSettings s, bool isDefault = false) => new()
+        public static BranchOperationalSettingsResponseDto ToResponse(BranchOperationalSettings s) => new()
         {
             BranchId = s.BranchId,
             OpeningTime = s.OpeningTime.ToString("HH:mm"),
             ClosingTime = s.ClosingTime.ToString("HH:mm"),
             TaxRate = s.TaxRate,
             DeliveryFee = s.DeliveryFee,
-            SuggestedTipPercent = s.SuggestedTipPercent,
             DeliveryRadiusKm = s.DeliveryRadiusKm,
-            MinOrderAmount = s.MinOrderAmount,
-            AcceptsDelivery = s.AcceptsDelivery,
-            AcceptsDineIn = s.AcceptsDineIn,
-            UpdatedAt = isDefault ? null : s.UpdatedAt,
-            IsDefault = isDefault
+            MaxActiveDeliveriesPerCourier = s.MaxActiveDeliveriesPerCourier,
+            UpdatedAt = s.UpdatedAt,
+            IsDefault = false
         };
 
-        public static BranchOperationalSettingsResponseDto Default(int branchId)
-            => ToResponse(new BranchOperationalSettings { BranchId = branchId }, isDefault: true);
+        // Sede sin configuración guardada: las horas salen vacías para que las llene el gerente/administrador.
+        public static BranchOperationalSettingsResponseDto Default(int branchId) => new()
+        {
+            BranchId = branchId,
+            OpeningTime = string.Empty,
+            ClosingTime = string.Empty,
+            TaxRate = 8m,
+            DeliveryFee = 0m,
+            DeliveryRadiusKm = 5m,
+            MaxActiveDeliveriesPerCourier = 4,
+            UpdatedAt = null,
+            IsDefault = true
+        };
     }
 }

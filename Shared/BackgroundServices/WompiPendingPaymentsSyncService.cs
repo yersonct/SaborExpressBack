@@ -17,7 +17,7 @@ namespace SaborExpress.Shared.BackgroundServices
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            Console.WriteLine("[SYNC] Servicio de sincronización Wompi INICIADO");
+            _logger.LogInformation("Servicio de sincronización Wompi iniciado");
             await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
 
             while (!stoppingToken.IsCancellationRequested)

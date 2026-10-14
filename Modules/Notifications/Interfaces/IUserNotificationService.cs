@@ -20,5 +20,7 @@ namespace SaborExpress.Modules.Notifications.Interfaces
         Task<NotificationDto> MarkAsReadAsync(int id, int userId);
         Task MarkAllAsReadAsync(int userId);
         Task DeleteAsync(int id, int userId);
+        Task RegisterPushDeviceAsync(int userId, PushDeviceRegistrationDto dto);
+        Task UnregisterPushDeviceAsync(int userId, string expoPushToken);
     }
 }

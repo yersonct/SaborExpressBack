@@ -75,6 +75,34 @@ namespace SaborExpress.Modules.EmployeeSchedules.Repositories
             await _context.SaveChangesAsync();
         }
 
+        public async Task<bool> ApplyBranchHoursToUpcomingAsync(
+            int branchId,
+            DateOnly fromDate,
+            TimeOnly startTime,
+            TimeOnly endTime)
+        {
+            var schedules = await _context.EmployeeSchedules
+                .Where(s => s.BranchId == branchId && s.ShiftDate >= fromDate)
+                .ToListAsync();
+
+            var changed = false;
+            foreach (var schedule in schedules)
+            {
+                if (schedule.StartTime == startTime && schedule.EndTime == endTime)
+                    continue;
+
+                schedule.StartTime = startTime;
+                schedule.EndTime = endTime;
+                schedule.UpdatedAt = DateTime.UtcNow;
+                changed = true;
+            }
+
+            if (!changed) return false;
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
         public async Task DeleteAsync(EmployeeSchedule schedule)
         {
             _context.EmployeeSchedules.Remove(schedule);

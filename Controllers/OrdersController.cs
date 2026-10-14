@@ -73,6 +73,16 @@ namespace SaborExpress.Controllers
             return Ok(result);
         }
 
+        [HttpGet("branch/{branchId:int}/occupied-tables")]
+        public async Task<IActionResult> GetOccupiedTableWaiters(int branchId)
+        {
+            var currentUserId = this.GetCurrentUserId();
+            var result = await _orderService.GetOccupiedTableWaitersByBranchIdAsync(
+                branchId,
+                currentUserId);
+            return Ok(result);
+        }
+
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateOrderDto dto)
         {
@@ -84,6 +94,10 @@ namespace SaborExpress.Controllers
         [HttpPatch("{id:int}/status")]
         public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateOrderStatusDto dto)
         {
+            // El panel de Gerente/Administrador es solo de supervisión.
+            if (User.IsInRole(RoleNames.Gerente) || User.IsInRole(RoleNames.Administrador))
+                return StatusCode(403, new { message = "Gerente y Administrador no pueden cambiar el estado de los pedidos." });
+
             var employeeId = this.GetCurrentEmployeeId();
 
             // Si el cliente está pagando con Wompi, no se confirma a mano:
@@ -119,9 +133,22 @@ namespace SaborExpress.Controllers
             return Ok(result);
         }
 
+        // El cliente avisa que pagará en efectivo contra entrega
+        [HttpPost("{id:int}/confirm-cash")]
+        [Authorize(Roles = RoleNames.Cliente)]
+        public async Task<IActionResult> ConfirmCash(int id)
+        {
+            var userId = this.GetCurrentUserId();
+            await _orderService.ConfirmCashDeliveryAsync(id, userId);
+            return NoContent();
+        }
+
         [HttpPatch("{id:int}/cancel")]
         public async Task<IActionResult> Cancel(int id, [FromBody] CancelOrderDto dto)
         {
+            if (User.IsInRole(RoleNames.Gerente) || User.IsInRole(RoleNames.Administrador))
+                return StatusCode(403, new { message = "Gerente y Administrador no pueden cancelar pedidos." });
+
             var employeeId = this.GetCurrentEmployeeId();
             var result = await _orderService.CancelAsync(id, dto, employeeId);
             return Ok(result);

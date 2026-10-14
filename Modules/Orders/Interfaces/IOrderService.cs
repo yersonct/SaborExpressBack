@@ -11,11 +11,13 @@ namespace SaborExpress.Modules.Orders.Interfaces
         Task<List<OrderSummaryDto>> GetByTableIdAsync(int tableId);
         Task<List<OrderSummaryDto>> GetByCustomerIdAsync(int customerId);
         Task<List<OrderSummaryDto>> GetByBranchIdAsync(int branchId, int currentUserId);
+        Task<List<OccupiedTableWaiterDto>> GetOccupiedTableWaitersByBranchIdAsync(int branchId, int currentUserId);
         Task<List<OrderSummaryDto>> GetKitchenBoardByAccessTokenAsync(string accessToken);
         Task<OrderResponseDto> UpdateAsync(int id, UpdateOrderDto dto, int employeeId);
         Task<OrderResponseDto> UpdateStatusAsync(int id, UpdateOrderStatusDto dto, int employeeId);
         Task<OrderResponseDto> CancelAsync(int id, CancelOrderDto dto, int employeeId);
         Task<OrderResponseDto> CancelByCustomerAsync(int id, CancelOrderDto dto, int currentUserId);
+        Task ConfirmCashDeliveryAsync(int id, int currentUserId);
 
     }
 }
