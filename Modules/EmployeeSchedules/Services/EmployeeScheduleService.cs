@@ -144,6 +144,11 @@ public async Task RevokeExpiredRolesAsync()
                 dto.StartTime = branchHours.open;
                 dto.EndTime = branchHours.close;
                 ValidateTimeRange(dto.StartTime, dto.EndTime);
+                var requestedRole = await _roleRepository.GetByIdAsync(dto.RoleId)
+                    ?? throw new KeyNotFoundException("El rol especificado no existe.");
+                await EnsureAdministratorDateIsAvailableAsync(
+                    requestedRole.Name, dto.BranchId, dto.ShiftDate, dto.EmployeeId, null);
+
                 var alreadyHadRole = employee.User?.UserRoles.Any(ur => ur.RoleId == dto.RoleId) == true;
                 var branchChanged = employee.BranchId == null;
                 await EnsureEmployeeHasRoleAsync(employee, dto.RoleId, currentUser, dto.BranchId);
@@ -239,6 +244,8 @@ public async Task RevokeExpiredRolesAsync()
                 roleChanged && IsManagementRoleName(schedule.Role?.Name))
                 throw new InvalidOperationException("No tienes permiso para gestionar turnos.");
 
+            await EnsureAdministratorDateIsAvailableAsync(
+                requestedRole.Name, effectiveBranchId, dto.ShiftDate, schedule.EmployeeId, id);
             await EnsureEmployeeHasRoleAsync(employee, dto.RoleId, currentUser, effectiveBranchId);
 
             var branchHours = await GetBranchHoursAsync(effectiveBranchId);
@@ -487,6 +494,21 @@ var shiftDate = schedule.ShiftDate;
                     throw new InvalidOperationException("Solo puedes gestionar turnos de tu misma sede.");
             }
 
+            private async Task EnsureAdministratorDateIsAvailableAsync(
+                string roleName, int branchId, DateOnly date, int employeeId, int? excludeScheduleId)
+            {
+                if (roleName != RoleNames.Administrador) return;
+
+                if (await _repository.HasAdministratorScheduleConflictAsync(branchId, date, excludeScheduleId))
+                    throw new InvalidOperationException(
+                        "Esta sede ya tiene un Administrador programado para esa fecha.");
+
+                var employee = await _employeeRepository.GetByIdAsync(employeeId);
+                if (await _repository.HasPermanentAdministratorConflictAsync(branchId, employee?.UserId))
+                    throw new InvalidOperationException(
+                        "Esta sede ya tiene un Administrador permanente asignado.");
+            }
+
             private async Task EnsureEmployeeHasRoleAsync(
                 Employee employee,
                 int roleId,
@@ -505,11 +527,6 @@ var shiftDate = schedule.ShiftDate;
                 var tieneEseRol = employee.User.UserRoles.Any(ur => ur.RoleId == roleId);
                 if (tieneEseRol)
                     return;
-
-                if (role.Name == RoleNames.Administrador &&
-                    await _userRoleRepository.ExistsAdministradorInBranchAsync(
-                        branchId, excludeUserId: employee.User.Id))
-                    throw new InvalidOperationException("Esta sede ya tiene un Administrador asignado.");
 
                 var tieneCv = employee.CvFile != null && employee.CvFile.Length > 0;
                 if (role.RequiresCv && !tieneCv)
@@ -578,7 +595,8 @@ var shiftDate = schedule.ShiftDate;
                 var schedulesToday = await _repository.GetByEmployeeAndDateAsync(employeeId, today);
 
                 var activeSchedule = schedulesToday
-                    .FirstOrDefault(s => nowTime >= s.StartTime && nowTime <= s.EndTime);
+                    .FirstOrDefault(s => s.Status == SaborExpress.Modules.EmployeeSchedules.Enum.ScheduleStatus.Programado
+                        && nowTime >= s.StartTime && nowTime < s.EndTime);
 
                 if (activeSchedule == null)
                 {
