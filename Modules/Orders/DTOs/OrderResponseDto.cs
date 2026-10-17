@@ -12,6 +12,7 @@ namespace SaborExpress.Modules.Orders.DTOs
         public string? EmployeeName { get; set; }
         public int? TableId { get; set; }
         public int? TableNumber { get; set; }
+        public Guid? TableSessionId { get; set; }
         public int BranchId { get; set; }
         public string? BranchName { get; set; }
         public OrderType OrderType { get; set; }
