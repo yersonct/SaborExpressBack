@@ -116,6 +116,22 @@ namespace SaborExpress.Configuration
                     if (singleSession && (string.IsNullOrEmpty(dbToken) || dbToken != rawToken))
                     {
                         context.Fail("Tu sesión ya no es válida: se inició sesión en otro dispositivo.");
+                        return;
+                    }
+
+                    // Validación en CADA petición, incluso si el JWT se emitió ayer.
+                    // El Gerente es independiente de los turnos de Administrador.
+                    if (context.Principal?.IsInRole(SaborExpress.Shared.Constants.RoleNames.Administrador) == true &&
+                        context.Principal.IsInRole(SaborExpress.Shared.Constants.RoleNames.Gerente) == false)
+                    {
+                        var schedules = context.HttpContext.RequestServices.GetRequiredService<
+                            SaborExpress.Modules.EmployeeSchedules.Interfaces.IEmployeeScheduleRepository>();
+                        if (!await schedules.CanActAsAdministratorAsync(
+                            userId, SaborExpress.Shared.Helpers.ColombiaTime.Now))
+                        {
+                            context.Fail("El turno de Administrador no está vigente.");
+                            return;
+                        }
                     }
                 }
             };

@@ -4,6 +4,8 @@ using SaborExpress.Modules.Employees.Models;
 using SaborExpress.Modules.RolePermissions.Interfaces;
 using SaborExpress.Shared.Constants;
 using SaborExpress.Shared.Interfaces;
+using SaborExpress.Shared.Helpers;
+using SaborExpress.Modules.EmployeeSchedules.Enum;
 
 namespace SaborExpress.Shared.Services
 {
@@ -35,9 +37,14 @@ namespace SaborExpress.Shared.Services
             if (employee?.User == null)
                 return false;
 
-            // 1. Gerente/Administrador: se valida el permiso contra CUALQUIERA de sus roles,
-            //    no necesitan turno activo
-            if (EsRolExento(employee))
+            // Gerente conserva acceso independiente de los horarios.
+            if (employee.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Gerente))
+                return await AlgunRolTienePermisoAsync(employee, permissionName);
+
+            // Un Administrador rotativo solo tiene privilegios durante su turno
+            // efectivo; un Administrador sin historial de turnos es permanente.
+            if (employee.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Administrador) &&
+                await _scheduleRepository.CanActAsAdministratorAsync(employee.UserId, ColombiaTime.Now))
                 return await AlgunRolTienePermisoAsync(employee, permissionName);
 
             // 2. El resto de roles: el permiso se valida SOLO contra el rol de su turno activo,
@@ -64,14 +71,15 @@ namespace SaborExpress.Shared.Services
 
         private async Task<int?> GetActiveShiftRoleIdAsync(int employeeId)
         {
-            var now = DateTime.Now;
+            var now = ColombiaTime.Now;
             var today = DateOnly.FromDateTime(now);
             var nowTime = TimeOnly.FromDateTime(now);
 
             var schedulesToday = await _scheduleRepository.GetByEmployeeAndDateAsync(employeeId, today);
 
             var activeSchedule = schedulesToday
-                .FirstOrDefault(s => nowTime >= s.StartTime && nowTime <= s.EndTime);
+                .FirstOrDefault(s => s.Status == ScheduleStatus.Programado &&
+                    nowTime >= s.StartTime && nowTime < s.EndTime);
 
             return activeSchedule?.RoleId;
         }

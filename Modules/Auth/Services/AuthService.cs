@@ -133,7 +133,9 @@
                 await EnsureCustomerForEmployeeAsync(user);
 
                 var (hasActiveShift, activeShiftRoleName) = await GetActiveShiftInfoAsync(user);
-                var token = _jwtGenerator.Generate(user, dto.Identifier, actAsClient: !hasActiveShift);
+                var effectiveRoles = await GetEffectiveRoleNamesAsync(user);
+                var token = _jwtGenerator.Generate(user, dto.Identifier,
+                    actAsClient: !hasActiveShift, effectiveRoles: effectiveRoles);
                 user.Token = token;
                 user.LastLogin = DateTime.UtcNow;
                 await _authRepository.UpdateAsync(user);
@@ -153,7 +155,7 @@
                 if (enforceSingleSession)
                     await _realtimeNotifier.SessionReplacedAsync(user.Id);
 
-                return AuthMapper.ToAuthResponse(user, token, refreshToken, hasActiveShift, activeShiftRoleName);
+                return AuthMapper.ToAuthResponse(user, token, refreshToken, hasActiveShift, activeShiftRoleName, effectiveRoles);
             }
             finally
             {
@@ -228,6 +230,18 @@
             user.Customer = customer; // para que el token lo incluya
         }
 
+            private async Task<IReadOnlyCollection<string>> GetEffectiveRoleNamesAsync(User user)
+            {
+                var roles = user.UserRoles.Select(ur => ur.Role.Name).Distinct().ToList();
+                if (roles.Contains(RoleNames.Administrador) &&
+                    !await _scheduleRepository.CanActAsAdministratorAsync(
+                        user.Id, SaborExpress.Shared.Helpers.ColombiaTime.Now))
+                {
+                    roles.Remove(RoleNames.Administrador);
+                }
+                return roles;
+            }
+
         private async Task<(bool HasActiveShift, string? ActiveShiftRoleName)> GetActiveShiftInfoAsync(User user)
         {
             // Cliente, Gerente y Administrador no dependen de turno.
@@ -295,12 +309,14 @@
                     await _refreshTokenRepository.RevokeAsync(stored);
 
                     var (hasActiveShift, activeShiftRoleName) = await GetActiveShiftInfoAsync(user);
-                    var newAccessToken = _jwtGenerator.Generate(user, user.Email!, actAsClient: !hasActiveShift);
+                    var effectiveRoles = await GetEffectiveRoleNamesAsync(user);
+                    var newAccessToken = _jwtGenerator.Generate(user, user.Email!,
+                        actAsClient: !hasActiveShift, effectiveRoles: effectiveRoles);
                     user.Token = newAccessToken;
                     await _authRepository.UpdateAsync(user);
 
                     var newRefreshToken = await GenerateAndSaveRefreshTokenAsync(user.Id);
-                    return AuthMapper.ToAuthResponse(user, newAccessToken, newRefreshToken, hasActiveShift, activeShiftRoleName);
+                    return AuthMapper.ToAuthResponse(user, newAccessToken, newRefreshToken, hasActiveShift, activeShiftRoleName, effectiveRoles);
                 }
                 finally
                 {
