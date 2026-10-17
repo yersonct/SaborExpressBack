@@ -30,6 +30,9 @@ namespace SaborExpress.Modules.Configurations.Validators
             if (dto.DeliveryFee < 0)
                 throw new ArgumentException("La tarifa de domicilio no puede ser negativa.");
 
+            if (dto.DeliveryFee != decimal.Truncate(dto.DeliveryFee))
+                throw new ArgumentException("La tarifa de domicilio debe ser un número entero.");
+
             if (dto.DeliveryRadiusKm is <= 0 or > 100)
                 throw new ArgumentException("El radio de entrega debe estar entre 0.01 y 100 km.");
 

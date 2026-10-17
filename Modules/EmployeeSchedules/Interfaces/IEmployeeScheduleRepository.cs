@@ -28,6 +28,10 @@ namespace SaborExpress.Modules.EmployeeSchedules.Interfaces
 
         Task<EmployeeSchedule?> GetActiveScheduleByTokenAsync(string token, DateTime now);
 
+        Task<bool> HasAdministratorScheduleConflictAsync(int branchId, DateOnly date, int? excludeScheduleId = null);
+        Task<bool> HasPermanentAdministratorConflictAsync(int branchId, int? excludeUserId = null);
+        Task<bool> CanActAsAdministratorAsync(int userId, DateTime nowColombia);
+
         Task<List<int>> GetEmployeeIdsWithSchedulesAsync();
 
         Task<List<int>> GetRequiredRoleIdsAsync(int employeeId, DateOnly fromDate);

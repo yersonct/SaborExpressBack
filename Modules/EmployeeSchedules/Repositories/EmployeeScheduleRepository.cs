@@ -135,6 +135,59 @@ namespace SaborExpress.Modules.EmployeeSchedules.Repositories
                 .ToListAsync();
         }
 
+        // La exclusividad del Administrador se comprueba por sede y FECHA.
+        // Un turno historico o futuro de otro dia nunca bloquea la fecha consultada.
+        public Task<bool> HasAdministratorScheduleConflictAsync(int branchId, DateOnly date, int? excludeScheduleId = null)
+        {
+            return _context.EmployeeSchedules.AnyAsync(s =>
+                s.BranchId == branchId && s.ShiftDate == date &&
+                s.Role.Name == SaborExpress.Shared.Constants.RoleNames.Administrador &&
+                s.Status != Enum.ScheduleStatus.Ausente &&
+                (!excludeScheduleId.HasValue || s.Id != excludeScheduleId.Value));
+        }
+
+        // Un Administrador concedido directamente en UserRoles, sin historial
+        // de turnos de Administrador, continua siendo permanente.
+        public Task<bool> HasPermanentAdministratorConflictAsync(int branchId, int? excludeUserId = null)
+        {
+            return _context.UserRoles.AnyAsync(ur =>
+                ur.Role.Name == SaborExpress.Shared.Constants.RoleNames.Administrador &&
+                ur.User.Employee != null &&
+                ur.User.Employee.BranchId == branchId &&
+                (!excludeUserId.HasValue || ur.UserId != excludeUserId.Value) &&
+                !_context.EmployeeSchedules.Any(s =>
+                    s.EmployeeId == ur.User.Employee.Id &&
+                    s.Role.Name == SaborExpress.Shared.Constants.RoleNames.Administrador));
+        }
+
+        // Comprueba el privilegio efectivo en tiempo real (hora Colombia):
+        // - Usuario con rol permanente: acceso sin turno (si nunca tuvo uno de Admin).
+        // - Usuario gestionado por turnos: solo durante el turno de Admin vigente.
+        public async Task<bool> CanActAsAdministratorAsync(int userId, DateTime nowColombia)
+        {
+            var today = DateOnly.FromDateTime(nowColombia);
+            var time = TimeOnly.FromDateTime(nowColombia);
+            var state = await _context.Employees
+                .Where(e => e.UserId == userId)
+                .Select(e => new
+                {
+                    HasRole = e.User.UserRoles.Any(ur =>
+                        ur.Role.Name == SaborExpress.Shared.Constants.RoleNames.Administrador),
+                    HasHistory = _context.EmployeeSchedules.Any(s =>
+                        s.EmployeeId == e.Id &&
+                        s.Role.Name == SaborExpress.Shared.Constants.RoleNames.Administrador),
+                    HasCurrent = _context.EmployeeSchedules.Any(s =>
+                        s.EmployeeId == e.Id &&
+                        s.Role.Name == SaborExpress.Shared.Constants.RoleNames.Administrador &&
+                        s.ShiftDate == today &&
+                        s.Status == Enum.ScheduleStatus.Programado &&
+                        s.StartTime <= time && time < s.EndTime)
+                })
+                .FirstOrDefaultAsync();
+
+            return state != null && state.HasRole && (!state.HasHistory || state.HasCurrent);
+        }
+
         public async Task<List<int>> GetEmployeeIdsWithSchedulesAsync()
         {
             return await _context.EmployeeSchedules

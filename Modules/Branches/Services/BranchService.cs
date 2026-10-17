@@ -1,5 +1,6 @@
 ﻿using SaborExpress.Modules.Branches.DTOs;
 using SaborExpress.Modules.Branches.Interfaces;
+using SaborExpress.Modules.Configurations.Interfaces;
 using SaborExpress.Modules.Branches.Mappings;
 using SaborExpress.Modules.Branches.Models;
 using SaborExpress.Modules.Branches.Validators;
@@ -13,6 +14,7 @@ namespace SaborExpress.Modules.Branches.Services
     public class BranchService : IBranchService
     {
         private readonly IBranchRepository _branchRepository;
+        private readonly IBranchOperationalSettingsRepository _settingsRepository;
         private readonly BranchValidator _validator;
         private readonly IBranchAccessGuard _accessGuard;
         private readonly IGeocodingService _geocodingService;
@@ -23,6 +25,7 @@ namespace SaborExpress.Modules.Branches.Services
 
         public BranchService(
             IBranchRepository branchRepository,
+            IBranchOperationalSettingsRepository settingsRepository,
             BranchValidator validator,
             IBranchAccessGuard accessGuard,
             IGeocodingService geocodingService,
@@ -32,6 +35,7 @@ namespace SaborExpress.Modules.Branches.Services
             IRealtimeNotifier realtime)
         {
             _branchRepository = branchRepository;
+            _settingsRepository = settingsRepository;
             _validator = validator;
             _accessGuard = accessGuard;
             _geocodingService = geocodingService;
@@ -233,9 +237,13 @@ namespace SaborExpress.Modules.Branches.Services
 
             Branch? nearest = null;
             double shortestDistance = double.MaxValue;
+            Branch? nearestWithCoverage = null;
+            double shortestCoveredDistance = double.MaxValue;
 
             foreach (var branch in branches)
             {
+                // Evita seleccionar sedes sin coordenadas reales.
+                if (branch.Latitude == 0 && branch.Longitude == 0) continue;
                 var distance = CalculateHaversineDistanceKm(
                     (double)latitude, (double)longitude,
                     (double)branch.Latitude, (double)branch.Longitude);
@@ -245,9 +253,23 @@ namespace SaborExpress.Modules.Branches.Services
                     shortestDistance = distance;
                     nearest = branch;
                 }
+
+                // La sede más cercana geométricamente puede tener radio menor
+                // que otra sede algo más lejana. Priorizar la que sí cubre al cliente.
+                var settings = await _settingsRepository.GetByBranchIdAsync(branch.Id);
+                if (settings != null && settings.DeliveryRadiusKm > 0
+                    && distance <= (double)settings.DeliveryRadiusKm
+                    && distance < shortestCoveredDistance)
+                {
+                    shortestCoveredDistance = distance;
+                    nearestWithCoverage = branch;
+                }
             }
 
-            return nearest!;
+            // Si ninguna cubre la dirección, devolver la más cercana para que
+            // cliente/backend muestren 'Fuera de cobertura' (jamás aceptar pedido).
+            return nearestWithCoverage ?? nearest
+                ?? throw new InvalidOperationException("Ninguna sede activa tiene coordenadas válidas.");
         }
 
         private static double CalculateHaversineDistanceKm(double lat1, double lon1, double lat2, double lon2)
