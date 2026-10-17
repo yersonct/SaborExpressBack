@@ -520,6 +520,17 @@ namespace SaborExpress.Modules.Orders.Services
 
             await _validator.ValidateVoid(orderDetail, dto);
 
+            // Anular el último producto NO cancela el pedido ni libera la mesa.
+            // Obligar a usar CancelAsync preserva el historial y las reglas
+            // de pagos y de cocina también para otros clientes de esta API.
+            var liveDetails = (await _orderDetailRepository.GetByOrderIdAsync(orderDetail.OrderId))
+                .Where(detail => detail.Status != OrderDetailStatus.Voided &&
+                                 detail.Status != OrderDetailStatus.Cancelled)
+                .ToList();
+            if (liveDetails.Count == 1 && liveDetails[0].Id == orderDetail.Id)
+                throw new InvalidOperationException(
+                    "Para quitar el último producto debes cancelar el pedido completo.");
+
             var oldStatus = orderDetail.Status;
             orderDetail.Status = OrderDetailStatus.Voided;
             orderDetail.LastModifiedByEmployeeId = employeeId;
@@ -572,9 +583,44 @@ namespace SaborExpress.Modules.Orders.Services
                 NewValue = OrderDetailStatus.Delivered.ToString(),
                 ChangedAt = DateTime.UtcNow
             });
+
             await _historyRepository.SaveChangesAsync();
-            await _tableAvailabilityService.TryReleaseAfterConfirmationAsync(orderDetail.OrderId);
+
+            var details = await _orderDetailRepository
+                .GetByOrderIdAsync(orderDetail.OrderId);
+
+            var activeDetails = details
+                .Where(detail =>
+                    detail.Status != OrderDetailStatus.Cancelled &&
+                    detail.Status != OrderDetailStatus.Voided)
+                .ToList();
+
+            var allDelivered =
+                activeDetails.Count > 0 &&
+                activeDetails.All(detail =>
+                    detail.Status == OrderDetailStatus.Delivered);
+
+            if (allDelivered)
+            {
+                var order = await _orderRepository.GetByIdAsync(orderDetail.OrderId);
+
+                if (order != null &&
+                    order.Status != OrderStatus.Cancelled &&
+                    order.Status != OrderStatus.Delivered)
+                {
+                    order.Status = OrderStatus.Delivered;
+                    order.UpdatedAt = DateTime.UtcNow;
+
+                    await _orderRepository.UpdateAsync(order);
+                    await _orderRepository.SaveChangesAsync();
+                }
+            }
+
+            await _tableAvailabilityService
+                .TryReleaseAfterConfirmationAsync(orderDetail.OrderId);
+
             await _realtime.OrdersChangedAsync();
+
 
             var delivered = await _orderDetailRepository.GetByIdAsync(orderDetail.Id);
             return OrderDetailMapper.ToResponse(delivered!);

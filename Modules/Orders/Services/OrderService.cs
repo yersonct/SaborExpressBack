@@ -106,16 +106,22 @@ namespace SaborExpress.Modules.Orders.Services
             await EnsureWithinDeliveryRadiusAsync(resolvedBranchId, dto.AddressId!.Value, settings.DeliveryRadiusKm);
 
         Table? table = null;
+        Guid? tableSessionId = null;
+
         if (dto.TableId.HasValue)
         {
             table = await _tableRepository.GetByIdAsync(dto.TableId.Value)
                 ?? throw new ArgumentException("La mesa no existe.");
 
             if (table.BranchId != resolvedBranchId)
-                throw new InvalidOperationException("La mesa no pertenece a la sede indicada.");
+                throw new InvalidOperationException(
+                    "La mesa no pertenece a la sede indicada.");
 
             if (table.Status != TableStatus.Available)
-                throw new InvalidOperationException("La mesa ya no está disponible. Puede que otro mesero ya la haya tomado.");
+                throw new InvalidOperationException(
+                    "La mesa ya no está disponible. Puede que otro mesero ya la haya tomado.");
+
+            tableSessionId = Guid.NewGuid();
         }
 
         var order = new Order
@@ -123,6 +129,7 @@ namespace SaborExpress.Modules.Orders.Services
             CustomerId = dto.CustomerId,
             EmployeeId = employeeId,
             TableId = dto.TableId,
+            TableSessionId = tableSessionId,
             BranchId = resolvedBranchId,
             AddressId = dto.AddressId,
             OrderType = dto.OrderType,
@@ -141,12 +148,14 @@ namespace SaborExpress.Modules.Orders.Services
         await _orderRepository.AddAsync(order);
         await _orderRepository.SaveChangesAsync();
 
-        if (table != null)
-        {
-            table.Status = TableStatus.Occupied;
-            await _tableRepository.UpdateAsync(table);
-            await _tableRepository.SaveChangesAsync();
-        }
+            if (table != null)
+            {
+                table.Status = TableStatus.Occupied;
+                table.CurrentSessionId = tableSessionId;
+
+                await _tableRepository.UpdateAsync(table);
+                await _tableRepository.SaveChangesAsync();
+            }
 
         await _statusHistoryRepository.AddAsync(new OrderStatusHistory
         {
@@ -525,10 +534,14 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
             var totalPaid = payments
                 .Where(p => p.Status == PaymentStatus.Completed)
                 .Sum(p => p.Amount);
-            if (totalPaid >= order.Total)
+            // Si se creó un pedido pero falló el envío de sus productos,
+            // Total = 0 y totalPaid = 0 NO significa "pagado".
+            // Mantener la protección cuando sí hubo pagos reales.
+            if (totalPaid > 0m &&
+                (order.Total <= 0m || totalPaid >= order.Total))
             {
                 throw new InvalidOperationException(
-                    "Este pedido ya está pagado en su totalidad y no se puede cancelar.");
+                    "Este pedido ya registra pagos y no se puede cancelar de forma automática.");
             }
 
             var currentDetails = await _orderDetailRepository.GetByOrderIdAsync(order.Id);
@@ -561,11 +574,24 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
             if (order.TableId.HasValue)
             {
                 var table = await _tableRepository.GetByIdAsync(order.TableId.Value);
-                if (table != null && table.Status == TableStatus.Occupied)
+                // Solo puede cerrar la misma sesion a la que pertenecia el pedido cancelado.
+                if (table != null && table.Status == TableStatus.Occupied &&
+                    table.CurrentSessionId == order.TableSessionId)
                 {
-                    table.Status = TableStatus.Available;
-                    await _tableRepository.UpdateAsync(table);
-                    await _tableRepository.SaveChangesAsync();
+                    var otherOrders = await _orderRepository.GetByTableIdAsync(table.Id);
+                    var hasOtherActiveOrders = otherOrders.Any(other =>
+                        other.Id != order.Id &&
+                        other.Status != OrderStatus.Cancelled &&
+                        (!table.CurrentSessionId.HasValue ||
+                         other.TableSessionId == table.CurrentSessionId));
+
+                    if (!hasOtherActiveOrders)
+                    {
+                        table.Status = TableStatus.Available;
+                        table.CurrentSessionId = null;
+                        await _tableRepository.UpdateAsync(table);
+                        await _tableRepository.SaveChangesAsync();
+                    }
                 }
             }
 

@@ -99,7 +99,15 @@ namespace SaborExpress.Modules.Tables.Services
             _validator.ValidateStatusChange(table, dto);
 
             if (dto.Status == TableStatus.Available)
+            {
                 await _tableAvailabilityService.EnsureCanSetAvailableAsync(id);
+                table.CurrentSessionId = null;
+            }
+            else if (dto.Status == TableStatus.Occupied &&
+                    table.Status != TableStatus.Occupied)
+            {
+                table.CurrentSessionId = Guid.NewGuid();
+            }
 
             table.Status = dto.Status;
 
