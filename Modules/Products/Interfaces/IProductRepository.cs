@@ -5,14 +5,14 @@ namespace SaborExpress.Modules.Products.Interfaces
     public interface IProductRepository
     {
         // branchId null = trae todos los productos, sin filtrar por sede
-        Task<List<Product>> GetAllAsync(int? branchId = null);
+        Task<List<Product>> GetAllAsync(int? branchId = null, bool includeInactive = false);
         Task<Product?> GetByIdAsync(int id);
         Task<Product> AddAsync(Product product);
         Task UpdateAsync(Product product);
         Task DeleteAsync(Product product);
         Task<bool> ExistsByNameAsync(string name, int? excludeId = null);
 
-        Task<List<Product>> GetByCategoryIdAsync(int categoryId);
+        Task<List<Product>> GetByCategoryIdAsync(int categoryId, bool includeInactive = false);
         Task<bool> HasOrderItemsAsync(int productId);
     }
 }

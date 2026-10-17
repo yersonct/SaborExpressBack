@@ -20,7 +20,10 @@ namespace SaborExpress.Modules.Orders.DTOs
 
         public int? AssignedDeliveryPersonId { get; set; }
         public string? AssignedDeliveryPersonName { get; set; } 
-        public decimal Tax { get; set; }
+             public decimal Tax { get; set; }
+        public decimal TaxRate { get; set; }
+        public bool TaxIncludedInPrice { get; set; }
+        public decimal DeliveryFee { get; set; }
         public decimal Total { get; set; }
         public string? Notes { get; set; }
         public DateTime CreatedAt { get; set; }

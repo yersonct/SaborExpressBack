@@ -4,6 +4,7 @@
     using SaborExpress.Modules.Orders.Enum;
     using SaborExpress.Modules.Orders.Interfaces;
     using SaborExpress.Modules.Orders.Models;
+using SaborExpress.Modules.Orders.DTOs;
 
     namespace SaborExpress.Modules.Orders.Repositories
     {
@@ -52,7 +53,12 @@
                 return order;
             }
 
-            public async Task<List<Order>> GetAllAsync(int? branchId, OrderStatus? status, int? employeeId = null)
+            public async Task<List<Order>> GetAllAsync(
+                int? branchId,
+                OrderStatus? status,
+                int? employeeId = null,
+                DateTime? fromDate = null,
+                DateTime? toDate = null)
             {
                 var query = SummaryQuery();
 
@@ -62,6 +68,10 @@
                     query = query.Where(x => x.Status == status.Value);
                 if (employeeId.HasValue)
                     query = query.Where(x => x.EmployeeId == employeeId.Value);
+                if (fromDate.HasValue)
+                    query = query.Where(x => x.CreatedAt >= fromDate.Value);
+                if (toDate.HasValue)
+                    query = query.Where(x => x.CreatedAt <= toDate.Value);
 
                 var orders = await query.OrderByDescending(x => x.CreatedAt).ToListAsync();
                 await AttachAssignedDeliveryInfoAsync(orders);
@@ -100,6 +110,38 @@
 
                 await AttachAssignedDeliveryInfoAsync(orders);
                 return orders;
+            }
+
+            public async Task<List<OccupiedTableWaiterDto>> GetOccupiedTableWaitersByBranchIdAsync(
+                int branchId)
+            {
+                var tableOrders = await _context.Orders
+                    .AsNoTracking()
+                    .Where(order =>
+                        order.BranchId == branchId &&
+                        order.TableId.HasValue &&
+                        order.Status != OrderStatus.Cancelled)
+                    .OrderByDescending(order => order.CreatedAt)
+                    .Select(order => new
+                    {
+                        TableId = order.TableId!.Value,
+                        order.EmployeeId,
+                        EmployeeName = order.Employee == null
+                            ? null
+                            : order.Employee.Name + " " + order.Employee.LastName,
+                    })
+                    .ToListAsync();
+
+                return tableOrders
+                    .GroupBy(order => order.TableId)
+                    .Select(group => group.First())
+                    .Select(order => new OccupiedTableWaiterDto
+                    {
+                        TableId = order.TableId,
+                        EmployeeId = order.EmployeeId,
+                        EmployeeName = order.EmployeeName?.Trim(),
+                    })
+                    .ToList();
             }
 
             public async Task<bool> CustomerExistsAsync(int customerId)
@@ -164,7 +206,7 @@
                     }
                 }
             }
-            public async Task RecalculateTotalsAsync(int orderId, decimal taxRate)
+            public async Task RecalculateTotalsAsync(int orderId)
             {
                 var subTotal = await _context.OrderDetails
                     .Where(d => d.OrderId == orderId
@@ -172,8 +214,31 @@
                             && d.Status != OrderDetailStatus.Cancelled)
                     .SumAsync(d => d.SubTotal);
 
-                var tax = Math.Round(subTotal * taxRate, 2);
-                var total = subTotal + tax;
+                // La tarifa y el tratamiento del impuesto quedan congelados en el pedido.
+                var rates = await _context.Orders
+                    .Where(o => o.Id == orderId)
+                    .Select(o => new { o.TaxRate, o.DeliveryFee, o.TaxIncludedInPrice })
+                    .FirstOrDefaultAsync();
+                if (rates == null) return;
+
+                // La tarifa de domicilio solo se cobra si hay productos
+                var fee = subTotal > 0 ? rates.DeliveryFee : 0m;
+                decimal tax;
+                decimal total;
+                if (rates.TaxIncludedInPrice)
+                {
+                    tax = rates.TaxRate <= 0
+                        ? 0m
+                        : Math.Round(subTotal * rates.TaxRate / (100m + rates.TaxRate), 2, MidpointRounding.AwayFromZero);
+                    total = subTotal + fee;
+                }
+                else
+                {
+                    // Conserva el cálculo de pedidos históricos para no cambiar
+                    // saldos ni facturas ya emitidas.
+                    tax = Math.Round(subTotal * rates.TaxRate / 100m, 2, MidpointRounding.AwayFromZero);
+                    total = subTotal + tax + fee;
+                }
 
                 await _context.Orders
                     .Where(o => o.Id == orderId)

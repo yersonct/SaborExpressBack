@@ -1,21 +1,27 @@
-// Modules/Deliveries/Services/DeliveryAssignmentService.cs
+using System.Collections.Concurrent;
+using SaborExpress.Modules.Auth.Interfaces;
+using SaborExpress.Modules.Branches.Interfaces;
+using SaborExpress.Modules.Configurations.Interfaces;
 using SaborExpress.Modules.Deliveries.Enum;
 using SaborExpress.Modules.Deliveries.Interfaces;
 using SaborExpress.Modules.Deliveries.Models;
+using SaborExpress.Modules.Notifications.Interfaces;
 using SaborExpress.Modules.Orders.Enum;
 using SaborExpress.Modules.Orders.Interfaces;
-using SaborExpress.Modules.Notifications.Interfaces;
-using SaborExpress.Modules.Auth.Interfaces;
+using SaborExpress.Shared.Helpers;
 
 namespace SaborExpress.Modules.Deliveries.Services
 {
     public class DeliveryAssignmentService : IDeliveryAssignmentService
     {
-        private const int MaxActiveDeliveriesPerPerson = 4;
+        private const int DefaultMaxActiveDeliveriesPerCourier = 4;
+        private static readonly TimeSpan FreshLocationWindow = TimeSpan.FromMinutes(5);
+        private static readonly ConcurrentDictionary<int, SemaphoreSlim> BranchLocks = new();
 
         private readonly IDeliveryRepository _deliveryRepository;
         private readonly IOrderRepository _orderRepository;
-
+        private readonly IBranchRepository _branchRepository;
+        private readonly IBranchOperationalSettingsRepository _settingsRepository;
         private readonly IUserNotificationService _notificationService;
         private readonly IAuthRepository _authRepository;
         private readonly ILogger<DeliveryAssignmentService> _logger;
@@ -23,12 +29,16 @@ namespace SaborExpress.Modules.Deliveries.Services
         public DeliveryAssignmentService(
             IDeliveryRepository deliveryRepository,
             IOrderRepository orderRepository,
+            IBranchRepository branchRepository,
+            IBranchOperationalSettingsRepository settingsRepository,
             IUserNotificationService notificationService,
             IAuthRepository authRepository,
             ILogger<DeliveryAssignmentService> logger)
         {
             _deliveryRepository = deliveryRepository;
             _orderRepository = orderRepository;
+            _branchRepository = branchRepository;
+            _settingsRepository = settingsRepository;
             _notificationService = notificationService;
             _authRepository = authRepository;
             _logger = logger;
@@ -36,42 +46,89 @@ namespace SaborExpress.Modules.Deliveries.Services
 
         public async Task AssignAutomaticallyAsync(int orderId)
         {
-            var order = await _orderRepository.GetDeliveryInfoAsync(orderId);
-            if (order == null || order.OrderType != OrderType.Delivery)
+            var initialOrder = await _orderRepository.GetDeliveryInfoAsync(orderId);
+            if (initialOrder == null || initialOrder.OrderType != OrderType.Delivery)
             {
-                _logger.LogInformation("Asignación omitida: pedido {OrderId} no existe o no es Delivery.", orderId);
+                _logger.LogInformation(
+                    "Asignación omitida: pedido {OrderId} no existe o no es Delivery.",
+                    orderId);
                 return;
             }
 
-            if (order.AddressId is null)
+            var gate = BranchLocks.GetOrAdd(initialOrder.BranchId, _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync();
+            try
             {
-                _logger.LogWarning("Asignación omitida: pedido {OrderId} sin dirección.", orderId);
-                return;
+                await AssignOrderUnderBranchLockAsync(orderId, initialOrder.BranchId);
             }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        public async Task AssignPendingForBranchAsync(int branchId)
+        {
+            var gate = BranchLocks.GetOrAdd(branchId, _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync();
+            try
+            {
+                var orderIds = await _deliveryRepository.GetUnassignedDeliveryOrderIdsAsync(branchId);
+                foreach (var orderId in orderIds)
+                    await AssignOrderUnderBranchLockAsync(orderId, branchId);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        private async Task AssignOrderUnderBranchLockAsync(int orderId, int branchId)
+        {
+            // Releer dentro del bloqueo evita asignar dos veces si pago y confirmación
+            // intentan procesar el mismo pedido casi al mismo tiempo.
+            var order = await _orderRepository.GetDeliveryInfoAsync(orderId);
+            if (order == null
+                || order.OrderType != OrderType.Delivery
+                || order.BranchId != branchId
+                || order.AddressId is null)
+                return;
 
             if (await _deliveryRepository.OrderHasDeliveryAsync(orderId))
-            {
-                _logger.LogInformation("Pedido {OrderId} ya tiene repartidor asignado.", orderId);
                 return;
-            }
 
-            var candidates = await _deliveryRepository.GetAvailableDeliveryPersonsWithLoadAsync(order.BranchId);
-            if (candidates.Count == 0)
-            {
-                _logger.LogWarning(
-                    "Pedido {OrderId} (sede {BranchId}): NO hay repartidores Activos y Disponibles en esa sede. Queda sin asignar.",
-                    orderId, order.BranchId);
-                return;
-            }
+            var settings = await _settingsRepository.GetByBranchIdAsync(branchId);
+            var maxActiveDeliveries = settings?.MaxActiveDeliveriesPerCourier
+                ?? DefaultMaxActiveDeliveriesPerCourier;
+            var candidates = await _deliveryRepository.GetAvailableDeliveryPersonsWithLoadAsync(branchId);
+            var branch = await _branchRepository.GetByIdAsync(branchId);
 
-            // Nivel 1: de los que tienen menos de 4 entregas activas, el de menor carga.
+            var now = DateTime.UtcNow;
             var chosen = candidates
-                .Where(c => c.ActiveDeliveryCount < MaxActiveDeliveriesPerPerson)
-                .OrderBy(c => c.ActiveDeliveryCount)
+                .Where(c => c.ActiveDeliveryCount < maxActiveDeliveries)
+                .Select(c => new
+                {
+                    Courier = c,
+                    DistanceKm = GetFreshDistanceKm(c, branch, now)
+                })
+                // Primero toma la ubicación reciente más cercana a la sede. Si no
+                // hay GPS vigente, usa la carga y después el ID como desempate estable.
+                .OrderByDescending(x => x.DistanceKm.HasValue)
+                .ThenBy(x => x.DistanceKm ?? double.MaxValue)
+                .ThenBy(x => x.Courier.ActiveDeliveryCount)
+                .ThenBy(x => x.Courier.EmployeeId)
+                .Select(x => x.Courier)
                 .FirstOrDefault();
 
-            // Nivel 2: si nadie cumple la regla, se asigna igual al de menor carga.
-            chosen ??= candidates.OrderBy(c => c.ActiveDeliveryCount).First();
+            if (chosen == null)
+            {
+                _logger.LogInformation(
+                    "Pedido {OrderId} queda en cola: no hay repartidor disponible con menos de {MaxActive} domicilios activos en la sede {BranchId}.",
+                    orderId,
+                    maxActiveDeliveries,
+                    branchId);
+                return;
+            }
 
             var delivery = new Delivery
             {
@@ -79,45 +136,62 @@ namespace SaborExpress.Modules.Deliveries.Services
                 AddressId = order.AddressId.Value,
                 DeliveryPersonId = chosen.EmployeeId,
                 Status = DeliveryStatus.Assigned,
-                AssignedAt = DateTime.UtcNow
+                AssignedAt = now
             };
 
             await _deliveryRepository.AddAsync(delivery);
             await _deliveryRepository.SaveChangesAsync();
 
-            _logger.LogInformation("Pedido {OrderId} asignado al repartidor (employee) {EmployeeId}.",
-                orderId, chosen.EmployeeId);
+            _logger.LogInformation(
+                "Pedido {OrderId} asignado al repartidor {EmployeeId}, que tenía {ActiveCount} domicilios activos.",
+                orderId,
+                chosen.EmployeeId,
+                chosen.ActiveDeliveryCount);
 
             try
             {
-                var deliveryPersonUserId = await _authRepository.GetUserIdByEmployeeIdAsync(chosen.EmployeeId);
-                if (deliveryPersonUserId == null)
+                var courierUserId = await _authRepository.GetUserIdByEmployeeIdAsync(chosen.EmployeeId);
+                if (courierUserId == null)
                 {
-                    _logger.LogWarning("El empleado {EmployeeId} no tiene UserId; no se pudo notificar.", chosen.EmployeeId);
+                    _logger.LogWarning(
+                        "El empleado {EmployeeId} no tiene UserId; no se pudo notificar la entrega.",
+                        chosen.EmployeeId);
                     return;
                 }
 
                 await _notificationService.CreateAsync(
-                    deliveryPersonUserId.Value,
+                    courierUserId.Value,
                     "Nuevo domicilio asignado",
-                    $"Se te asignó el pedido #{orderId} para entrega.",
+                    "Se te asignó un pedido para entrega.",
                     SaborExpress.Modules.Notifications.Enum.NotificationType.DeliveryAssigned,
                     relatedEntityType: "Order",
                     relatedEntityId: orderId);
             }
             catch (Exception ex)
             {
-                // La entrega ya quedó guardada; un fallo al notificar no debe romperla.
+                // La entrega ya quedó guardada; un fallo al notificar no la revierte.
                 _logger.LogError(ex, "No se pudo notificar al repartidor del pedido {OrderId}", orderId);
             }
         }
-                // Asigna los pedidos Delivery confirmados que quedaron sin repartidor.
-        // Se llama cuando un repartidor se marca disponible.
-        public async Task AssignPendingForBranchAsync(int branchId)
+
+        private static double? GetFreshDistanceKm(
+            DeliveryPersonLoad courier,
+            Modules.Branches.Models.Branch? branch,
+            DateTime now)
         {
-            var orderIds = await _deliveryRepository.GetUnassignedDeliveryOrderIdsAsync(branchId);
-            foreach (var orderId in orderIds)
-                await AssignAutomaticallyAsync(orderId); // cada asignación guarda, así la carga se actualiza
+            if (branch == null
+                || branch.Latitude == 0 && branch.Longitude == 0
+                || courier.CurrentLatitude is null
+                || courier.CurrentLongitude is null
+                || courier.LocationUpdatedAt is null
+                || now - courier.LocationUpdatedAt.Value > FreshLocationWindow)
+                return null;
+
+            return GeoDistance.Km(
+                (double)branch.Latitude,
+                (double)branch.Longitude,
+                (double)courier.CurrentLatitude.Value,
+                (double)courier.CurrentLongitude.Value);
         }
     }
 }

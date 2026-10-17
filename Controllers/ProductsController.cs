@@ -24,16 +24,22 @@ namespace SaborExpress.Controllers
         // branchId opcional: si se pasa, filtra productos de esa sede + los globales
         [AllowAnonymous]
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] int? branchId = null)
+        public async Task<IActionResult> GetAll(
+            [FromQuery] int? branchId = null,
+            [FromQuery] bool includeInactive = false)
         {
-            var products = await _service.GetAllAsync(branchId);
+            var products = await _service.GetAllAsync(
+                branchId,
+                includeInactive && CanManageCatalog());
             return Ok(products);
         }
 
         [HttpGet("{id}")]
-        public async Task<IActionResult> GetById(int id)
+        public async Task<IActionResult> GetById(int id, [FromQuery] bool includeInactive = false)
         {
-            var product = await _service.GetByIdAsync(id);
+            var product = await _service.GetByIdAsync(
+                id,
+                includeInactive && CanManageCatalog());
             if (product is null) return NotFound();
             return Ok(product);
         }
@@ -65,11 +71,18 @@ namespace SaborExpress.Controllers
         // 👇 También pública, por si la carta llega a filtrar por categoría
         [AllowAnonymous]
         [HttpGet("category/{categoryId}")]
-        public async Task<IActionResult> GetByCategory(int categoryId)
+        public async Task<IActionResult> GetByCategory(
+            int categoryId,
+            [FromQuery] bool includeInactive = false)
         {
-            var products = await _service.GetByCategoryIdAsync(categoryId);
+            var products = await _service.GetByCategoryIdAsync(
+                categoryId,
+                includeInactive && CanManageCatalog());
             return Ok(products);
         }
+
+        private bool CanManageCatalog() =>
+            User.IsInRole(RoleNames.Gerente) || User.IsInRole(RoleNames.Administrador);
 
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador},{RoleNames.Cocinero}")]
         [HttpPatch("{id}/status")]

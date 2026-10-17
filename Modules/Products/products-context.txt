@@ -359,7 +359,7 @@ namespace SaborExpress.Modules.Products.Services
             return products.Select(p => p.ToResponseDto()).ToList();
         }
 
-        // Ahora recibe el empleado actual y valida el permiso ActivarDesactivarPlato
+        // El cocinero requiere el permiso ActivarDesactivarProducto y un turno activo.
         // (Gerente/Administrador ya entran por el rol en el controller; el Cocinero
         // necesita este permiso + turno activo para llegar hasta aquÃ­).
         public async Task UpdateStatusAsync(int id, bool status, int currentEmployeeId, bool isManagerOrAdmin)
@@ -369,7 +369,7 @@ namespace SaborExpress.Modules.Products.Services
 
             if (!isManagerOrAdmin)
             {
-                var canToggle = await _authorizationService.CanPerformActionAsync(currentEmployeeId, PermissionNames.ActivarDesactivarPlato);
+                var canToggle = await _authorizationService.CanPerformActionAsync(currentEmployeeId, PermissionNames.ActivarDesactivarProducto);
                 if (!canToggle)
                     throw new InvalidOperationException("No tienes permiso para activar/desactivar productos ahora mismo.");
             }

@@ -47,6 +47,11 @@ namespace SaborExpress.Modules.Deliveries.Mappings
 
                 // NUEVO
                 OrderNotes = delivery.Order?.Notes,
+                               SubTotal = delivery.Order?.SubTotal ?? 0,
+                Tax = delivery.Order?.Tax ?? 0,
+                TaxRate = delivery.Order?.TaxRate ?? 0,
+                TaxIncludedInPrice = delivery.Order?.TaxIncludedInPrice ?? false,
+                DeliveryFee = delivery.Order?.DeliveryFee ?? 0,
                 Total = delivery.Order?.Total ?? 0,
                 AmountPaid = delivery.AmountPaid,
                 AmountPending = Math.Max(0, (delivery.Order?.Total ?? 0) - delivery.AmountPaid),

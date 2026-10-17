@@ -1,3 +1,4 @@
+    using Microsoft.Extensions.Configuration;
     using SaborExpress.Modules.Auth.Interfaces;
     using SaborExpress.Modules.Auth.Models;
     using SaborExpress.Modules.Branches.Interfaces;
@@ -10,7 +11,10 @@
     using SaborExpress.Shared.Constants;
     using SaborExpress.Shared.Extensions;
     using SaborExpress.Modules.Roles.Interfaces;
+    using SaborExpress.Modules.UserRoles.Interfaces;
     using SaborExpress.Shared.Helpers;
+    using SaborExpress.Shared.Interfaces;
+    using SaborExpress.Modules.Configurations.Interfaces;
 
     namespace SaborExpress.Modules.EmployeeSchedules.Services
     {
@@ -22,6 +26,11 @@
             private readonly IAuthRepository _authRepository;
             private readonly EmployeeScheduleValidator _validator;
             private readonly IRoleRepository _roleRepository;
+            private readonly IUserRoleRepository _userRoleRepository;
+            private readonly IRefreshTokenRepository _refreshTokenRepository;
+              private readonly IRealtimeNotifier _realtime;
+            private readonly IBranchOperationalSettingsRepository _settingsRepository;
+            private readonly string? _initialManagerEmail;
 
             public EmployeeScheduleService(
                 IEmployeeScheduleRepository repository,
@@ -29,24 +38,36 @@
                 IBranchRepository branchRepository,
                 IAuthRepository authRepository,
                 EmployeeScheduleValidator validator,
-                IRoleRepository roleRepository)
+                IRoleRepository roleRepository,
+                IUserRoleRepository userRoleRepository,
+                IRefreshTokenRepository refreshTokenRepository,
+                IRealtimeNotifier realtime,
+                IBranchOperationalSettingsRepository settingsRepository,
+                IConfiguration configuration)
             {
+                _settingsRepository = settingsRepository;
+                _initialManagerEmail = configuration["InitialManager:Email"]?.Trim();
                 _repository = repository;
                 _employeeRepository = employeeRepository;
                 _branchRepository = branchRepository;
                 _authRepository = authRepository;
                 _validator = validator;
                 _roleRepository = roleRepository;
+                _userRoleRepository = userRoleRepository;
+                _refreshTokenRepository = refreshTokenRepository;
+                _realtime = realtime;
             }
 
             public async Task<List<EmployeeScheduleResponseDto>> GetByEmployeeAsync(int employeeId)
             {
+                await SynchronizeEmployeeScheduleHoursAsync(employeeId);
                 var schedules = await _repository.GetByEmployeeAsync(employeeId);
                 return schedules.Select(s => s.ToResponseDto()).ToList();
             }
 
             public async Task<List<EmployeeScheduleResponseDto>> GetByBranchAsync(int branchId)
             {
+                await SynchronizeBranchHoursAsync(branchId);
                 var schedules = await _repository.GetByBranchAsync(branchId);
                 return schedules.Select(s => s.ToResponseDto()).ToList();
             }
@@ -63,6 +84,7 @@ public async Task RevokeExpiredRolesAsync()
 {
     var today = DateOnly.FromDateTime(ColombiaTime.Now); // antes: DateTime.UtcNow (desfasaba el día en las noches, Colombia UTC-5)
     var employeeIds = await _repository.GetEmployeeIdsWithSchedulesAsync();
+    var rolesWereRevoked = false;
 
         foreach (var employeeId in employeeIds)
         {
@@ -89,11 +111,17 @@ public async Task RevokeExpiredRolesAsync()
                 employee.User.UserRoles.Remove(ur);
 
             await _employeeRepository.UpdateAsync(employee);
+            rolesWereRevoked = true;
+            await ForceLogoutUserAsync(employee.UserId, "role-expired");
         }
+
+        if (rolesWereRevoked)
+            await _realtime.AdminDataChangedAsync("Employees");
     }
             public async Task<List<EmployeeScheduleResponseDto>> GetByBranchTodayAsync(int branchId)
             {
                 var today = DateOnly.FromDateTime(ColombiaTime.Now);
+                await SynchronizeBranchHoursAsync(branchId);
                 var schedules = await _repository.GetByBranchAndDateAsync(branchId, today);
                 return schedules.Select(s => s.ToResponseDto()).ToList();
             }
@@ -101,7 +129,6 @@ public async Task RevokeExpiredRolesAsync()
             public async Task<EmployeeScheduleResponseDto> CreateAsync(CreateEmployeeScheduleDto dto, int currentUserId)
             {
                 _validator.ValidateCreate(dto);
-                ValidateTimeRange(dto.StartTime, dto.EndTime);
 
                 var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
                     ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
@@ -112,12 +139,23 @@ public async Task RevokeExpiredRolesAsync()
                 var branch = await _branchRepository.GetByIdAsync(dto.BranchId)
                     ?? throw new KeyNotFoundException("La sucursal no existe.");
 
-                EnsureBranchAccess(currentUser, dto.BranchId);
-                await EnsureEmployeeHasRoleAsync(employee, dto.RoleId);
+                    EnsureBranchAccess(currentUser, dto.BranchId);
+                var branchHours = await GetBranchHoursAsync(dto.BranchId);
+                dto.StartTime = branchHours.open;
+                dto.EndTime = branchHours.close;
+                ValidateTimeRange(dto.StartTime, dto.EndTime);
+                var requestedRole = await _roleRepository.GetByIdAsync(dto.RoleId)
+                    ?? throw new KeyNotFoundException("El rol especificado no existe.");
+                await EnsureAdministratorDateIsAvailableAsync(
+                    requestedRole.Name, dto.BranchId, dto.ShiftDate, dto.EmployeeId, null);
+
+                var alreadyHadRole = employee.User?.UserRoles.Any(ur => ur.RoleId == dto.RoleId) == true;
+                var branchChanged = employee.BranchId == null;
+                await EnsureEmployeeHasRoleAsync(employee, dto.RoleId, currentUser, dto.BranchId);
 
                 // Igual que el rol: si el empleado no tiene sede todavía, nace
                 // con la del primer turno que se le asigna.
-                if (employee.BranchId == null)
+                if (branchChanged)
                 {
                     employee.BranchId = dto.BranchId;
                     await _employeeRepository.UpdateAsync(employee);
@@ -129,11 +167,17 @@ public async Task RevokeExpiredRolesAsync()
 
                 var entity = dto.ToModel();
                 var created = await _repository.AddAsync(entity);
+                if (branchChanged)
+                    await ForceLogoutEmployeeAsync(dto.EmployeeId, "branch-changed");
+                else if (!alreadyHadRole)
+                    await ForceLogoutEmployeeAsync(dto.EmployeeId, "role-changed");
+                else
+                    await ForceRelogInIfTodayAsync(dto.EmployeeId, currentUserId, dto.ShiftDate);
 
                 var full = await _repository.GetByIdAsync(created.Id)
                     ?? throw new InvalidOperationException("Error al crear el turno.");
 
-                return full.ToResponseDto();
+                return ToResponseDto(full, currentUser);
             }
 
             public async Task<int> TransferEmployeeToBranchAsync(int employeeId, int newBranchId, int currentUserId)
@@ -148,16 +192,20 @@ public async Task RevokeExpiredRolesAsync()
 
                 var employee = await _employeeRepository.GetByIdAsync(employeeId)
                     ?? throw new KeyNotFoundException("El empleado no existe.");
+                var branchChanged = employee.BranchId != newBranchId;
 
                 var newBranch = await _branchRepository.GetByIdAsync(newBranchId)
                     ?? throw new KeyNotFoundException("La sucursal destino no existe.");
 
-                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var today = DateOnly.FromDateTime(ColombiaTime.Now);
                 var allSchedules = await _repository.GetByEmployeeAsync(employeeId);
 
                 // Solo se trasladan turnos futuros (hoy inclusive). Los pasados se quedan
                 // donde realmente ocurrieron, para no falsear el historial.
                 var toTransfer = allSchedules.Where(s => s.ShiftDate >= today).ToList();
+
+                foreach (var schedule in toTransfer)
+                    EnsureCanModifySchedule(currentUser, schedule);
 
                 foreach (var schedule in toTransfer)
                 {
@@ -168,13 +216,14 @@ public async Task RevokeExpiredRolesAsync()
                 employee.BranchId = newBranchId;
                 await _employeeRepository.UpdateAsync(employee);
 
+                if (branchChanged)
+                    await ForceLogoutEmployeeAsync(employeeId, "branch-changed");
                 return toTransfer.Count;
             }
 
         public async Task<EmployeeScheduleResponseDto> UpdateAsync(int id, UpdateEmployeeScheduleDto dto, int currentUserId)
         {
             _validator.ValidateUpdate(dto);
-            ValidateTimeRange(dto.StartTime, dto.EndTime);
 
             var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
                 ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
@@ -183,10 +232,26 @@ public async Task RevokeExpiredRolesAsync()
                 ?? throw new KeyNotFoundException("El turno no existe.");
 
             EnsureBranchAccess(currentUser, schedule.BranchId);
+            var requestedRole = await _roleRepository.GetByIdAsync(dto.RoleId)
+                ?? throw new KeyNotFoundException("El rol especificado no existe.");
+            EnsureCanModifySchedule(currentUser, schedule);
 
             var employee = await _employeeRepository.GetByIdAsync(schedule.EmployeeId)
                 ?? throw new KeyNotFoundException("El empleado no existe.");
-            await EnsureEmployeeHasRoleAsync(employee, dto.RoleId);
+            var roleChanged = schedule.RoleId != dto.RoleId;
+            var effectiveBranchId = dto.BranchId != 0 ? dto.BranchId : schedule.BranchId;
+            if (!currentUser.HasRole(RoleNames.Gerente) &&
+                roleChanged && IsManagementRoleName(schedule.Role?.Name))
+                throw new InvalidOperationException("No tienes permiso para gestionar turnos.");
+
+            await EnsureAdministratorDateIsAvailableAsync(
+                requestedRole.Name, effectiveBranchId, dto.ShiftDate, schedule.EmployeeId, id);
+            await EnsureEmployeeHasRoleAsync(employee, dto.RoleId, currentUser, effectiveBranchId);
+
+            var branchHours = await GetBranchHoursAsync(effectiveBranchId);
+            dto.StartTime = branchHours.open;
+            dto.EndTime = branchHours.close;
+            ValidateTimeRange(dto.StartTime, dto.EndTime);
 
             var hasOverlap = await HasOverlapAsync(schedule.EmployeeId, dto.ShiftDate, dto.StartTime, dto.EndTime, excludeScheduleId: id);
             if (hasOverlap)
@@ -199,7 +264,16 @@ public async Task RevokeExpiredRolesAsync()
             // a ningún turno real, simplemente por haber editado el turno que
             // originalmente se lo otorgó.
             var previousRoleId = schedule.RoleId;
-            var roleChanged = previousRoleId != dto.RoleId;
+            var previousDate = schedule.ShiftDate;
+            var branchChanged = dto.BranchId != 0 && dto.BranchId != schedule.BranchId;
+            if (branchChanged)
+            {
+                EnsureBranchAccess(currentUser, dto.BranchId);
+                var newBranch = await _branchRepository.GetByIdAsync(dto.BranchId)
+                    ?? throw new KeyNotFoundException("La sucursal no existe.");
+                schedule.BranchId = dto.BranchId;
+                schedule.Branch = newBranch;
+            }
 
             schedule.RoleId = dto.RoleId;
             schedule.ShiftDate = dto.ShiftDate;
@@ -212,8 +286,7 @@ public async Task RevokeExpiredRolesAsync()
             // La reasignamos explícitamente para que la respuesta muestre el rol nuevo.
             if (roleChanged)
             {
-                schedule.Role = await _roleRepository.GetByIdAsync(dto.RoleId)
-                    ?? throw new KeyNotFoundException("El rol especificado no existe.");
+                schedule.Role = requestedRole;
             }
 
             await _repository.UpdateAsync(schedule);
@@ -224,7 +297,14 @@ public async Task RevokeExpiredRolesAsync()
                 await RemoveRoleIfNoMoreSchedulesAsync(schedule.EmployeeId, previousRoleId, remainingSchedules);
             }
 
-            return schedule.ToResponseDto();
+            if (roleChanged)
+                await ForceLogoutEmployeeAsync(schedule.EmployeeId, "role-changed");
+            else if (branchChanged)
+                await ForceLogoutEmployeeAsync(schedule.EmployeeId, "branch-changed");
+            else if (previousDate != schedule.ShiftDate)
+                await ForceRelogInIfTodayAsync(schedule.EmployeeId, currentUserId, previousDate, schedule.ShiftDate);
+
+            return ToResponseDto(schedule, currentUser);
         }
             public async Task<EmployeeScheduleResponseDto> UpdateStatusAsync(int id, UpdateScheduleStatusDto dto, int currentUserId)
             {
@@ -235,10 +315,11 @@ public async Task RevokeExpiredRolesAsync()
                     ?? throw new KeyNotFoundException("El turno no existe.");
 
                 EnsureBranchAccess(currentUser, schedule.BranchId);
+                EnsureCanModifySchedule(currentUser, schedule);
 
                 schedule.Status = dto.Status;
                 await _repository.UpdateAsync(schedule);
-                return schedule.ToResponseDto();
+                return ToResponseDto(schedule, currentUser);
             }
 
             public async Task DeleteAsync(int id, int currentUserId)
@@ -250,9 +331,14 @@ public async Task RevokeExpiredRolesAsync()
                     ?? throw new KeyNotFoundException("El turno no existe.");
 
                 EnsureBranchAccess(currentUser, schedule.BranchId);
+                EnsureCanModifySchedule(currentUser, schedule);
+                if (!currentUser.HasRole(RoleNames.Gerente) &&
+                    IsManagementRoleName(schedule.Role?.Name))
+                    throw new InvalidOperationException("No tienes permiso para gestionar turnos.");
 
                 var employeeId = schedule.EmployeeId;
                 var roleId = schedule.RoleId;
+var shiftDate = schedule.ShiftDate;
 
                 await _repository.DeleteAsync(schedule);
 
@@ -262,10 +348,11 @@ public async Task RevokeExpiredRolesAsync()
                 // si este era el ÚLTIMO turno del empleado con este rol, el rol
                 // se retira junto con él. Si le quedan otros turnos con ese
                 // mismo rol, no se lo quitamos.
-                await RemoveRoleIfNoMoreSchedulesAsync(employeeId, roleId, remainingSchedules);
+                var roleRemoved = await RemoveRoleIfNoMoreSchedulesAsync(employeeId, roleId, remainingSchedules);
 
                 // Si ya no le queda NINGÚN turno (de ningún rol), tampoco tiene
                 // sentido que conserve la sede — se la quitamos también.
+                var branchRemoved = false;
                 if (remainingSchedules.Count == 0)
                 {
                     var employee = await _employeeRepository.GetByIdAsync(employeeId);
@@ -273,30 +360,111 @@ public async Task RevokeExpiredRolesAsync()
                     {
                         employee.BranchId = null;
                         await _employeeRepository.UpdateAsync(employee);
+                        branchRemoved = true;
                     }
                 }
+
+                if (roleRemoved || branchRemoved)
+                    await ForceLogoutEmployeeAsync(
+                        employeeId,
+                        branchRemoved ? "branch-changed" : "role-changed");
+                else
+                    await ForceRelogInIfTodayAsync(employeeId, currentUserId, shiftDate);
             }
 
-            private async Task RemoveRoleIfNoMoreSchedulesAsync(
+            private async Task<bool> RemoveRoleIfNoMoreSchedulesAsync(
                 int employeeId, int roleId, List<Models.EmployeeSchedule> remainingSchedules)
             {
                 var stillHasThisRole = remainingSchedules.Any(s => s.RoleId == roleId);
                 if (stillHasThisRole)
-                    return;
+                    return false;
 
                 var employee = await _employeeRepository.GetByIdAsync(employeeId);
                 if (employee?.User == null)
-                    return;
+                    return false;
 
                 var userRole = employee.User.UserRoles.FirstOrDefault(ur => ur.RoleId == roleId);
-                if (userRole != null)
-                {
-                    employee.User.UserRoles.Remove(userRole);
-                    await _employeeRepository.UpdateAsync(employee);
-                }
+                if (userRole == null) return false;
+
+                employee.User.UserRoles.Remove(userRole);
+                await _employeeRepository.UpdateAsync(employee);
+                return true;
+            }
+
+            // Si el cambio toca el turno de HOY, el empleado debe volver a iniciar
+            // sesión: se revocan sus refresh-tokens y se le avisa en tiempo real.
+            // Quien hace el cambio no se saca a sí mismo.
+            private async Task ForceRelogInIfTodayAsync(int employeeId, int actorUserId, params DateOnly[] dates)
+            {
+                var today = DateOnly.FromDateTime(ColombiaTime.Now);
+                if (!dates.Contains(today)) return;
+
+                var employee = await _employeeRepository.GetByIdAsync(employeeId);
+                if (employee == null || employee.UserId == actorUserId) return;
+
+                await ForceLogoutUserAsync(employee.UserId, "shift-changed");
+            }
+
+            private async Task ForceLogoutEmployeeAsync(
+                int employeeId, string reason)
+            {
+                var employee = await _employeeRepository.GetByIdAsync(employeeId);
+                if (employee == null) return;
+
+                await ForceLogoutUserAsync(employee.UserId, reason);
+            }
+
+            private async Task ForceLogoutUserAsync(int userId, string reason)
+            {
+                await _refreshTokenRepository.RevokeAllForUserAsync(userId);
+                await _authRepository.ClearSessionTokensAsync(new[] { userId });
+                await _realtime.ForceLogoutAsync(userId, reason);
             }
 
             // --- Helpers privados ---
+            
+            // La configuración de la sede define las horas exactas de cada turno.
+            private async Task SynchronizeBranchHoursAsync(int branchId)
+            {
+                var settings = await _settingsRepository.GetByBranchIdAsync(branchId);
+                if (settings is null) return;
+
+                var changed = await _repository.ApplyBranchHoursToUpcomingAsync(
+                    branchId,
+                    DateOnly.FromDateTime(ColombiaTime.Now),
+                    settings.OpeningTime,
+                    settings.ClosingTime);
+
+                if (changed)
+                {
+                    await _realtime.AdminDataChangedAsync("EmployeeSchedules");
+                    await _realtime.AdminDataChangedAsync("Employees");
+                }
+            }
+
+            private async Task SynchronizeEmployeeScheduleHoursAsync(int employeeId)
+            {
+                var today = DateOnly.FromDateTime(ColombiaTime.Now);
+                var schedules = await _repository.GetByEmployeeAsync(employeeId);
+                var branchIds = schedules
+                    .Where(schedule => schedule.ShiftDate >= today)
+                    .Select(schedule => schedule.BranchId)
+                    .Distinct();
+
+                foreach (var branchId in branchIds)
+                    await SynchronizeBranchHoursAsync(branchId);
+            }
+
+            private async Task<(TimeOnly open, TimeOnly close)> GetBranchHoursAsync(int branchId)
+            {
+                var settings = await _settingsRepository.GetByBranchIdAsync(branchId);
+                if (settings is null)
+                    throw new InvalidOperationException(
+                        "La sede no tiene hora de apertura y cierre configuradas. " +
+                        "Configúralas en Configuración > Ajustes del Restaurante antes de crear turnos.");
+
+                return (settings.OpeningTime, settings.ClosingTime);
+            }
 
             private static void ValidateTimeRange(TimeOnly start, TimeOnly end)
             {
@@ -326,17 +494,39 @@ public async Task RevokeExpiredRolesAsync()
                     throw new InvalidOperationException("Solo puedes gestionar turnos de tu misma sede.");
             }
 
-            private async Task EnsureEmployeeHasRoleAsync(Employee employee, int roleId)
+            private async Task EnsureAdministratorDateIsAvailableAsync(
+                string roleName, int branchId, DateOnly date, int employeeId, int? excludeScheduleId)
             {
-                var tieneEseRol = employee.User?.UserRoles.Any(ur => ur.RoleId == roleId) ?? false;
-                if (tieneEseRol)
-                    return;
+                if (roleName != RoleNames.Administrador) return;
 
+                if (await _repository.HasAdministratorScheduleConflictAsync(branchId, date, excludeScheduleId))
+                    throw new InvalidOperationException(
+                        "Esta sede ya tiene un Administrador programado para esa fecha.");
+
+                var employee = await _employeeRepository.GetByIdAsync(employeeId);
+                if (await _repository.HasPermanentAdministratorConflictAsync(branchId, employee?.UserId))
+                    throw new InvalidOperationException(
+                        "Esta sede ya tiene un Administrador permanente asignado.");
+            }
+
+            private async Task EnsureEmployeeHasRoleAsync(
+                Employee employee,
+                int roleId,
+                User currentUser,
+                int branchId)
+            {
                 if (employee.User == null)
                     throw new InvalidOperationException("El empleado no tiene una cuenta de usuario asociada.");
 
                 var role = await _roleRepository.GetByIdAsync(roleId)
                     ?? throw new ArgumentException("El rol especificado no existe.");
+
+                if (!currentUser.HasRole(RoleNames.Gerente) && IsManagementRoleName(role.Name))
+                    throw new InvalidOperationException("No tienes permiso para asignar roles.");
+
+                var tieneEseRol = employee.User.UserRoles.Any(ur => ur.RoleId == roleId);
+                if (tieneEseRol)
+                    return;
 
                 var tieneCv = employee.CvFile != null && employee.CvFile.Length > 0;
                 if (role.RequiresCv && !tieneCv)
@@ -354,16 +544,59 @@ public async Task RevokeExpiredRolesAsync()
                 await _employeeRepository.UpdateAsync(employee);
             }
 
+            private static bool IsManagementRoleName(string? roleName) =>
+                roleName == RoleNames.Gerente || roleName == RoleNames.Administrador;
+
+            private EmployeeScheduleResponseDto ToResponseDto(
+                Models.EmployeeSchedule schedule,
+                User currentUser)
+            {
+                var response = schedule.ToResponseDto();
+                response.IsOwnLockedShift = IsOwnShiftLockedForManager(currentUser, schedule);
+                return response;
+            }
+
+            private void EnsureCanModifySchedule(
+                User currentUser,
+                Models.EmployeeSchedule schedule)
+            {
+                if (IsOwnShiftLockedForManager(currentUser, schedule))
+                {
+                    throw new InvalidOperationException(
+                        "No puedes editar ni eliminar tus propios turnos como Gerente o Administrador.");
+                }
+            }
+
+            private bool IsOwnShiftLockedForManager(
+                User currentUser,
+                Models.EmployeeSchedule schedule)
+            {
+                if (IsInitialManager(currentUser) || schedule.Employee?.UserId != currentUser.Id)
+                    return false;
+
+                return currentUser.HasRole(RoleNames.Gerente) ||
+                    currentUser.HasRole(RoleNames.Administrador);
+            }
+
+            private bool IsInitialManager(User user) =>
+                !string.IsNullOrWhiteSpace(_initialManagerEmail) &&
+                string.Equals(
+                    user.Email?.Trim(),
+                    _initialManagerEmail,
+                    StringComparison.OrdinalIgnoreCase);
+
             public async Task<CurrentShiftResponseDto> GetCurrentShiftAsync(int employeeId)
             {
                 var now = ColombiaTime.Now;
                 var today = DateOnly.FromDateTime(now);
                 var nowTime = TimeOnly.FromDateTime(now);
 
+                await SynchronizeEmployeeScheduleHoursAsync(employeeId);
                 var schedulesToday = await _repository.GetByEmployeeAndDateAsync(employeeId, today);
 
                 var activeSchedule = schedulesToday
-                    .FirstOrDefault(s => nowTime >= s.StartTime && nowTime <= s.EndTime);
+                    .FirstOrDefault(s => s.Status == SaborExpress.Modules.EmployeeSchedules.Enum.ScheduleStatus.Programado
+                        && nowTime >= s.StartTime && nowTime < s.EndTime);
 
                 if (activeSchedule == null)
                 {
@@ -394,8 +627,9 @@ public async Task RevokeExpiredRolesAsync()
 
                 EnsureBranchAccess(currentUser, targetEmployee.BranchId);
 
+                await SynchronizeEmployeeScheduleHoursAsync(employeeId);
                 var schedules = await _repository.GetByEmployeeAsync(employeeId);
-                return schedules.Select(s => s.ToResponseDto()).ToList();
+                return schedules.Select(s => ToResponseDto(s, currentUser)).ToList();
             }
 
             public async Task<List<EmployeeScheduleResponseDto>> GetByBranchAsync(int branchId, int currentUserId)
@@ -405,8 +639,9 @@ public async Task RevokeExpiredRolesAsync()
 
                 EnsureBranchAccess(currentUser, branchId);
 
+                await SynchronizeBranchHoursAsync(branchId);
                 var schedules = await _repository.GetByBranchAsync(branchId);
-                return schedules.Select(s => s.ToResponseDto()).ToList();
+                return schedules.Select(s => ToResponseDto(s, currentUser)).ToList();
             }
 
             public async Task<List<EmployeeScheduleResponseDto>> GetByBranchTodayAsync(int branchId, int currentUserId)
@@ -416,9 +651,10 @@ public async Task RevokeExpiredRolesAsync()
 
                 EnsureBranchAccess(currentUser, branchId);
 
-                var today = DateOnly.FromDateTime(DateTime.Now);
+                var today = DateOnly.FromDateTime(ColombiaTime.Now);
+                await SynchronizeBranchHoursAsync(branchId);
                 var schedules = await _repository.GetByBranchAndDateAsync(branchId, today);
-                return schedules.Select(s => s.ToResponseDto()).ToList();
+                return schedules.Select(s => ToResponseDto(s, currentUser)).ToList();
             }
         }
     }

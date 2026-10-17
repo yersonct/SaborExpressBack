@@ -93,9 +93,9 @@ namespace SaborExpress.Configuration
                     var authRepository = context.HttpContext.RequestServices
                         .GetRequiredService<IAuthRepository>();
 
-                    var user = await authRepository.GetByIdWithRelationsAsync(userId);
+                    var (exists, dbToken) = await authRepository.GetSessionInfoAsync(userId);
 
-                    if (user == null)
+                    if (!exists)
                     {
                         context.Fail("Usuario no encontrado.");
                         return;
@@ -113,9 +113,25 @@ namespace SaborExpress.Configuration
                     var config = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
                     var singleSession = config.GetValue("Auth:SingleSession", true);
 
-                    if (singleSession && (string.IsNullOrEmpty(user.Token) || user.Token != rawToken))
+                    if (singleSession && (string.IsNullOrEmpty(dbToken) || dbToken != rawToken))
                     {
                         context.Fail("Tu sesión ya no es válida: se inició sesión en otro dispositivo.");
+                        return;
+                    }
+
+                    // Validación en CADA petición, incluso si el JWT se emitió ayer.
+                    // El Gerente es independiente de los turnos de Administrador.
+                    if (context.Principal?.IsInRole(SaborExpress.Shared.Constants.RoleNames.Administrador) == true &&
+                        context.Principal.IsInRole(SaborExpress.Shared.Constants.RoleNames.Gerente) == false)
+                    {
+                        var schedules = context.HttpContext.RequestServices.GetRequiredService<
+                            SaborExpress.Modules.EmployeeSchedules.Interfaces.IEmployeeScheduleRepository>();
+                        if (!await schedules.CanActAsAdministratorAsync(
+                            userId, SaborExpress.Shared.Helpers.ColombiaTime.Now))
+                        {
+                            context.Fail("El turno de Administrador no está vigente.");
+                            return;
+                        }
                     }
                 }
             };

@@ -12,6 +12,7 @@ namespace SaborExpress.Modules.Notifications.Enum
         PaymentConfirmed,
         Manual,
         System,
-        ReviewReceived
+        ReviewReceived,
+        TableAvailable
     }
 }

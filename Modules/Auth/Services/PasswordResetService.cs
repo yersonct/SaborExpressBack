@@ -6,6 +6,7 @@ using SaborExpress.Modules.Auth.Validators;
 using SaborExpress.Shared.Extensions;
 using SaborExpress.Shared.Interfaces;
 using SaborExpress.Modules.Auth.Exceptions;
+using SaborExpress.Shared.Constants;
 
 namespace SaborExpress.Modules.Auth.Services
 {
@@ -47,7 +48,7 @@ namespace SaborExpress.Modules.Auth.Services
 
             var user = await _authRepository.GetByIdentifierAsync(dto.Identifier);
 
-            if (user == null)
+            if (user == null || !CanRecoverWebAccount(user))
                 return;
 
             var windowStart = DateTime.UtcNow.AddMinutes(-PasswordResetRateLimiter.WindowMinutes);
@@ -88,7 +89,7 @@ namespace SaborExpress.Modules.Auth.Services
             _verifyResetCodeValidator.Validate(dto);
 
             var user = await _authRepository.GetByIdentifierAsync(dto.Identifier);
-            if (user == null)
+            if (user == null || !CanRecoverWebAccount(user))
                 throw new UnauthorizedAccessException("Codigo invalido o expirado.");
 
             var resetCode = await ValidateAndConsumeCodeAsync(
@@ -117,7 +118,9 @@ namespace SaborExpress.Modules.Auth.Services
             if (resetCode == null)
                 throw new UnauthorizedAccessException("El codigo de recuperacion es invalido o ha expirado.");
 
-            var user = resetCode.User;
+            var user = await _authRepository.GetByIdWithRelationsAsync(resetCode.UserId);
+            if (user == null || !CanRecoverWebAccount(user))
+                throw new UnauthorizedAccessException("El codigo de recuperacion es invalido o ha expirado.");
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
             user.Token = null;
@@ -127,5 +130,10 @@ namespace SaborExpress.Modules.Auth.Services
             resetCode.IsCompleted = true;
             await _resetRepository.UpdateAsync(resetCode);
         }
+
+        private static bool CanRecoverWebAccount(User user) =>
+            user.UserRoles.Any(userRole =>
+                string.Equals(userRole.Role?.Name, RoleNames.Gerente, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(userRole.Role?.Name, RoleNames.Administrador, StringComparison.OrdinalIgnoreCase));
     }
-}   
+}

@@ -20,8 +20,7 @@ namespace SaborExpress.Data.SeedData
             [PermissionNames.EliminarEmpleado] = (PermissionModule.Employees, "Dar de baja a un empleado"),
             [PermissionNames.AprobarRegistros] = (PermissionModule.Employees, "Aprobar registros pendientes"),
             [PermissionNames.VerReportes] = (PermissionModule.Reports, "Ver reportes del sistema"),
-            [PermissionNames.GestionarMenu] = (PermissionModule.DailyMenu, "Planear el menú del día"),
-            [PermissionNames.ActivarDesactivarPlato] = (PermissionModule.DailyMenu, "Activar o desactivar un plato a media jornada"),
+            [PermissionNames.ActivarDesactivarProducto] = (PermissionModule.Products, "Activar o desactivar productos"),
 
             [PermissionNames.CrearPedido] = (PermissionModule.Orders, "Crear un pedido nuevo"),
             [PermissionNames.EditarPedidoPropio] = (PermissionModule.Orders, "Editar líneas de un pedido propio"),
@@ -44,8 +43,8 @@ namespace SaborExpress.Data.SeedData
             {
                 PermissionNames.CrearSede, PermissionNames.EditarSede, PermissionNames.EliminarSede,
                 PermissionNames.GestionarEmpleados, PermissionNames.CrearEmpleado, PermissionNames.EliminarEmpleado,
-                PermissionNames.AprobarRegistros, PermissionNames.VerReportes, PermissionNames.GestionarMenu,
-                PermissionNames.ActivarDesactivarPlato,
+                PermissionNames.AprobarRegistros, PermissionNames.VerReportes,
+                PermissionNames.ActivarDesactivarProducto,
                 PermissionNames.EditarCualquierPedido, PermissionNames.CancelarPedido, PermissionNames.ActualizarEstadoPedido,
                 PermissionNames.CambiarEstadoMesa, PermissionNames.RegistrarPago, PermissionNames.ReembolsarPago,
             },
@@ -53,7 +52,7 @@ namespace SaborExpress.Data.SeedData
             {
                 PermissionNames.EditarSede, PermissionNames.GestionarEmpleados, PermissionNames.CrearEmpleado,
                 PermissionNames.EliminarEmpleado, PermissionNames.AprobarRegistros, PermissionNames.VerReportes,
-                PermissionNames.GestionarMenu, PermissionNames.ActivarDesactivarPlato,
+                PermissionNames.ActivarDesactivarProducto,
                 PermissionNames.EditarCualquierPedido, PermissionNames.CancelarPedido, PermissionNames.ActualizarEstadoPedido,
                 PermissionNames.CambiarEstadoMesa, PermissionNames.RegistrarPago, PermissionNames.ReembolsarPago
             },
@@ -70,7 +69,7 @@ namespace SaborExpress.Data.SeedData
             },
             [RoleNames.Cocinero] = new[]
             {
-                PermissionNames.ActualizarEstadoPedido, PermissionNames.ActivarDesactivarPlato
+                PermissionNames.ActualizarEstadoPedido, PermissionNames.ActivarDesactivarProducto
             },
             [RoleNames.AuxiliarCocina] = new string[]
             {

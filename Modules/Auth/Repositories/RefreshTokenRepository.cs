@@ -39,14 +39,9 @@ namespace SaborExpress.Modules.Auth.Repositories
 
         public async Task RevokeAllForUserAsync(int userId)
         {
-            var tokens = await _context.RefreshTokens
+            await _context.RefreshTokens
                 .Where(rt => rt.UserId == userId && !rt.IsRevoked)
-                .ToListAsync();
-
-            foreach (var token in tokens)
-                token.IsRevoked = true;
-
-            await _context.SaveChangesAsync();
+                .ExecuteUpdateAsync(s => s.SetProperty(rt => rt.IsRevoked, true));
         }
     }
 }

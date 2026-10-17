@@ -8,11 +8,11 @@ using SaborExpress.Modules.Payments.Interfaces;
 using SaborExpress.Modules.Payments.Mappings;
 using SaborExpress.Modules.Payments.Models;
 using SaborExpress.Modules.Payments.Validators;
-using SaborExpress.Modules.Tables.Enum;
 using SaborExpress.Modules.Tables.Interfaces;
 using SaborExpress.Shared.Constants;
 using SaborExpress.Shared.Extensions;
 using SaborExpress.Shared.Interfaces;
+using SaborExpress.Shared.Helpers;
 using SaborExpress.Modules.Deliveries.Interfaces; 
 using SaborExpress.Modules.Notifications.Interfaces;
 using SaborExpress.Modules.Notifications.Enum;
@@ -33,10 +33,11 @@ namespace SaborExpress.Modules.Payments.Services
         private readonly IDeliveryAssignmentService _deliveryAssignmentService; 
         private readonly IWompiClient _wompiClient;
         private readonly IOrderRepository _orderRepository;
-        private readonly ITableRepository _tableRepository;   
+        private readonly ITableAvailabilityService _tableAvailabilityService;
         private readonly IUserNotificationService _notificationService;
         private readonly ICustomerRepository _customerRepository;
         private readonly IEmployeeRepository _employeeRepository;
+        private readonly IRealtimeNotifier _realtime;
 
         public PaymentService(
             IPaymentRepository paymentRepository,
@@ -45,13 +46,15 @@ namespace SaborExpress.Modules.Payments.Services
             IAuthorizationService authorizationService,
             IWompiClient wompiClient,
             IOrderRepository orderRepository,
-            ITableRepository tableRepository,
+            ITableAvailabilityService tableAvailabilityService,
             IDeliveryAssignmentService deliveryAssignmentService,
             IUserNotificationService notificationService,
             ICustomerRepository customerRepository,
             IEmployeeRepository employeeRepository,
-            ILogger<PaymentService> logger)
+            ILogger<PaymentService> logger,
+            IRealtimeNotifier realtime)
         {
+            _realtime = realtime;
             _employeeRepository = employeeRepository;
             _logger = logger;
             _paymentRepository = paymentRepository;
@@ -60,7 +63,7 @@ namespace SaborExpress.Modules.Payments.Services
             _authorizationService = authorizationService;
             _wompiClient = wompiClient;
             _orderRepository = orderRepository;
-            _tableRepository = tableRepository;
+            _tableAvailabilityService = tableAvailabilityService;
             _deliveryAssignmentService = deliveryAssignmentService;
             _notificationService = notificationService;
             _customerRepository = customerRepository;
@@ -83,12 +86,13 @@ namespace SaborExpress.Modules.Payments.Services
 
             await _paymentRepository.AddAsync(payment);
             await _paymentRepository.SaveChangesAsync();
-
-            // Nuevo: si con este pago el pedido quedó pagado del todo,
-            // liberamos su mesa automáticamente (si tenía una asociada).
-            await ReleaseTableIfFullyPaidAsync(dto.OrderId);
+            await _realtime.PaymentsChangedAsync();
+            // El pago es una de las dos confirmaciones requeridas para liberar la mesa.
+            await _tableAvailabilityService.TryReleaseAfterConfirmationAsync(dto.OrderId);
 
             await NotifyPaymentConfirmedAsync(payment);
+            await _realtime.OrdersChangedAsync();
+            await _realtime.TablesChangedAsync();
 
             var created = await _paymentRepository.GetByIdAsync(payment.Id);
             return PaymentMapper.ToResponse(created!);
@@ -108,17 +112,14 @@ namespace SaborExpress.Modules.Payments.Services
                     await _notificationService.CreateAsync(
                         cashierUserId.Value,
                         "Pago confirmado",
-                        $"Se registró un pago de ${payment.Amount:N0} para el pedido #{payment.OrderId}.",
+                        $"Se registró un pago de ${payment.Amount:N0}.",
                         NotificationType.PaymentConfirmed,
                         relatedEntityType: "Order",
                         relatedEntityId: payment.OrderId);
                 }
             }
-
-            // NUEVO: sin esto, el Mesero nunca se entera de que su mesa se
-            // cobró. La mesa SÍ se libera bien en la base de datos
-            // (ReleaseTableIfFullyPaidAsync), pero su pantalla no tenía
-            // ninguna señal para refrescarse y mostrarla libre.
+            // El aviso de mesa disponible se envía cuando también se confirma
+            // que los productos se entregaron al mesero.
             var order = await _orderRepository.GetByIdAsync(payment.OrderId);
             if (order?.EmployeeId != null && order.EmployeeId != payment.CashierId)
             {
@@ -128,7 +129,7 @@ namespace SaborExpress.Modules.Payments.Services
                     await _notificationService.CreateAsync(
                         meseroUserId.Value,
                         "Pago registrado",
-                        $"Se cobró el pedido #{payment.OrderId}.",
+                        "Se cobró un pedido.",
                         SaborExpress.Modules.Notifications.Enum.NotificationType.PaymentConfirmed,
                         relatedEntityType: "Order",
                         relatedEntityId: payment.OrderId);
@@ -162,9 +163,13 @@ namespace SaborExpress.Modules.Payments.Services
             _validator.ValidateRefund(payment, dto);
 
             payment.Status = PaymentStatus.Refunded;
+            payment.RefundReason = dto.Reason.Trim();
 
             await _paymentRepository.UpdateAsync(payment);
             await _paymentRepository.SaveChangesAsync();
+
+            await _realtime.PaymentsChangedAsync();
+            await _realtime.OrdersChangedAsync();
 
             // Nota: NO reabrimos la mesa automáticamente al reembolsar —
             // eso sería una decisión de negocio aparte (¿el cliente ya se fue
@@ -184,11 +189,13 @@ namespace SaborExpress.Modules.Payments.Services
         public async Task<CashierShiftSummaryDto> GetMyShiftSummaryAsync(int cashierId)
         {
             // "Hoy" según hora de Colombia (UTC-5), convertido a UTC para comparar con PaidAt
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(
-                OperatingSystem.IsWindows() ? "SA Pacific Standard Time" : "America/Bogota");
-            var nowCo = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-            var today = TimeZoneInfo.ConvertTimeToUtc(nowCo.Date, tz);
-            var payments = await _paymentRepository.GetByCashierSinceAsync(cashierId, today);
+            var todayColombia = ColombiaTime.Now.Date;
+            var fromUtc = ColombiaTime.ToUtc(todayColombia);
+            var toUtc = ColombiaTime.ToUtc(todayColombia.AddDays(1));
+            var payments = await _paymentRepository.GetByCashierInRangeAsync(
+                cashierId,
+                fromUtc,
+                toUtc);
 
             // Solo cuentan los pagos completados — un reembolso no debe sumar al cuadre de caja.
             var completed = payments.Where(p => p.Status == PaymentStatus.Completed).ToList();
@@ -248,6 +255,7 @@ namespace SaborExpress.Modules.Payments.Services
 
             await _paymentRepository.AddAsync(payment);
             await _paymentRepository.SaveChangesAsync();
+            await _realtime.PaymentsChangedAsync();
 
             var amountInCents = (int)Math.Round(amount * 100m, MidpointRounding.AwayFromZero);
             var signature = _wompiClient.BuildIntegritySignature(reference, amountInCents, "COP");
@@ -302,6 +310,7 @@ namespace SaborExpress.Modules.Payments.Services
                 };
                 await _paymentRepository.AddAsync(payment);
                 await _paymentRepository.SaveChangesAsync();
+                await _realtime.PaymentsChangedAsync();
             }
 
             var amountInCents = (int)Math.Round(amount * 100m, MidpointRounding.AwayFromZero);
@@ -372,6 +381,9 @@ namespace SaborExpress.Modules.Payments.Services
         public async Task SyncPendingWompiPaymentsAsync()
         {
             var pending = await _paymentRepository.GetPendingWompiSinceAsync(DateTime.UtcNow.AddMinutes(-30));
+            if (pending.Count == 0)
+                return;
+
             Console.WriteLine($"[SYNC] Pagos Wompi pendientes: {pending.Count}");
 
             foreach (var payment in pending)
@@ -412,9 +424,10 @@ namespace SaborExpress.Modules.Payments.Services
                     payment.Status = PaymentStatus.Completed;
                     await _paymentRepository.UpdateAsync(payment);
                     await _paymentRepository.SaveChangesAsync();
+                    await _realtime.PaymentsChangedAsync();
 
                     var order = await _orderRepository.GetByIdAsync(payment.OrderId);
-                    Console.WriteLine($"[SYNC] Pago {payment.Id} APROBADO. Pedido {payment.OrderId} estado actual: {order?.Status}");
+                    _logger.LogInformation("Pago {PaymentId} aprobado. Pedido {OrderId} estado actual: {Status}", payment.Id, payment.OrderId, order?.Status);
                     if (order != null && order.Status == OrderStatus.Pending)
                     {
                         order.Status = OrderStatus.Confirmed;
@@ -426,7 +439,7 @@ namespace SaborExpress.Modules.Payments.Services
                         {
                             try
                             {
-                                await _deliveryAssignmentService.AssignAutomaticallyAsync(order.Id);
+                                await _deliveryAssignmentService.AssignPendingForBranchAsync(order.BranchId);
                             }
                             catch (Exception ex)
                             {
@@ -446,12 +459,15 @@ namespace SaborExpress.Modules.Payments.Services
                     // 2) Liberar mesa (protegido: un fallo aquí no debe tumbar el resto)
                     try
                     {
-                        await ReleaseTableIfFullyPaidAsync(payment.OrderId);
+                        await _tableAvailabilityService.TryReleaseAfterConfirmationAsync(payment.OrderId);
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "No se pudo liberar la mesa del pedido {OrderId}", payment.OrderId);
                     }
+
+                    await _realtime.OrdersChangedAsync();
+                    await _realtime.TablesChangedAsync();
 
                     // 3) Cobro iniciado por un cajero (QR en mesa): avisar al cajero y al mesero
                     if (payment.CashierId != null)
@@ -473,6 +489,8 @@ namespace SaborExpress.Modules.Payments.Services
                     payment.Status = PaymentStatus.Failed;
                     await _paymentRepository.UpdateAsync(payment);
                     await _paymentRepository.SaveChangesAsync();
+                    await _realtime.PaymentsChangedAsync();
+                    await _realtime.OrdersChangedAsync();
                     break;
 
                 // PENDING: no se toca, se espera el siguiente evento
@@ -499,7 +517,7 @@ namespace SaborExpress.Modules.Payments.Services
                 await _notificationService.CreateAsync(
                     customerUserId.Value,
                     "Pago confirmado",
-                    $"Tu pago para el pedido #{order.Id} fue aprobado.",
+                    "Tu pago fue aprobado.",
                     NotificationType.PaymentConfirmed,
                     relatedEntityType: "Order",
                     relatedEntityId: order.Id);
@@ -528,7 +546,7 @@ namespace SaborExpress.Modules.Payments.Services
                     await _notificationService.CreateAsync(
                         userId,
                         "Pedido nuevo",
-                        $"Llegó el pedido #{orderId} (ya pagado en línea).",
+                    "Llegó un pedido (ya pagado en línea).",
                         NotificationType.OrderCreated,
                         relatedEntityType: "Order",
                         relatedEntityId: orderId);
@@ -543,29 +561,6 @@ namespace SaborExpress.Modules.Payments.Services
         // Nuevo: revisa si el pedido quedó 100% pagado, y si tiene mesa
         // asociada, la libera automáticamente. No hace nada si falta saldo
         // por cobrar, o si el pedido no tenía mesa (domicilio/para llevar).
-        private async Task ReleaseTableIfFullyPaidAsync(int orderId)
-        {
-            var order = await _orderRepository.GetByIdAsync(orderId);
-            if (order == null || !order.TableId.HasValue)
-                return;
-
-            var payments = await _paymentRepository.GetByOrderIdAsync(orderId);
-            var totalPaid = payments
-                .Where(p => p.Status == PaymentStatus.Completed)
-                .Sum(p => p.Amount);
-
-            if (totalPaid < order.Total)
-                return; // todavía falta saldo, no se toca la mesa
-
-            var table = await _tableRepository.GetByIdAsync(order.TableId.Value);
-            if (table == null || table.Status != TableStatus.Occupied)
-                return; // ya estaba libre, o en otro estado — no forzar el cambio
-
-            table.Status = TableStatus.Available;
-            await _tableRepository.UpdateAsync(table);
-            await _tableRepository.SaveChangesAsync();
-        }
-
         private async Task EnsureCanRegisterPaymentAsync(int currentUserId)
         {
             var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)

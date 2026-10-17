@@ -28,7 +28,7 @@ El rol dice **"a qué módulo entras"**; el permiso dice **"qué tan lejos llega
 |---|---|
 | **Cliente** | Pide domicilios/pedidos desde la app, gestiona su perfil, sus direcciones, deja reseñas |
 | **Mesero** | Toma pedidos en mesa, los edita, marca mesas ocupadas/libres |
-| **Cocinero** | Ve los pedidos pendientes, actualiza el estado de preparación, gestiona el menú del día |
+| **Cocinero** | Ve los pedidos pendientes, actualiza su estado de preparación y puede activar o desactivar productos durante su turno |
 | **Cajero** | Cobra pedidos, procesa pagos y reembolsos |
 | **Repartidor** | Toma domicilios disponibles, actualiza el estado de la entrega |
 | **Administrador** | Gestiona su propia sede: empleados, mesas, turnos, ve reportes de su sede |
@@ -104,25 +104,9 @@ Leyenda: ✅ Sí puede · ❌ No puede · 🔶 Parcial/condicionado (se explica 
 |---|---|---|---|---|---|---|---|
 | Ver categorías/productos | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Crear/editar/borrar categoría o producto | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Activar/desactivar producto | ❌ | ❌ | 🔶 recomendado | ❌ | ❌ | ✅ | ✅ |
+| Activar/desactivar producto | ❌ | ❌ | ✅ con turno activo | ❌ | ❌ | ✅ | ✅ |
 
-**Nota:** hoy `Products` solo deja Gerente/Administrador. Vale la pena considerar
-si el Cocinero debería poder desactivar un plato agotado sin llamar al Administrador
-(`PATCH /api/Products/{id}/status`) — es un caso de uso real ("se acabó el pescado del día").
-
----
-
-### DailyMenu (Menú del día)
-
-| Acción | Cliente | Mesero | Cocinero | Cajero | Repartidor | Admin | Gerente |
-|---|---|---|---|---|---|---|---|
-| Ver el menú de hoy | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ |
-| Planear/crear el menú de una fecha | ❌ | ❌ | 🔶 recomendado | ❌ | ❌ | ✅ | ✅ |
-| Prender/apagar un plato a media jornada | ❌ | ❌ | ✅ recomendado | ❌ | ❌ | ✅ | ✅ |
-
-**Nota:** este es el módulo donde el Cocinero debería tener más participación —
-hoy el diseño solo contempla Gerente/Administrador, pero operativamente quien
-mejor sabe si "se acabó el plato del día" es el propio cocinero en el momento.
+El Cocinero puede cambiar la disponibilidad de un producto durante su turno activo.
 
 ---
 
@@ -252,7 +236,7 @@ de los cajeros puede hacer reembolsos (una acción más sensible que cobrar).
 
 ```
 CrearSede, EditarSede, EliminarSede, GestionarEmpleados, AprobarRegistros,
-VerReportes, GestionarMenu, CrearEmpleado, EliminarEmpleado
+VerReportes, CrearEmpleado, EliminarEmpleado
 ```
 
 ### Permisos nuevos sugeridos, para cubrir los roles operativos (Mesero, Cocinero, Cajero, Repartidor)
@@ -267,7 +251,6 @@ VerReportes, GestionarMenu, CrearEmpleado, EliminarEmpleado
 | `TABLES_UPDATE_STATUS` | Mesero | Marcar mesa Ocupada/Libre/Reservada |
 | `PAYMENTS_CREATE` | Cajero | Registrar un cobro |
 | `PAYMENTS_REFUND` | Cajero (opcional, más sensible) | Procesar un reembolso |
-| `MENU_TOGGLE` | Cocinero | Prender/apagar un plato del menú del día |
 | `DELIVERY_TAKE` | Repartidor | Tomar un pedido disponible del pool |
 | `DELIVERY_UPDATE_STATUS` | Repartidor | Actualizar el estado de su entrega |
 
@@ -280,7 +263,7 @@ para que el turno determine **con qué rol** trabaja el empleado ese día. Esta
 matriz es justo la base para definir, cuando lleguemos a ese punto, **qué
 permisos se activan automáticamente según el rol del turno activo** — por
 ejemplo, si hoy Camilo tiene turno de Cocinero, el sistema solo le habilita
-`ORDERS_STATUS_UPDATE` y `MENU_TOGGLE`, no `PAYMENTS_CREATE` aunque también
+`ORDERS_STATUS_UPDATE` y `ACTIVAR_DESACTIVAR_PRODUCTO`, no `PAYMENTS_CREATE` aunque también
 tenga el rol Cajero asignado de forma permanente.
 
 ---

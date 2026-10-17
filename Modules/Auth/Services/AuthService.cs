@@ -1,4 +1,5 @@
-﻿    using SaborExpress.Modules.Auth.DTOs;
+    using System.Collections.Concurrent;
+    using SaborExpress.Modules.Auth.DTOs;
     using SaborExpress.Modules.Auth.Helpers;
     using SaborExpress.Modules.Auth.Interfaces;
     using SaborExpress.Modules.Auth.Mappings;
@@ -15,6 +16,8 @@
     using SaborExpress.Shared.Constants;
     using SaborExpress.Modules.Customers.Interfaces;
     using SaborExpress.Modules.Customers.Models;
+    using SaborExpress.Modules.Notifications.Interfaces;
+    using SaborExpress.Modules.Branches.Interfaces;
 
     namespace SaborExpress.Modules.Auth.Services
     {
@@ -25,14 +28,25 @@
             private readonly JwtTokenGenerator _jwtGenerator;
             private readonly IOptions<JwtSettings> _jwtSettings;
             private readonly INotificationService _notificationService;
+        private readonly IRealtimeNotifier _realtimeNotifier;
         private readonly IRefreshTokenRepository _refreshTokenRepository;
         private readonly IEmployeeScheduleRepository _scheduleRepository;
         private readonly ICustomerRepository _customerRepository;
+        private readonly INotificationRepository _notificationRepository;
         private readonly IConfiguration _configuration;
+        private readonly IBranchRepository _branchRepository;
+
+        // Serializa login y renovación para que un refresh antiguo no sustituya la sesión nueva.
+        private static readonly ConcurrentDictionary<int, SemaphoreSlim> SessionLocks = new();
 
         private static readonly string[] OperationalRoles =
         {
             RoleNames.Mesero, RoleNames.Cajero, RoleNames.Cocinero, RoleNames.Repartidor
+        };
+
+        private static readonly string[] WebPanelRoles =
+        {
+            RoleNames.Gerente, RoleNames.Administrador
         };
 
             public AuthService(
@@ -41,18 +55,24 @@
                 JwtTokenGenerator jwtGenerator,
                 IOptions<JwtSettings> jwtSettings,
                 INotificationService notificationService,
+                IRealtimeNotifier realtimeNotifier,
                 IRefreshTokenRepository refreshTokenRepository,
                 IEmployeeScheduleRepository scheduleRepository,
                 ICustomerRepository customerRepository,
-                IConfiguration configuration)
+                INotificationRepository notificationRepository,
+                IConfiguration configuration,
+                IBranchRepository branchRepository)
                 {
+                    _branchRepository = branchRepository;
                     _configuration = configuration;
                     _customerRepository = customerRepository;
+                    _notificationRepository = notificationRepository;
                 _authRepository = authRepository;
                 _loginValidator = loginValidator;
                 _jwtGenerator = jwtGenerator;
                 _jwtSettings = jwtSettings;
                 _notificationService = notificationService;
+                _realtimeNotifier = realtimeNotifier;
                 _refreshTokenRepository = refreshTokenRepository;
                 _scheduleRepository = scheduleRepository;
 
@@ -103,28 +123,88 @@
             user!.FailedLoginAttempts = 0;
             user.LockoutEnd = null;
 
-            await EnsureCustomerForEmployeeAsync(user);
+            await EnsureBranchIsActiveAsync(user);
 
-            var token = _jwtGenerator.Generate(user, dto.Identifier);
-            user.Token = token;
-            user.LastLogin = DateTime.UtcNow;
+            var sessionLock = SessionLocks.GetOrAdd(user.Id, static _ => new SemaphoreSlim(1, 1));
+            await sessionLock.WaitAsync();
+            try
+            {
+                var enforceSingleSession = _configuration.GetValue("Auth:SingleSession", true);
+                await EnsureCustomerForEmployeeAsync(user);
+
+                var (hasActiveShift, activeShiftRoleName) = await GetActiveShiftInfoAsync(user);
+                var effectiveRoles = await GetEffectiveRoleNamesAsync(user);
+                var token = _jwtGenerator.Generate(user, dto.Identifier,
+                    actAsClient: !hasActiveShift, effectiveRoles: effectiveRoles);
+                user.Token = token;
+                user.LastLogin = DateTime.UtcNow;
+                await _authRepository.UpdateAsync(user);
+
+                // Retira los destinos push anteriores y revoca las sesiones previas.
+                if (enforceSingleSession)
+                    await _notificationRepository.RemovePushDevicesByUserIdAsync(user.Id);
+
+                var nombreCompleto = user.GetDisplayName(dto.Identifier);
+                if (!string.IsNullOrEmpty(user.Email))
+                    NotifyLoginAsync(user.Email, nombreCompleto);
+
+                if (enforceSingleSession)
+                    await _refreshTokenRepository.RevokeAllForUserAsync(user.Id);
+
+                var refreshToken = await GenerateAndSaveRefreshTokenAsync(user.Id);
+                if (enforceSingleSession)
+                    await _realtimeNotifier.SessionReplacedAsync(user.Id);
+
+                return AuthMapper.ToAuthResponse(user, token, refreshToken, hasActiveShift, activeShiftRoleName, effectiveRoles);
+            }
+            finally
+            {
+                sessionLock.Release();
+            }
+        }
+        public async Task ChangePasswordAsync(int userId, ChangePasswordDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.CurrentPassword))
+                throw new ArgumentException("La contraseña actual es obligatoria.");
+
+            if (string.IsNullOrWhiteSpace(dto.NewPassword) || dto.NewPassword.Length < 8)
+                throw new ArgumentException("La nueva contraseña debe tener al menos 8 caracteres.");
+
+            if (!dto.NewPassword.Any(char.IsLetter) || !dto.NewPassword.Any(char.IsDigit))
+                throw new ArgumentException("La nueva contraseña debe incluir al menos una letra y un número.");
+
+            if (dto.ConfirmPassword is not null && dto.ConfirmPassword != dto.NewPassword)
+                throw new ArgumentException("Las contraseñas no coinciden.");
+
+            var user = await _authRepository.GetByIdWithRelationsAsync(userId)
+                ?? throw new KeyNotFoundException("Usuario no encontrado.");
+
+            if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+                throw new ArgumentException("La contraseña actual no es correcta.");
+
+            if (BCrypt.Net.BCrypt.Verify(dto.NewPassword, user.PasswordHash))
+                throw new ArgumentException("La nueva contraseña debe ser diferente a la actual.");
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            user.MustChangePassword = false;
+            user.Token = null; // invalida el access token actual
             await _authRepository.UpdateAsync(user);
 
-            var nombreCompleto = user.GetDisplayName(dto.Identifier);
-            if (!string.IsNullOrEmpty(user.Email))
-            {
-                NotifyLoginAsync(user.Email, nombreCompleto);
-            }
+            // Ninguna sesión previa puede renovarse con la contraseña vieja.
+            await _refreshTokenRepository.RevokeAllForUserAsync(userId);
+        }
 
-            // 👇 nuevo: sesión única — cualquier dispositivo anterior con este
-            // usuario deja de poder refrescar su token en cuanto expire.
-            if (_configuration.GetValue("Auth:SingleSession", true))
-                await _refreshTokenRepository.RevokeAllForUserAsync(user.Id);
+        // Con la sede desactivada solo entran Gerente y Administrador (panel web).
+        private async Task EnsureBranchIsActiveAsync(User user)
+        {
+            if (user.Employee?.BranchId is not int branchId) return;
 
-        var refreshToken = await GenerateAndSaveRefreshTokenAsync(user.Id);
-        var (hasActiveShift, activeShiftRoleName) = await GetActiveShiftInfoAsync(user);
-        return AuthMapper.ToAuthResponse(user, token, refreshToken, hasActiveShift, activeShiftRoleName);
-    }
+            if (user.UserRoles.Any(ur => WebPanelRoles.Contains(ur.Role.Name))) return;
+
+            var branch = await _branchRepository.GetByIdAsync(branchId);
+            if (branch is { Status: false })
+                throw new UnauthorizedAccessException("Tu sede está desactivada. Contacta al gerente.");
+        }
 
         // Un empleado operativo (Mesero, Cajero, Cocinero, Repartidor) puede usar la app
         // como cliente cuando no tiene turno. Direcciones y pedidos necesitan un Customer
@@ -149,6 +229,18 @@
             await _customerRepository.AddAsync(customer);
             user.Customer = customer; // para que el token lo incluya
         }
+
+            private async Task<IReadOnlyCollection<string>> GetEffectiveRoleNamesAsync(User user)
+            {
+                var roles = user.UserRoles.Select(ur => ur.Role.Name).Distinct().ToList();
+                if (roles.Contains(RoleNames.Administrador) &&
+                    !await _scheduleRepository.CanActAsAdministratorAsync(
+                        user.Id, SaborExpress.Shared.Helpers.ColombiaTime.Now))
+                {
+                    roles.Remove(RoleNames.Administrador);
+                }
+                return roles;
+            }
 
         private async Task<(bool HasActiveShift, string? ActiveShiftRoleName)> GetActiveShiftInfoAsync(User user)
         {
@@ -197,28 +289,40 @@
                 var stored = await _refreshTokenRepository.GetActiveByTokenAsync(dto.RefreshToken)
                     ?? throw new UnauthorizedAccessException("Refresh token invalido o expirado.");
 
-                // Se recarga el usuario con roles, Employee y Customer: stored.User puede venir
-                // sin esas relaciones y el token renovado perdería CustomerId/EmployeeId.
-                var user = await _authRepository.GetByIdWithRelationsAsync(stored.UserId)
-                    ?? throw new UnauthorizedAccessException("Usuario no encontrado.");
+                var sessionLock = SessionLocks.GetOrAdd(stored.UserId, static _ => new SemaphoreSlim(1, 1));
+                await sessionLock.WaitAsync();
+                try
+                {
+                    // El login pudo revocar este token mientras esperábamos el bloqueo.
+                    stored = await _refreshTokenRepository.GetActiveByTokenAsync(dto.RefreshToken)
+                        ?? throw new UnauthorizedAccessException("Refresh token invalido o expirado.");
 
-                if (!user.Status)
-                    throw new UnauthorizedAccessException("La cuenta esta deshabilitada.");
+                    // Se recarga el usuario con roles, Employee y Customer para conservar sus claims.
+                    var user = await _authRepository.GetByIdWithRelationsAsync(stored.UserId)
+                        ?? throw new UnauthorizedAccessException("Usuario no encontrado.");
 
-                await EnsureCustomerForEmployeeAsync(user);
+                    if (!user.Status)
+                        throw new UnauthorizedAccessException("La cuenta esta deshabilitada.");
 
-                await _refreshTokenRepository.RevokeAsync(stored);
+                    await EnsureBranchIsActiveAsync(user);
+                    await EnsureCustomerForEmployeeAsync(user);
+                    await _refreshTokenRepository.RevokeAsync(stored);
 
-                var newAccessToken = _jwtGenerator.Generate(user, user.Email!);
-                user.Token = newAccessToken;
-                await _authRepository.UpdateAsync(user);
+                    var (hasActiveShift, activeShiftRoleName) = await GetActiveShiftInfoAsync(user);
+                    var effectiveRoles = await GetEffectiveRoleNamesAsync(user);
+                    var newAccessToken = _jwtGenerator.Generate(user, user.Email!,
+                        actAsClient: !hasActiveShift, effectiveRoles: effectiveRoles);
+                    user.Token = newAccessToken;
+                    await _authRepository.UpdateAsync(user);
 
-                var newRefreshToken = await GenerateAndSaveRefreshTokenAsync(user.Id);
-                var (hasActiveShift, activeShiftRoleName) = await GetActiveShiftInfoAsync(user);
-
-                return AuthMapper.ToAuthResponse(user, newAccessToken, newRefreshToken, hasActiveShift, activeShiftRoleName);
+                    var newRefreshToken = await GenerateAndSaveRefreshTokenAsync(user.Id);
+                    return AuthMapper.ToAuthResponse(user, newAccessToken, newRefreshToken, hasActiveShift, activeShiftRoleName, effectiveRoles);
+                }
+                finally
+                {
+                    sessionLock.Release();
+                }
             }
-
             private void NotifyLoginAsync(string email, string nombreCompleto)
             {
                 _ = Task.Run(async () =>

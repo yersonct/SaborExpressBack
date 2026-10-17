@@ -24,12 +24,11 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.TaxRate).HasColumnName("tax_rate").HasColumnType("decimal(5,2)").IsRequired();
             builder.Property(x => x.DeliveryFee).HasColumnName("delivery_fee").HasColumnType("decimal(12,2)").IsRequired();
-            builder.Property(x => x.SuggestedTipPercent).HasColumnName("suggested_tip_percent").HasColumnType("decimal(5,2)").IsRequired();
             builder.Property(x => x.DeliveryRadiusKm).HasColumnName("delivery_radius_km").HasColumnType("decimal(5,2)").IsRequired();
-            builder.Property(x => x.MinOrderAmount).HasColumnName("min_order_amount").HasColumnType("decimal(12,2)").IsRequired();
-
-            builder.Property(x => x.AcceptsDelivery).HasColumnName("accepts_delivery").IsRequired();
-            builder.Property(x => x.AcceptsDineIn).HasColumnName("accepts_dine_in").IsRequired();
+            builder.Property(x => x.MaxActiveDeliveriesPerCourier)
+                .HasColumnName("max_active_deliveries_per_courier")
+                .HasDefaultValue(4)
+                .IsRequired();
 
             builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();
         }

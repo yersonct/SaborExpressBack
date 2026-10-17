@@ -10,8 +10,12 @@ using SaborExpress.Modules.Employees.Interfaces;
 using SaborExpress.Modules.Notifications.Interfaces;
 using SaborExpress.Modules.Notifications.Enum;
 using SaborExpress.Shared.Constants;
+using SaborExpress.Shared.Interfaces;
 using SaborExpress.Modules.Payments.Interfaces;
 using SaborExpress.Modules.Payments.Enum;
+using SaborExpress.Modules.Deliveries.Interfaces;
+using SaborExpress.Modules.Deliveries.Enum;
+using SaborExpress.Modules.Tables.Interfaces;
 namespace SaborExpress.Modules.Orders.Services
 {
     public class OrderDetailService : IOrderDetailService
@@ -24,9 +28,10 @@ namespace SaborExpress.Modules.Orders.Services
         private readonly IEmployeeRepository _employeeRepository;
         private readonly IUserNotificationService _notificationService;
         private readonly IPaymentRepository _paymentRepository;
+        private readonly IRealtimeNotifier _realtime;
+        private readonly IDeliveryRepository _deliveryRepository;
+        private readonly ITableAvailabilityService _tableAvailabilityService;
 
-        // Usado solo si la sede nunca configuró TaxRate en Configuraciones.
-        private const decimal DefaultTaxRate = 0.19m;
 
         public OrderDetailService(
             IOrderDetailRepository orderDetailRepository,
@@ -36,8 +41,14 @@ namespace SaborExpress.Modules.Orders.Services
             OrderDetailValidator validator,
             IEmployeeRepository employeeRepository,
             IUserNotificationService notificationService,
-            IPaymentRepository paymentRepository)
+            IPaymentRepository paymentRepository,
+            IRealtimeNotifier realtime,
+            IDeliveryRepository deliveryRepository,
+            ITableAvailabilityService tableAvailabilityService)
         {
+            _tableAvailabilityService = tableAvailabilityService;
+            _deliveryRepository = deliveryRepository;
+            _realtime = realtime;
             _paymentRepository = paymentRepository;
             _orderDetailRepository = orderDetailRepository;
             _historyRepository = historyRepository;
@@ -46,33 +57,6 @@ namespace SaborExpress.Modules.Orders.Services
             _validator = validator;
             _employeeRepository = employeeRepository;
             _notificationService = notificationService;
-        }
-
-        // Lee TaxRate de la sede del pedido. Si esa sede nunca lo configuró
-        // (fila inexistente en BranchSetting) o el valor guardado no es un
-        // número válido, cae al 19% por defecto en vez de romper el pedido.
-        private async Task<decimal> GetTaxRateAsync(int orderId)
-        {
-            var order = await _orderRepository.GetByIdAsync(orderId);
-            if (order == null)
-                return DefaultTaxRate;
-
-            var setting = await _configurationRepository.GetByKeyAsync(order.BranchId, "TaxRate");
-            if (setting == null)
-                return DefaultTaxRate;
-
-            // El valor viene como texto ("19" o "19.5"); se fuerza cultura
-            // invariante (punto decimal) para que no dependa de la config
-            // regional del servidor. TaxRate se guarda como porcentaje
-            // (19 = 19%), así que se divide entre 100 al usarlo.
-            if (!decimal.TryParse(
-                    setting.Value,
-                    System.Globalization.NumberStyles.Number,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out var percent))
-                return DefaultTaxRate;
-
-            return percent / 100m;
         }
 
         public async Task<List<OrderDetailResponseDto>> GetByOrderIdAsync(int orderId)
@@ -132,7 +116,8 @@ namespace SaborExpress.Modules.Orders.Services
             });
             await _historyRepository.SaveChangesAsync();
 
-            await _orderRepository.RecalculateTotalsAsync(orderId, await GetTaxRateAsync(orderId));
+            await _orderRepository.RecalculateTotalsAsync(orderId);
+            await _realtime.OrdersChangedAsync();
 
             var created = await _orderDetailRepository.GetByIdAsync(orderDetail.Id);
             return OrderDetailMapper.ToResponse(created!);
@@ -194,7 +179,9 @@ namespace SaborExpress.Modules.Orders.Services
             }
             await _historyRepository.SaveChangesAsync();
 
-            await _orderRepository.RecalculateTotalsAsync(orderId, await GetTaxRateAsync(orderId));
+            await _orderRepository.RecalculateTotalsAsync(orderId);
+
+            await _realtime.OrdersChangedAsync();
 
             // NUEVO: sin esto, cocina solo se enteraba del extra por el
             // polling de 15s (sin sonido), y el mesero no se enteraba NUNCA
@@ -230,14 +217,13 @@ namespace SaborExpress.Modules.Orders.Services
                 order.BranchId, RoleNames.Administrador);
             var gerenteIds = await _employeeRepository.GetUserIdsByRolesAsync(RoleNames.Gerente);
 
-            var kitchenUserIds = cocineroIds.Concat(adminIds).Concat(gerenteIds).Distinct();
-
-            foreach (var userId in kitchenUserIds)
+            var kitchenUserIds = cocineroIds.Concat(adminIds).Concat(gerenteIds).Distinct().ToList();
+            if (kitchenUserIds.Count > 0)
             {
-                await _notificationService.CreateAsync(
-                    userId,
+                await _notificationService.CreateBulkAsync(
+                    kitchenUserIds,
                     "Pedido actualizado",
-                    $"Se agregaron productos al pedido #{order.Id}.",
+                    "Se agregaron productos al pedido.",
                     NotificationType.OrderCreated,
                     relatedEntityType: "Order",
                     relatedEntityId: order.Id);
@@ -252,12 +238,13 @@ namespace SaborExpress.Modules.Orders.Services
             var cajeroIds = await _employeeRepository.GetUserIdsByBranchAndRolesAsync(
                 order.BranchId, RoleNames.Cajero);
 
-            foreach (var cajeroUserId in cajeroIds.Distinct().Where(id => id != adderUserId))
+            var notifiedCashierIds = cajeroIds.Distinct().Where(id => id != adderUserId).ToList();
+            if (notifiedCashierIds.Count > 0)
             {
-                await _notificationService.CreateAsync(
-                    cajeroUserId,
+                await _notificationService.CreateBulkAsync(
+                    notifiedCashierIds,
                     "Pedido nuevo",
-                    $"Pedido #{order.Id}: hay productos nuevos para cobrar.",
+                    "Hay productos nuevos para cobrar.",
                     NotificationType.OrderCreated,
                     relatedEntityType: "Order",
                     relatedEntityId: order.Id);
@@ -271,7 +258,7 @@ namespace SaborExpress.Modules.Orders.Services
                     await _notificationService.CreateAsync(
                         mesero.UserId,
                         "Pedido actualizado",
-                        $"Se agregaron productos al pedido #{order.Id}.",
+                        "Se agregaron productos al pedido.",
                         NotificationType.OrderStatusChanged,
                         relatedEntityType: "Order",
                         relatedEntityId: order.Id);
@@ -281,6 +268,17 @@ namespace SaborExpress.Modules.Orders.Services
 
         public async Task<List<OrderDetailResponseDto>> UpdateBatchStatusAsync(int orderId, int batchNumber, UpdateBatchStatusDto dto, int employeeId)
         {
+            if (dto.Status == OrderDetailStatus.Delivered)
+                throw new InvalidOperationException(
+                    "La entrega al mesero se debe confirmar desde la acción de entrega del pedido.");
+
+            var order = await _orderRepository.GetByIdAsync(orderId)
+                ?? throw new ArgumentException("El pedido no existe.");
+
+            if (order.Channel == OrderChannel.App && order.Status == OrderStatus.Pending)
+                throw new InvalidOperationException(
+                    "El pedido del cliente está pendiente de confirmación en caja. Cocina podrá iniciarlo cuando quede confirmado.");
+
             var items = await _orderDetailRepository.GetByOrderAndBatchAsync(orderId, batchNumber);
             if (items.Count == 0)
                 throw new ArgumentException("El lote indicado no existe para este pedido.");
@@ -313,6 +311,7 @@ namespace SaborExpress.Modules.Orders.Services
             // NUEVO: sincronizamos el estado general del pedido con el estado
             // agregado de sus platos, y avisamos al Mesero dueño del pedido.
             await SyncOrderStatusAndNotifyAsync(orderId, batchNumber, dto.Status);
+            await _realtime.OrdersChangedAsync();
 
             var result = new List<OrderDetailResponseDto>();
             foreach (var item in items)
@@ -382,10 +381,36 @@ namespace SaborExpress.Modules.Orders.Services
                     await _notificationService.CreateAsync(
                         cajeroUserId,
                         "Pedido listo",
-                        $"El pedido #{order.Id} está listo para cobrar.",
+                        "Un pedido está listo para cobrar.",
                         NotificationType.OrderReady,
                         relatedEntityType: "Order",
                         relatedEntityId: order.Id);
+                }
+
+                // Domicilio: avisa al repartidor asignado que ya puede salir
+                if (order.OrderType == OrderType.Delivery)
+                {
+                    try
+                    {
+                        var deliveries = await _deliveryRepository.GetByOrderIdAsync(order.Id);
+                        foreach (var d in deliveries.Where(d => d.Status != DeliveryStatus.Delivered))
+                        {
+                            var driver = await _employeeRepository.GetByIdAsync(d.DeliveryPersonId);
+                            if (driver == null) continue;
+
+                            await _notificationService.CreateAsync(
+                                driver.UserId,
+                                "Pedido listo para recoger",
+                                "Un pedido ya está listo. Puedes iniciar la entrega.",
+                                NotificationType.OrderReady,
+                                relatedEntityType: "Order",
+                                relatedEntityId: order.Id);
+                        }
+                    }
+                    catch
+                    {
+                        // El estado ya quedó guardado; un fallo al notificar no debe romperlo.
+                    }
                 }
             }
 
@@ -440,7 +465,49 @@ namespace SaborExpress.Modules.Orders.Services
             });
             await _historyRepository.SaveChangesAsync();
 
-            await _orderRepository.RecalculateTotalsAsync(orderDetail.OrderId, await GetTaxRateAsync(orderDetail.OrderId));
+            await _orderRepository.RecalculateTotalsAsync(orderDetail.OrderId);
+
+            var updated = await _orderDetailRepository.GetByIdAsync(orderDetail.Id);
+            return OrderDetailMapper.ToResponse(updated!);
+        }
+
+        public async Task<OrderDetailResponseDto> UpdateToGoAsync(
+            int id,
+            UpdateOrderDetailToGoDto dto,
+            int employeeId)
+        {
+            var orderDetail = await _orderDetailRepository.GetByIdAsync(id)
+                ?? throw new ArgumentException("La linea del pedido no existe");
+
+            if (orderDetail.Status == OrderDetailStatus.Voided ||
+                orderDetail.Status == OrderDetailStatus.Cancelled)
+            {
+                throw new ArgumentException(
+                    "No se puede cambiar el tipo de una linea anulada o cancelada");
+            }
+
+            if (orderDetail.IsToGo == dto.IsToGo)
+                return OrderDetailMapper.ToResponse(orderDetail);
+
+            var oldValue = orderDetail.IsToGo ? "Para llevar" : "Mesa";
+            var newValue = dto.IsToGo ? "Para llevar" : "Mesa";
+            orderDetail.IsToGo = dto.IsToGo;
+            orderDetail.LastModifiedByEmployeeId = employeeId;
+
+            await _orderDetailRepository.UpdateAsync(orderDetail);
+            await _orderDetailRepository.SaveChangesAsync();
+
+            await _historyRepository.AddAsync(new OrderDetailHistory
+            {
+                OrderDetailId = orderDetail.Id,
+                ChangedByEmployeeId = employeeId,
+                Action = OrderDetailHistoryAction.Updated,
+                OldValue = oldValue,
+                NewValue = newValue,
+                ChangedAt = DateTime.UtcNow,
+            });
+            await _historyRepository.SaveChangesAsync();
+            await _realtime.OrdersChangedAsync();
 
             var updated = await _orderDetailRepository.GetByIdAsync(orderDetail.Id);
             return OrderDetailMapper.ToResponse(updated!);
@@ -472,7 +539,8 @@ namespace SaborExpress.Modules.Orders.Services
             });
             await _historyRepository.SaveChangesAsync();
 
-            await _orderRepository.RecalculateTotalsAsync(orderDetail.OrderId, await GetTaxRateAsync(orderDetail.OrderId));
+            await _orderRepository.RecalculateTotalsAsync(orderDetail.OrderId);
+            await _realtime.OrdersChangedAsync();
 
             var voided = await _orderDetailRepository.GetByIdAsync(orderDetail.Id);
             return OrderDetailMapper.ToResponse(voided!);
@@ -484,6 +552,9 @@ namespace SaborExpress.Modules.Orders.Services
                 ?? throw new ArgumentException("La linea del pedido no existe");
 
             EnsureCanBeDelivered(orderDetail);
+            if (orderDetail.Status != OrderDetailStatus.Ready)
+                throw new InvalidOperationException(
+                    "Solo puedes marcar como entregado un producto que cocina ya marc\u00f3 como listo.");
 
             var oldStatus = orderDetail.Status;
             orderDetail.Status = OrderDetailStatus.Delivered;
@@ -502,6 +573,8 @@ namespace SaborExpress.Modules.Orders.Services
                 ChangedAt = DateTime.UtcNow
             });
             await _historyRepository.SaveChangesAsync();
+            await _tableAvailabilityService.TryReleaseAfterConfirmationAsync(orderDetail.OrderId);
+            await _realtime.OrdersChangedAsync();
 
             var delivered = await _orderDetailRepository.GetByIdAsync(orderDetail.Id);
             return OrderDetailMapper.ToResponse(delivered!);

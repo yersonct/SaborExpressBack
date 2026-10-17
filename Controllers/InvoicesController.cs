@@ -59,13 +59,13 @@ namespace SaborExpress.Controllers
         }
 
         // GET /api/Invoices/{id}/pdf
-        // TODO: requiere una librería de generación de PDF (ej. QuestPDF, iText7).
-        // Este endpoint queda como placeholder hasta que se instale una de esas librerías.
+        // TODO: requiere una librerÃ­a de generaciÃ³n de PDF (ej. QuestPDF, iText7).
+        // Este endpoint queda como placeholder hasta que se instale una de esas librerÃ­as.
         [HttpGet("{id:int}/pdf")]
         public async Task<IActionResult> GetPdf(int id)
         {
             await _invoiceService.GetByIdAsync(id); // valida que exista
-            return StatusCode(501, new { message = "Generación de PDF pendiente de implementar. Ver TODO en InvoicesController." });
+            return StatusCode(501, new { message = "GeneraciÃ³n de PDF pendiente de implementar. Consulta el TODO en InvoicesController." });
         }
     }
 }

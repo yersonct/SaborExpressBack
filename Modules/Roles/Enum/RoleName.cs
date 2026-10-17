@@ -8,6 +8,7 @@
         Cocinero,
         Repartidor,
         Gerente,
-        Administrador
+        Administrador,
+        AUXILIAR_COCINA
     }
 }
