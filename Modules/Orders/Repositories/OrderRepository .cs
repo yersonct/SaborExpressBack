@@ -229,7 +229,7 @@ using SaborExpress.Modules.Orders.DTOs;
                 {
                     tax = rates.TaxRate <= 0
                         ? 0m
-                        : Math.Round(subTotal * rates.TaxRate / 100m, 2, MidpointRounding.AwayFromZero);
+                        : Math.Round(subTotal * rates.TaxRate / (100m + rates.TaxRate), 2, MidpointRounding.AwayFromZero);
                     total = subTotal + fee;
                 }
                 else
