@@ -17,9 +17,10 @@ namespace SaborExpress.Controllers
         public BranchOperationalSettingsController(IBranchOperationalSettingsService service)
             => _service = service;
 
-        // Cualquier usuario autenticado puede leer (el cliente necesita tarifa, IVA y horario).
+        // Cualquier usuario autenticado puede leer (el cliente necesita tarifa, Impoconsumo y horario).
         // GET /api/branch-settings/{branchId}
         [HttpGet("{branchId:int}")]
+        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public async Task<IActionResult> Get(int branchId)
             => Ok(await _service.GetAsync(branchId));
 

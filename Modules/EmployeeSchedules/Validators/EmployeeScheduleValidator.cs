@@ -18,9 +18,6 @@ namespace SaborExpress.Modules.EmployeeSchedules.Validators
             if (dto.ShiftDate == default)
                 throw new ArgumentException("Debes indicar la fecha del turno.");
 
-            if (dto.EndTime <= dto.StartTime)
-                throw new ArgumentException("La hora de fin debe ser mayor a la hora de inicio.");
-
             if (!string.IsNullOrEmpty(dto.Notes) && dto.Notes.Length > 300)
                 throw new ArgumentException("Las notas no pueden superar los 300 caracteres.");
         }
@@ -32,9 +29,6 @@ namespace SaborExpress.Modules.EmployeeSchedules.Validators
 
             if (dto.ShiftDate == default)
                 throw new ArgumentException("Debes indicar la fecha del turno.");
-
-            if (dto.EndTime <= dto.StartTime)
-                throw new ArgumentException("La hora de fin debe ser mayor a la hora de inicio.");
 
             if (!string.IsNullOrEmpty(dto.Notes) && dto.Notes.Length > 300)
                 throw new ArgumentException("Las notas no pueden superar los 300 caracteres.");

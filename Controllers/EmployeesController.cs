@@ -58,6 +58,14 @@ namespace SaborExpress.Controllers
             await _employeeService.DeactivateAsync(id, currentUserId);
             return NoContent();
         }
+
+        [HttpDelete("{id}/permanent")]
+        public async Task<IActionResult> DeletePermanently(int id)
+        {
+            var currentUserId = ObtenerUsuarioActualId();
+            await _employeeService.DeletePermanentlyAsync(id, currentUserId);
+            return NoContent();
+        }
         
         [HttpGet("{id}/cv")]
         public async Task<IActionResult> DownloadCv(int id)

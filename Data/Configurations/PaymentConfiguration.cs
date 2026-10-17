@@ -69,6 +69,10 @@ namespace SaborExpress.Data.Configurations
             builder.Property(x => x.WompiTransactionId)
                 .HasColumnName("wompi_transaction_id")
                 .HasMaxLength(100);
+
+            builder.Property(x => x.RefundReason)
+                .HasColumnName("refund_reason")
+                .HasMaxLength(500);
         }
     }
 }

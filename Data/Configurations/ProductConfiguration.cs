@@ -34,6 +34,13 @@ namespace SaborExpress.Data.Configurations
                 .HasColumnType("text")
                 .IsRequired();
 
+            builder.Property(x => x.NameEn).HasColumnName("name_en").HasMaxLength(120);
+            builder.Property(x => x.NamePt).HasColumnName("name_pt").HasMaxLength(120);
+            builder.Property(x => x.NameFr).HasColumnName("name_fr").HasMaxLength(120);
+            builder.Property(x => x.DescriptionEn).HasColumnName("description_en").HasColumnType("text");
+            builder.Property(x => x.DescriptionPt).HasColumnName("description_pt").HasColumnType("text");
+            builder.Property(x => x.DescriptionFr).HasColumnName("description_fr").HasColumnType("text");
+
             builder.Property(x => x.Price)
                 .HasColumnName("price")
                 .HasColumnType("decimal(10,2)")

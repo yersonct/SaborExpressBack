@@ -1,4 +1,4 @@
-# SaborExpress — Plan de pruebas: Permisos operativos + Turnos (Employees, Orders, Tables, Payments, Deliveries, DailyMenu)
+# SaborExpress — Plan de pruebas: Permisos operativos + Turnos (Employees, Orders, Tables, Payments, Deliveries)
 
 Este plan cubre el bloque completo que se construyó en esta sesión: el
 catálogo de permisos (`Permission`), su conexión real en 6 módulos, y el
@@ -100,16 +100,6 @@ Repite esto para los 4 roles operativos, cada uno con su propio `roleId`.
 | Actualizar estado de entrega | Administrador (respaldo, sin necesitar el permiso) | 200 |
 | Actualizar estado de entrega | Gerente (NO tiene esta excepción, según diseño) | Bloqueado |
 
-### DailyMenu
-
-| Caso | Quién | Resultado esperado |
-|---|---|---|
-| Crear/editar/planear menú | Gerente/Administrador | 200/201 |
-| Crear/editar/planear menú | Cocinero | 403 (bloqueado por rol en el controller, ni siquiera llega al permiso) |
-| Prender/apagar un plato (toggle) | Cocinero con `ActivarDesactivarPlato` + turno activo | 200 |
-| Prender/apagar un plato | Cocinero sin turno activo | Bloqueado |
-| Prender/apagar un plato | Cocinero de otra sede | Bloqueado |
-
 ---
 
 ## Parte 3 — Rendimiento esperado
@@ -145,8 +135,6 @@ rol de una sola vez.
 | Deliveries | Tomar entrega | Repartidor | 201 | | |
 | Deliveries | Actualizar estado (dueño) | Repartidor | 200 | | |
 | Deliveries | Actualizar estado (Admin respaldo) | Administrador | 200 | | |
-| DailyMenu | Toggle plato | Cocinero | 200 | | |
-| DailyMenu | Crear/editar menú | Cocinero | 403 | | |
 
 ---
 

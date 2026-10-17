@@ -22,7 +22,7 @@ namespace SaborExpress.Modules.Invoices.Validators
         public async Task ValidateCreateAsync(CreateInvoiceDto dto)
         {
             if (dto.PaymentId <= 0)
-                throw new ArgumentException("Debe indicar un pago válido");
+                throw new ArgumentException("Debe indicar un pago v?lido");
 
             var payment = await _paymentRepository.GetByIdAsync(dto.PaymentId);
             if (payment == null)

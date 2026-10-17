@@ -55,7 +55,8 @@ namespace SaborExpress.Configuration
         private static void ConfigurarPostgres(DbContextOptionsBuilder options, IConfiguration configuration)
         {
             var connectionString = ObtenerConnectionString(configuration, "PostgresConnection");
-            options.UseNpgsql(connectionString);
+            options.UseNpgsql(connectionString, npgsql =>
+                npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
         }
 
         private static string ObtenerConnectionString(IConfiguration configuration, string key)
@@ -63,7 +64,7 @@ namespace SaborExpress.Configuration
             var connectionString = configuration.GetConnectionString(key);
 
             if (string.IsNullOrEmpty(connectionString))
-                throw new Exception($"{key} no está configurada.");
+                throw new Exception($"{key} no estï¿½ configurada.");
 
             return connectionString;
         }

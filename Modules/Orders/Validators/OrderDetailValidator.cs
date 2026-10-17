@@ -45,6 +45,9 @@ namespace SaborExpress.Modules.Orders.Validators
             if (!product.Status)
                 throw new ArgumentException("El producto esta agotado y no se puede agregar al pedido");
 
+            if (!product.Category.Status)
+                throw new ArgumentException("La categoría está inactiva y no se puede agregar al pedido");
+
             return product;
         }
 
@@ -58,6 +61,10 @@ namespace SaborExpress.Modules.Orders.Validators
 
             if (orderDetail.Status == OrderDetailStatus.Delivered)
                 throw new ArgumentException("No se puede modificar una linea ya entregada");
+
+            if (orderDetail.Status != OrderDetailStatus.Pending)
+                throw new ArgumentException(
+                    "Solo se pueden modificar productos que siguen pendientes");
 
             var orderStatus = await _orderRepository.GetOrderStatusAsync(orderDetail.OrderId)
                 ?? throw new ArgumentException("El pedido no existe");
@@ -75,6 +82,10 @@ namespace SaborExpress.Modules.Orders.Validators
 
             if (orderDetail.Status == OrderDetailStatus.Delivered)
                 throw new ArgumentException("No se puede anular una linea ya entregada");
+
+            if (orderDetail.Status != OrderDetailStatus.Pending)
+                throw new ArgumentException(
+                    "Solo se pueden anular productos que siguen pendientes");
 
             var orderStatus = await _orderRepository.GetOrderStatusAsync(orderDetail.OrderId)
                 ?? throw new ArgumentException("El pedido no existe");

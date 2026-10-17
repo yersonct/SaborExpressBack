@@ -38,6 +38,14 @@ namespace SaborExpress.Controllers
             return Ok(await _employeeService.SetMyAvailabilityAsync(employeeId, dto.IsAvailable));
         }
 
+        [HttpPut("me/location")]
+        public async Task<IActionResult> UpdateMyLocation([FromBody] UpdateEmployeeLocationDto dto)
+        {
+            var employeeId = ObtenerEmployeeIdActual();
+            await _employeeService.UpdateMyLocationAsync(employeeId, dto.Latitude, dto.Longitude);
+            return NoContent();
+        }
+
         private int ObtenerEmployeeIdActual()
         {
             var claim = User.FindFirst("EmployeeId")

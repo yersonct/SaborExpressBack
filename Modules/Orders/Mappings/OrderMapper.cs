@@ -7,7 +7,7 @@ namespace SaborExpress.Modules.Orders.Mappings
 {
     public static class OrderMapper
     {
-        // Misma regla que PaymentService.ReleaseTableIfFullyPaidAsync: solo
+        // La suma de pagos completados determina si el pedido está pagado.
         // cuentan los pagos Completed, y el pedido está pagado cuando la suma
         // cubre el total (o lo supera, por redondeos).
         private static bool ComputeIsFullyPaid(Order order)
@@ -38,7 +38,10 @@ namespace SaborExpress.Modules.Orders.Mappings
                 AssignedDeliveryPersonName = order.AssignedDeliveryPersonName,
                 Status = order.Status,
                 SubTotal = order.SubTotal,
-                Tax = order.Tax,
+              Tax = order.Tax,
+                TaxRate = order.TaxRate,
+                TaxIncludedInPrice = order.TaxIncludedInPrice,
+                DeliveryFee = order.DeliveryFee,
                 Total = order.Total,
                 Notes = order.Notes,
                 CreatedAt = order.CreatedAt,
@@ -63,13 +66,24 @@ namespace SaborExpress.Modules.Orders.Mappings
                 TableId = order.TableId,
                 TableNumber = order.Table?.Number,
                 BranchId = order.BranchId,
+                Channel = order.Channel,
                 OrderType = order.OrderType,
                 AssignedDeliveryPersonId = order.AssignedDeliveryPersonId,
                 AssignedDeliveryPersonName = order.AssignedDeliveryPersonName,
-                Status = order.Status,
+               Status = order.Status,
+                SubTotal = order.SubTotal,
+                Tax = order.Tax,
+                TaxRate = order.TaxRate,
+                TaxIncludedInPrice = order.TaxIncludedInPrice,
+                DeliveryFee = order.DeliveryFee,
                 Total = order.Total,
                 IsFullyPaid = ComputeIsFullyPaid(order),
                 CreatedAt = order.CreatedAt,
+                UpdatedAt = order.UpdatedAt,
+                PaidAt = order.Payments
+                    .Where(payment => payment.Status == PaymentStatus.Completed)
+                    .Select(payment => (DateTime?)payment.PaidAt)
+                    .Max(),
                 OrderDetails = order.OrderDetails
                     .Select(d => new OrderSummaryItemDto
                     {

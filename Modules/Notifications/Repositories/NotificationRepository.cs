@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SaborExpress.Data;
 using SaborExpress.Modules.Notifications.Interfaces;
 using SaborExpress.Modules.Notifications.Models;
+using SaborExpress.Modules.UserPreferences.Constants;
 using SaborExpress.Shared.Constants;
 
 namespace SaborExpress.Modules.Notifications.Repositories
@@ -47,6 +48,25 @@ namespace SaborExpress.Modules.Notifications.Repositories
         public async Task<int> GetUnreadCountAsync(int userId)
         {
             return await _context.Notifications.CountAsync(n => n.UserId == userId && !n.IsRead);
+        }
+
+        public async Task<Dictionary<int, string>> GetLanguagesByUserIdsAsync(IReadOnlyCollection<int> userIds)
+        {
+            var ids = userIds.Distinct().ToArray();
+            if (ids.Length == 0) return new Dictionary<int, string>();
+
+            var savedLanguages = await _context.UserPreferences
+                .Where(x => ids.Contains(x.UserId)
+                    && x.Screen == LanguageOptions.LanguageScreen
+                    && x.Key == LanguageOptions.LanguageKey)
+                .ToDictionaryAsync(x => x.UserId, x => x.Value);
+
+            return ids.ToDictionary(
+                id => id,
+                id => savedLanguages.TryGetValue(id, out var language)
+                    && LanguageOptions.Allowed.Contains(language, StringComparer.OrdinalIgnoreCase)
+                        ? language.ToLowerInvariant()
+                        : LanguageOptions.DefaultLanguage);
         }
 
         public async Task<List<int>> GetUserIdsByBranchIdAsync(int branchId)
@@ -100,5 +120,53 @@ namespace SaborExpress.Modules.Notifications.Repositories
             _context.Notifications.Remove(notification);
             await _context.SaveChangesAsync();
         }
+
+        public async Task UpsertPushDeviceAsync(PushDevice device)
+        {
+            var existing = await _context.PushDevices
+                .FirstOrDefaultAsync(x => x.ExpoPushToken == device.ExpoPushToken);
+
+            if (existing == null)
+            {
+                device.CreatedAt = DateTime.UtcNow;
+                _context.PushDevices.Add(device);
+            }
+            else
+            {
+                // Un token de una misma instalación puede cambiar de usuario al cerrar sesión.
+                existing.UserId = device.UserId;
+                existing.Platform = device.Platform;
+                existing.NotificationProfile = device.NotificationProfile;
+                existing.SoundEnabled = device.SoundEnabled;
+                existing.VibrationEnabled = device.VibrationEnabled;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task RemovePushDeviceAsync(int userId, string expoPushToken)
+        {
+            var device = await _context.PushDevices.FirstOrDefaultAsync(x =>
+                x.UserId == userId && x.ExpoPushToken == expoPushToken);
+            if (device == null) return;
+
+            _context.PushDevices.Remove(device);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task RemovePushDevicesByUserIdAsync(int userId)
+        {
+            var devices = await _context.PushDevices
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+            if (devices.Count == 0) return;
+
+            _context.PushDevices.RemoveRange(devices);
+            await _context.SaveChangesAsync();
+        }
+
+        public Task<List<PushDevice>> GetPushDevicesByUserIdAsync(int userId) =>
+            _context.PushDevices.Where(x => x.UserId == userId).ToListAsync();
     }
 }

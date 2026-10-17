@@ -6,6 +6,7 @@ namespace SaborExpress.Modules.Auth.Interfaces
     public interface IAuthService
     {
         Task<AuthResponseDto> LoginAsync(LoginDto dto);
+        Task ChangePasswordAsync(int userId, ChangePasswordDto dto);
         Task LogoutAsync(int userId);
         Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto dto);
     }

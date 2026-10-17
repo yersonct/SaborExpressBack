@@ -9,6 +9,7 @@ using SaborExpress.Modules.Reviews.Models;
 using SaborExpress.Modules.Reviews.Validators;
 using SaborExpress.Shared.Constants;
 using SaborExpress.Shared.Extensions;
+using SaborExpress.Shared.Interfaces;
 
 namespace SaborExpress.Modules.Reviews.Services
 {
@@ -20,6 +21,7 @@ namespace SaborExpress.Modules.Reviews.Services
         private readonly IUserNotificationService _notificationService;
         private readonly INotificationRepository _notificationRepository;
         private readonly ILogger<ReviewService> _logger;
+        private readonly IRealtimeNotifier _realtime;
 
         public ReviewService(
             IReviewRepository reviewRepository,
@@ -27,8 +29,10 @@ namespace SaborExpress.Modules.Reviews.Services
             IAuthRepository authRepository,
             IUserNotificationService notificationService,
             INotificationRepository notificationRepository,
-            ILogger<ReviewService> logger)
+            ILogger<ReviewService> logger,
+            IRealtimeNotifier realtime)
         {
+            _realtime = realtime;
             _reviewRepository = reviewRepository;
             _validator = validator;
             _authRepository = authRepository;
@@ -57,6 +61,7 @@ namespace SaborExpress.Modules.Reviews.Services
             var response = ReviewMapper.ToResponse(created!);
 
             await NotifyManagersAsync(response);
+            await _realtime.ReviewsChangedAsync();
 
             return response;
         }
@@ -73,7 +78,7 @@ namespace SaborExpress.Modules.Reviews.Services
                 if (recipients.Count == 0) return;
 
                 var customer = string.IsNullOrWhiteSpace(review.CustomerName) ? "Un cliente" : review.CustomerName;
-                var message = $"{customer} calificó el pedido #{review.OrderId} con {review.Rating}/5.";
+                var message = $"{customer} calificó un pedido con {review.Rating}/5.";
 
                 if (!string.IsNullOrWhiteSpace(review.Comment))
                 {
@@ -109,6 +114,7 @@ namespace SaborExpress.Modules.Reviews.Services
 
             await _reviewRepository.UpdateAsync(review);
             await _reviewRepository.SaveChangesAsync();
+            await _realtime.ReviewsChangedAsync();
 
             var updated = await _reviewRepository.GetByIdAsync(review.Id);
             return ReviewMapper.ToResponse(updated!);
@@ -170,9 +176,10 @@ namespace SaborExpress.Modules.Reviews.Services
 
             await _reviewRepository.DeleteAsync(review);
             await _reviewRepository.SaveChangesAsync();
+            await _realtime.ReviewsChangedAsync();
         }
 
-        // Nuevo: mismo patrón que ya usamos en Orders, Tables, DailyMenu
+        // Nuevo: mismo patrón que ya usamos en Orders y Tables
         private async Task EnsureCanAccessBranchAsync(int branchId, int currentUserId)
         {
             var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)

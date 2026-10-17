@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using SaborExpress.Modules.Auth.DTOs;
 using SaborExpress.Modules.Auth.Exceptions;
 using SaborExpress.Modules.Auth.Interfaces;
@@ -40,7 +40,7 @@ namespace SaborExpress.Controllers
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
         {
             await _passwordResetService.ForgotPasswordAsync(dto);
-            return Ok(new { message = "Se ha enviado un codigo de recuperacion a tu correo." });
+            return Ok(new { message = "Si la cuenta esta habilitada para recuperacion, recibiras un codigo." });
         }
 
         [HttpPost("verify-reset-code")]
@@ -56,6 +56,22 @@ namespace SaborExpress.Controllers
             await _passwordResetService.ResetPasswordAsync(dto);
             return Ok(new { message = "Contraseña actualizada correctamente." });
         }
+
+        [Authorize]
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+                return Unauthorized();
+
+            await _authService.ChangePasswordAsync(userId, dto);
+            return Ok(new { message = "Contraseña actualizada correctamente." });
+        }
+
+        [Authorize]
+        [HttpGet("session")]
+        public IActionResult ValidateSession() => NoContent();
 
         [Authorize]
         [HttpPost("logout")]

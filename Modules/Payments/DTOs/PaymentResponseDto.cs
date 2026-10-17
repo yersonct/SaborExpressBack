@@ -15,5 +15,6 @@ namespace SaborExpress.Modules.Payments.DTOs
         public DateTime PaidAt { get; set; }
         public string? WompiReference { get; set; }    // opcional, útil para debugging desde el admin
         public string? WompiTransactionId { get; set; }
+        public string? RefundReason { get; set; }
     }
 }
