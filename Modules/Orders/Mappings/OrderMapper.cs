@@ -31,6 +31,7 @@ namespace SaborExpress.Modules.Orders.Mappings
                     : $"{order.Employee.Name} {order.Employee.LastName}".Trim(),
                 TableId = order.TableId,
                 TableNumber = order.Table?.Number,
+                TableSessionId = order.TableSessionId,
                 BranchId = order.BranchId,
                 BranchName = order.Branch?.Name,
                 OrderType = order.OrderType,

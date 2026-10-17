@@ -21,6 +21,11 @@ namespace SaborExpress.Modules.Orders.Models
 
         public int? TableId { get; set; }
         public Table? Table { get; set; }
+
+        // Identifica la ocupación a la que pertenece el pedido.
+        // Null para pedidos antiguos y pedidos sin mesa.
+        public Guid? TableSessionId { get; set; }
+
         public int BranchId { get; set; }
         public Branch Branch { get; set; } = null!;
 
