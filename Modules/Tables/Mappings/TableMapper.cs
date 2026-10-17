@@ -13,6 +13,7 @@ namespace SaborExpress.Modules.Tables.Mappings
                 Id = table.Id,
                 BranchId = table.BranchId,
                 BranchName = table.Branch?.Name,
+                CurrentSessionId = table.CurrentSessionId,
                 Number = table.Number,
                 Status = table.Status,
                 CreatedAt = table.CreatedAt

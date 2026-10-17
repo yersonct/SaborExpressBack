@@ -1034,6 +1034,9 @@ namespace SaborExpress.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("table_id");
 
+                    b.Property<Guid?>("TableSessionId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("Tax")
                         .HasColumnType("decimal(10,2)")
                         .HasColumnName("tax");
@@ -1542,6 +1545,9 @@ namespace SaborExpress.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CurrentSessionId")
+                        .HasColumnType("uuid");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
