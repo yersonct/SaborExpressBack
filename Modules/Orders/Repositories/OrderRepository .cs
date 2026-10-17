@@ -120,6 +120,9 @@ using SaborExpress.Modules.Orders.DTOs;
                     .Where(order =>
                         order.BranchId == branchId &&
                         order.TableId.HasValue &&
+                        order.Table!.Status == SaborExpress.Modules.Tables.Enum.TableStatus.Occupied &&
+                        order.Table.CurrentSessionId.HasValue &&
+                        order.TableSessionId == order.Table.CurrentSessionId &&
                         order.Status != OrderStatus.Cancelled)
                     .OrderByDescending(order => order.CreatedAt)
                     .Select(order => new

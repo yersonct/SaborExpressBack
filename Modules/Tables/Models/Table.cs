@@ -13,6 +13,11 @@ namespace SaborExpress.Modules.Tables.Models
 
         public int Number { get; set; }
         public TableStatus Status { get; set; } = TableStatus.Available;
+
+        // Identifica únicamente la atención vigente.
+        // Los pedidos históricos conservan su propio TableSessionId.
+        public Guid? CurrentSessionId { get; set; }
+
         public bool IsDeleted { get; set; } = false;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

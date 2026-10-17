@@ -49,11 +49,25 @@ namespace SaborExpress.Modules.Tables.Services
             if (table == null || table.Status != TableStatus.Occupied)
                 return false;
 
+
+            if (table.CurrentSessionId.HasValue)
+            {
+                if (triggeringOrder.TableSessionId != table.CurrentSessionId)
+                    return false;
+            }
+            else if (triggeringOrder.TableSessionId.HasValue)
+            {
+                // Nunca permitir que una confirmacion de otra sesion libere esta mesa.
+                return false;
+            }
+
             var tableOrders = (await _orderRepository.GetByTableIdAsync(tableId))
-                .Where(order => order.Status != OrderStatus.Cancelled &&
-                                (order.Status != OrderStatus.Delivered ||
-                                 order.Id == triggeringOrder.Id))
+                .Where(order =>
+                    order.Status != OrderStatus.Cancelled &&
+                    (!table.CurrentSessionId.HasValue ||
+                     order.TableSessionId == table.CurrentSessionId))
                 .ToList();
+
 
             if (tableOrders.Count == 0 ||
                 !await AreAllOrdersDeliveredAndPaidAsync(tableOrders))
@@ -62,6 +76,8 @@ namespace SaborExpress.Modules.Tables.Services
             }
 
             table.Status = TableStatus.Available;
+            table.CurrentSessionId = null;
+
             await _tableRepository.UpdateAsync(table);
             await _tableRepository.SaveChangesAsync();
             await _realtime.TablesChangedAsync();
@@ -97,10 +113,25 @@ namespace SaborExpress.Modules.Tables.Services
 
         public async Task EnsureCanSetAvailableAsync(int tableId)
         {
+            var table = await _tableRepository.GetByIdAsync(tableId)
+                ?? throw new ArgumentException("La mesa no existe.");
+
+            // Compatibilidad con mesas ocupadas antes de crear el seguimiento de sesiones.
+            // Sin sesion comprobamos TODOS los pedidos no cancelados de la mesa.
+
             var tableOrders = (await _orderRepository.GetByTableIdAsync(tableId))
-                .Where(order => order.Status != OrderStatus.Cancelled &&
-                                order.Status != OrderStatus.Delivered)
+                .Where(order =>
+                    order.Status != OrderStatus.Cancelled &&
+                    (!table.CurrentSessionId.HasValue ||
+                     order.TableSessionId == table.CurrentSessionId))
                 .ToList();
+
+            if (tableOrders.Count == 0)
+            {
+                // Mesa huerfana: no hay pedidos asociados a esta atencion.
+                // Permite al cajero restaurar Disponible sin inventar una sesion.
+                return;
+            }
 
             if (tableOrders.Count > 0 &&
                 !await AreAllOrdersDeliveredAndPaidAsync(tableOrders))
