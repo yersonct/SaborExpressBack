@@ -237,8 +237,8 @@ using SaborExpress.Modules.Orders.DTOs;
                 }
                 else
                 {
-                    // Conserva el cálculo de pedidos históricos para no cambiar
-                    // saldos ni facturas ya emitidas.
+                    // Fix21: INC adicional para pedidos nuevos y antiguos que ya
+                    // guardaron este régimen. Nunca convertir pedidos existentes.
                     tax = Math.Round(subTotal * rates.TaxRate / 100m, 2, MidpointRounding.AwayFromZero);
                     total = subTotal + tax + fee;
                 }

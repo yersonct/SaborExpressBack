@@ -40,8 +40,9 @@ namespace SaborExpress.Modules.Orders.Models
         public decimal SubTotal { get; set; }
           public decimal Tax { get; set; }
         public decimal TaxRate { get; set; }      // porcentaje aplicado (8 = 8 %)
-        // False en pedidos históricos (impuesto calculado por encima del subtotal).
-        // Los pedidos nuevos usan precios al público con Impoconsumo incluido.
+        // True conserva los pedidos previos con INC incluido en el precio.
+        // False se usa en pedidos nuevos (Fix21) y pedidos anteriores con INC adicional.
+        // No modificar esta propiedad en pedidos existentes.
         public bool TaxIncludedInPrice { get; set; }
         public decimal DeliveryFee { get; set; }  // solo > 0 en pedidos a domicilio
         public decimal Total { get; set; }

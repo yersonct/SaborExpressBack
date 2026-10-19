@@ -11,6 +11,7 @@ using SaborExpress.Modules.Categories.Models;
 using SaborExpress.Modules.Products.Models;
 using SaborExpress.Modules.Orders.Models;
 using SaborExpress.Modules.Payments.Models;
+using SaborExpress.Modules.CashClosures.Models;
 using SaborExpress.Modules.Tables.Models;
 using SaborExpress.Modules.Deliveries.Models;
 using SaborExpress.Modules.Reviews.Models;
@@ -46,6 +47,7 @@ namespace SaborExpress.Data
         public DbSet<OrderDetailHistory> OrderDetailHistories => Set<OrderDetailHistory>();
         public DbSet<OrderStatusHistory> OrderStatusHistories => Set<OrderStatusHistory>();
         public DbSet<Payment>  Payments => Set<Payment>();
+        public DbSet<CashClosure> CashClosures => Set<CashClosure>();
 
         public DbSet<Table> Tables => Set<Table>();
 

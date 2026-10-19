@@ -10,5 +10,11 @@ namespace SaborExpress.Modules.Branches.DTOs
         public string? Phone { get; set; }
         public decimal Latitude { get; set; }
         public decimal Longitude { get; set; }
+        public bool IsActive { get; set; }
+        public bool IsOpen { get; set; }
+        public bool HasSchedule { get; set; }
+        public string OpeningTime { get; set; } = string.Empty;
+        public string ClosingTime { get; set; } = string.Empty;
+        public string UnavailableReason { get; set; } = string.Empty;
     }
 }
