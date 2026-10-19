@@ -45,7 +45,7 @@
 
         private static readonly string[] OperationalRoles =
         {
-            RoleNames.Mesero, RoleNames.Cajero, RoleNames.Cocinero, RoleNames.Repartidor
+            RoleNames.Mesero, RoleNames.Cajero, RoleNames.Cocinero, RoleNames.AuxiliarCocina, RoleNames.Repartidor
         };
 
         private static readonly string[] WebPanelRoles =
@@ -138,8 +138,10 @@
                 var enforceSingleSession = _configuration.GetValue("Auth:SingleSession", true);
                 await EnsureCustomerForEmployeeAsync(user);
 
-                var (hasActiveShift, activeShiftRoleName) = await GetActiveShiftInfoAsync(user);
-                var effectiveRoles = await GetEffectiveRoleNamesAsync(user);
+                var effective = await EffectiveRolePolicy.ResolveAsync(user, _scheduleRepository);
+                var hasActiveShift = effective.HasActiveShift;
+                var activeShiftRoleName = effective.ActiveShiftRoleName;
+                var effectiveRoles = effective.Roles;
                 var token = _jwtGenerator.Generate(user, dto.Identifier,
                     actAsClient: !hasActiveShift, effectiveRoles: effectiveRoles);
                 user.Token = token;
@@ -245,45 +247,7 @@
             user.Customer = customer; // para que el token lo incluya
         }
 
-            private async Task<IReadOnlyCollection<string>> GetEffectiveRoleNamesAsync(User user)
-            {
-                var roles = user.UserRoles.Select(ur => ur.Role.Name).Distinct().ToList();
-                if (roles.Contains(RoleNames.Administrador) &&
-                    !await _scheduleRepository.CanActAsAdministratorAsync(
-                        user.Id, SaborExpress.Shared.Helpers.ColombiaTime.Now))
-                {
-                    roles.Remove(RoleNames.Administrador);
-                }
-                return roles;
-            }
-
-        private async Task<(bool HasActiveShift, string? ActiveShiftRoleName)> GetActiveShiftInfoAsync(User user)
-        {
-            // Cliente, Gerente y Administrador no dependen de turno.
-            var esOperativo = user.UserRoles.Any(ur => OperationalRoles.Contains(ur.Role.Name));
-            if (!esOperativo || user.Employee == null)
-                return (true, null);
-
-            var nowColombia = SaborExpress.Shared.Helpers.ColombiaTime.Now;
-            var today = DateOnly.FromDateTime(nowColombia);
-            var now = TimeOnly.FromDateTime(nowColombia);
-
-        var shiftsToday = await _scheduleRepository.GetByEmployeeAndDateAsync(user.Employee.Id, today);
-
-        var activeShift = shiftsToday.FirstOrDefault(s =>
-            s.Status == ScheduleStatus.Programado &&
-            now >= s.StartTime &&
-            now <= s.EndTime);
-
-        if (activeShift == null)
-            return (false, null);
-
-        // Resolvemos el nombre del rol desde los UserRoles ya cargados en 'user',
-        // haciendo match por RoleId — evita otro query o Include extra.
-        var roleName = user.UserRoles.FirstOrDefault(ur => ur.RoleId == activeShift.RoleId)?.Role.Name;
-
-        return (true, roleName);
-    }
+        // Los roles efectivos se resuelven de forma centralizada en EffectiveRolePolicy.
 
             private async Task<string> GenerateAndSaveRefreshTokenAsync(int userId)
             {
@@ -323,8 +287,10 @@
                     await EnsureCustomerForEmployeeAsync(user);
                     await _refreshTokenRepository.RevokeAsync(stored);
 
-                    var (hasActiveShift, activeShiftRoleName) = await GetActiveShiftInfoAsync(user);
-                    var effectiveRoles = await GetEffectiveRoleNamesAsync(user);
+                    var effective = await EffectiveRolePolicy.ResolveAsync(user, _scheduleRepository);
+                    var hasActiveShift = effective.HasActiveShift;
+                    var activeShiftRoleName = effective.ActiveShiftRoleName;
+                    var effectiveRoles = effective.Roles;
                     var newAccessToken = _jwtGenerator.Generate(user, user.Email!,
                         actAsClient: !hasActiveShift, effectiveRoles: effectiveRoles);
                     user.Token = newAccessToken;

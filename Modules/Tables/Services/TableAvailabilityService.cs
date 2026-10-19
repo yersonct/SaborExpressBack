@@ -128,9 +128,10 @@ namespace SaborExpress.Modules.Tables.Services
 
             if (tableOrders.Count == 0)
             {
-                // Mesa huerfana: no hay pedidos asociados a esta atencion.
-                // Permite al cajero restaurar Disponible sin inventar una sesion.
-                return;
+                // Sin pedidos no hay evidencia para una liberación ordinaria.
+                // La revisión administrativa exige motivo y deja auditoría.
+                throw new InvalidOperationException(
+                    "La mesa no tiene pedidos asociados. Solicita un cierre administrativo con motivo.");
             }
 
             if (tableOrders.Count > 0 &&

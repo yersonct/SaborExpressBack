@@ -55,11 +55,27 @@ namespace SaborExpress.Modules.Payments.Services
                 var root = doc.RootElement;
 
                 var signature = root.GetProperty("signature");
-                var checksum = signature.GetProperty("checksum").GetString();
-                if (string.IsNullOrWhiteSpace(checksum))
-                    checksum = signatureHeader;
+                // Wompi puede enviar el checksum en el cuerpo, en el header o en ambos.
+                // Si están ambos presentes, deben coincidir. Comparar hashes en tiempo constante.
+                string? checksum = signature.TryGetProperty("checksum", out var bodyChecksum)
+                    ? bodyChecksum.GetString()
+                    : null;
+                var header = signatureHeader?.Trim();
+                checksum = string.IsNullOrWhiteSpace(checksum) ? header : checksum.Trim();
                 if (string.IsNullOrWhiteSpace(checksum))
                     return false;
+
+                var received = Convert.FromHexString(checksum);
+                if (received.Length != 32)
+                    return false;
+
+                if (!string.IsNullOrWhiteSpace(header))
+                {
+                    var fromHeader = Convert.FromHexString(header);
+                    if (fromHeader.Length != 32 ||
+                        !CryptographicOperations.FixedTimeEquals(received, fromHeader))
+                        return false;
+                }
 
                 var timestamp = root.GetProperty("timestamp").ToString();
 
@@ -74,11 +90,8 @@ namespace SaborExpress.Modules.Payments.Services
                 sb.Append(timestamp);
                 sb.Append(_eventsSecret);
 
-                var computed = Convert.ToHexString(
-                    SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()))
-                ).ToLower();
-
-                return computed == checksum.ToLower();
+                var computed = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
+                return CryptographicOperations.FixedTimeEquals(computed, received);
             }
             catch
             {
@@ -91,7 +104,8 @@ namespace SaborExpress.Modules.Payments.Services
         {
             var res = await _http.GetAsync($"transactions?reference={Uri.EscapeDataString(reference)}");
             var body = await res.Content.ReadAsStringAsync();
-            Console.WriteLine($"[WOMPI] GET {_http.BaseAddress}transactions?reference={reference} -> {(int)res.StatusCode} | {(body.Length > 300 ? body[..300] : body)}");
+            // No registrar el cuerpo de Wompi ni referencias de pago en consola:
+            // pueden contener información financiera que acabaría en los logs.
 
             if (!res.IsSuccessStatusCode)
                 return null;
