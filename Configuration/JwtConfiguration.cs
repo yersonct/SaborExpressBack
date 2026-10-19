@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SaborExpress.Modules.Auth.Interfaces;
+using SaborExpress.Modules.Auth.Helpers;
+using SaborExpress.Shared.Constants;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -119,20 +121,38 @@ namespace SaborExpress.Configuration
                         return;
                     }
 
-                    // Validación en CADA petición, incluso si el JWT se emitió ayer.
-                    // El Gerente es independiente de los turnos de Administrador.
-                    if (context.Principal?.IsInRole(SaborExpress.Shared.Constants.RoleNames.Administrador) == true &&
-                        context.Principal.IsInRole(SaborExpress.Shared.Constants.RoleNames.Gerente) == false)
+                    // Los roles del JWT deben coincidir con los privilegios del turno
+                    // en este instante. Protege tokens antiguos y cambios de turno sin
+                    // depender de que SignalR llegue a todos los dispositivos.
+                    var user = await authRepository.GetByIdWithRelationsAsync(userId);
+                    if (user == null || !user.Status)
                     {
-                        var schedules = context.HttpContext.RequestServices.GetRequiredService<
-                            SaborExpress.Modules.EmployeeSchedules.Interfaces.IEmployeeScheduleRepository>();
-                        if (!await schedules.CanActAsAdministratorAsync(
-                            userId, SaborExpress.Shared.Helpers.ColombiaTime.Now))
-                        {
-                            context.Fail("El turno de Administrador no está vigente.");
-                            return;
-                        }
+                        context.Fail("La cuenta ya no está habilitada.");
+                        return;
                     }
+
+                    var scheduleRepository = context.HttpContext.RequestServices.GetRequiredService<
+                        SaborExpress.Modules.EmployeeSchedules.Interfaces.IEmployeeScheduleRepository>();
+                    var snapshot = await EffectiveRolePolicy.ResolveAsync(user, scheduleRepository);
+
+                    var jwtRoles = context.Principal!.FindAll(ClaimTypes.Role)
+                        .Select(claim => claim.Value)
+                        .ToHashSet(StringComparer.Ordinal);
+                    if (!jwtRoles.SetEquals(snapshot.Roles))
+                    {
+                        context.Fail("Los permisos de tu turno cambiaron. Inicia sesión de nuevo.");
+                        return;
+                    }
+
+                    // Evita conservar un BranchId anterior si el empleado cambió de sede.
+                    var tokenBranch = context.Principal.FindFirst("BranchId")?.Value;
+                    var currentBranch = user.Employee?.BranchId?.ToString();
+                    if (tokenBranch != currentBranch)
+                    {
+                        context.Fail("Tu sede cambió. Inicia sesión de nuevo.");
+                        return;
+                    }
+
                 }
             };
         }

@@ -50,6 +50,7 @@ namespace SaborExpress.Data
         public DbSet<CashClosure> CashClosures => Set<CashClosure>();
 
         public DbSet<Table> Tables => Set<Table>();
+        public DbSet<TableReleaseAudit> TableReleaseAudits => Set<TableReleaseAudit>();
 
         public DbSet<Delivery> Deliveries => Set<Delivery>();
         public DbSet<Review> Reviews => Set<Review>();
