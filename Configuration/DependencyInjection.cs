@@ -285,6 +285,7 @@ namespace SaborExpress.Configuration
             services.AddScoped<ITableRepository, TableRepository>();
             services.AddScoped<ITableService, TableService>();
             services.AddScoped<ITableAvailabilityService, TableAvailabilityService>();
+            services.AddScoped<TableReleaseWorkflow>();
             services.AddScoped<TableValidator>();
 
             return services;
