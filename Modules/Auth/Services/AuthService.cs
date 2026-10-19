@@ -18,6 +18,9 @@
     using SaborExpress.Modules.Customers.Models;
     using SaborExpress.Modules.Notifications.Interfaces;
     using SaborExpress.Modules.Branches.Interfaces;
+    using SaborExpress.Data;
+    using Microsoft.EntityFrameworkCore;
+    using SaborExpress.Shared.Helpers;
 
     namespace SaborExpress.Modules.Auth.Services
     {
@@ -35,6 +38,7 @@
         private readonly INotificationRepository _notificationRepository;
         private readonly IConfiguration _configuration;
         private readonly IBranchRepository _branchRepository;
+        private readonly AppDbContext _db;
 
         // Serializa login y renovación para que un refresh antiguo no sustituya la sesión nueva.
         private static readonly ConcurrentDictionary<int, SemaphoreSlim> SessionLocks = new();
@@ -61,8 +65,10 @@
                 ICustomerRepository customerRepository,
                 INotificationRepository notificationRepository,
                 IConfiguration configuration,
-                IBranchRepository branchRepository)
+                IBranchRepository branchRepository,
+                AppDbContext db)
                 {
+                    _db = db;
                     _branchRepository = branchRepository;
                     _configuration = configuration;
                     _customerRepository = customerRepository;
@@ -200,6 +206,15 @@
             if (user.Employee?.BranchId is not int branchId) return;
 
             if (user.UserRoles.Any(ur => WebPanelRoles.Contains(ur.Role.Name))) return;
+
+            // No se emiten ni renuevan sesiones operativas luego del cierre
+            // de la sede. La regla expira automáticamente al cambiar de día
+            // en zona horaria Colombia.
+            var today = DateOnly.FromDateTime(ColombiaTime.Now);
+            if (await _db.CashClosures.AsNoTracking().AnyAsync(c =>
+                c.BranchId == branchId && c.ShiftDate == today && c.ReopenedAtUtc == null))
+                throw new UnauthorizedAccessException(
+                    "La caja de hoy ya fue cerrada. Podrás ingresar en tu próximo turno, otro día.");
 
             var branch = await _branchRepository.GetByIdAsync(branchId);
             if (branch is { Status: false })

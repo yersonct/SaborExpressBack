@@ -7,6 +7,8 @@ using SaborExpress.Modules.Deliveries.Models;
 using SaborExpress.Modules.Orders.Enum;
 using SaborExpress.Modules.Orders.Models;
 using SaborExpress.Shared.Constants;
+using SaborExpress.Shared.Helpers;
+using SaborExpress.Modules.EmployeeSchedules.Enum;
 using SaborExpress.Modules.Payments.Enum;
 
 namespace SaborExpress.Modules.Deliveries.Repositories
@@ -102,11 +104,25 @@ namespace SaborExpress.Modules.Deliveries.Repositories
 
         public async Task<List<DeliveryPersonLoad>> GetAvailableDeliveryPersonsWithLoadAsync(int branchId)
         {
+            var nowCo = ColombiaTime.Now;
+            var today = DateOnly.FromDateTime(nowCo);
+            var currentTime = TimeOnly.FromDateTime(nowCo);
+            var heartbeatThreshold = DateTime.UtcNow.AddMinutes(-3);
+
             return await _context.Employees
                 .Where(e => e.BranchId == branchId
                     && e.Status == "Activo"
                     && e.IsAvailable
-                    && e.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Repartidor))
+                    && e.LastCourierHeartbeatAt >= heartbeatThreshold
+                    && e.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Repartidor)
+                    && _context.EmployeeSchedules.Any(shift =>
+                        shift.EmployeeId == e.Id
+                        && shift.BranchId == branchId
+                        && shift.ShiftDate == today
+                        && shift.Status == ScheduleStatus.Programado
+                        && shift.Role.Name == RoleNames.Repartidor
+                        && shift.StartTime <= currentTime
+                        && shift.EndTime >= currentTime))
                 .Select(e => new DeliveryPersonLoad
                 {
                     EmployeeId = e.Id,
@@ -176,7 +192,9 @@ namespace SaborExpress.Modules.Deliveries.Repositories
             return await _context.Orders
                 .Where(o => o.BranchId == branchId
                     && o.OrderType == OrderType.Delivery
-                    && o.Status == OrderStatus.Confirmed
+                    && (o.Status == OrderStatus.Confirmed
+                        || o.Status == OrderStatus.InPreparation
+                        || o.Status == OrderStatus.Ready)
                     && o.AddressId != null
                     && !_context.Deliveries.Any(d => d.OrderId == o.Id))
                 .OrderBy(o => o.CreatedAt)

@@ -100,6 +100,7 @@ namespace SaborExpress.Modules.Configurations.Services
             await _realtime.AdminDataChangedAsync("EmployeeSchedules");
             await _realtime.AdminDataChangedAsync("Employees");
             await _realtime.BranchOperationalSettingsChangedAsync(branchId);
+            await _realtime.PublicBranchesChangedAsync();
             try
             {
                 await _deliveryAssignmentService.AssignPendingForBranchAsync(branchId);

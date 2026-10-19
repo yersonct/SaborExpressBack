@@ -13,6 +13,7 @@ using SaborExpress.Modules.Tables.Interfaces;
 using SaborExpress.Modules.Tables.Enum;
 using SaborExpress.Modules.Tables.Models;
 using SaborExpress.Modules.Branches.Interfaces;
+using SaborExpress.Modules.Branches.Services;
 using SaborExpress.Modules.EmployeeSchedules.Interfaces;
 using SaborExpress.Modules.Addresses.Interfaces;
 using SaborExpress.Modules.Deliveries.Interfaces;
@@ -47,6 +48,7 @@ namespace SaborExpress.Modules.Orders.Services
         private readonly IDeliveryRepository _deliveryRepository;
         private readonly IRealtimeNotifier _realtime;
         private readonly IBranchOperationalSettingsRepository _settingsRepository;
+        private readonly BranchAvailabilityService _availability;
 
         public OrderService(
             IOrderRepository orderRepository,
@@ -67,8 +69,10 @@ namespace SaborExpress.Modules.Orders.Services
             IPaymentRepository paymentRepository,
             IDeliveryRepository deliveryRepository,
           IRealtimeNotifier realtime,
-            IBranchOperationalSettingsRepository settingsRepository)
+            IBranchOperationalSettingsRepository settingsRepository,
+            BranchAvailabilityService availability)
         {
+            _availability = availability;
             _settingsRepository = settingsRepository;
             _realtime = realtime;
             _orderRepository = orderRepository;
@@ -140,7 +144,10 @@ namespace SaborExpress.Modules.Orders.Services
             SubTotal = 0,
             Tax = 0,
             TaxRate = settings.TaxRate,
-            TaxIncludedInPrice = true,
+            // Fix21: nuevos pedidos aplican el INC sobre el subtotal;
+            // el domicilio se agrega despues y no esta gravado.
+            // Los pedidos anteriores mantienen la modalidad que tienen guardada.
+            TaxIncludedInPrice = false,
             DeliveryFee = dto.OrderType == OrderType.Delivery ? settings.DeliveryFee : 0m,
             Total = 0
         };
@@ -667,29 +674,8 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                     "No podemos llevar el pedido a esa dirección.");
         }
 
-        private async Task EnsureBranchIsOpenAsync(int branchId)
-        {
-            var openingConfig = await _configurationRepository.GetByKeyAsync(branchId, "OPENING_TIME");
-            var closingConfig = await _configurationRepository.GetByKeyAsync(branchId, "CLOSING_TIME");
-
-            if (openingConfig == null || closingConfig == null)
-                return;
-
-            if (!TimeOnly.TryParse(openingConfig.Value, out var opening) ||
-                !TimeOnly.TryParse(closingConfig.Value, out var closing))
-            {
-                return;
-            }
-
-            var now = TimeOnly.FromDateTime(DateTime.Now);
-
-            var isOpen = opening < closing
-                ? now >= opening && now <= closing
-                : now >= opening || now <= closing;
-
-            if (!isOpen)
-                throw new InvalidOperationException($"La sede esta cerrada. Horario: {opening:HH:mm} - {closing:HH:mm}.");
-        }
+        private Task EnsureBranchIsOpenAsync(int branchId) =>
+            _availability.EnsureCanAcceptNewOrderAsync(branchId);
 
         private async Task EnsureCanEditOrderAsync(Order order, int employeeId)
         {

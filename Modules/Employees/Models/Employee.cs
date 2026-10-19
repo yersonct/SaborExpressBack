@@ -24,6 +24,8 @@ namespace SaborExpress.Modules.Employees.Models
         // NUEVO: toggle online/offline, solo relevante para Repartidor.
         // Para otros roles queda en true por defecto y se ignora.
         public bool IsAvailable { get; set; } = true;
+        // Presencia reciente de la app del repartidor; independiente del permiso GPS.
+        public DateTime? LastCourierHeartbeatAt { get; set; }
         public decimal? CurrentLatitude { get; set; }
         public decimal? CurrentLongitude { get; set; }
         public DateTime? LocationUpdatedAt { get; set; }

@@ -41,6 +41,9 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.IsAvailable)
                 .HasDefaultValue(true);
+            builder.Property(x => x.LastCourierHeartbeatAt)
+                .HasColumnName("last_courier_heartbeat_at")
+                .HasColumnType("timestamp with time zone");
 
             builder.Property(x => x.CurrentLatitude)
                 .HasColumnName("current_latitude")

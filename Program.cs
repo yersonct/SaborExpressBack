@@ -98,6 +98,7 @@ app.UseStaticFiles();
 app.UseCors("AllowAll");
 
 app.UseAuthentication();
+app.UseMiddleware<ClosedBranchGuardMiddleware>();
 app.UseMiddleware<WebRequestRealtimeMiddleware>();
 app.UseAuthorization();
 app.MapControllers();

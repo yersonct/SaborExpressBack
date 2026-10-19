@@ -415,11 +415,15 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
             var employee = await _employeeRepository.GetByIdAsync(employeeId)
                 ?? throw new KeyNotFoundException("Empleado no encontrado.");
 
+            var isRepartidor = employee.User?.UserRoles.Any(ur => ur.Role.Name == RoleNames.Repartidor) ?? false;
             employee.IsAvailable = isAvailable;
+            // Cada heartbeat desde la app mantiene la presencia viva. Al salir
+            // de la app, el vencimiento automático evita asignaciones a ausentes.
+            if (isRepartidor)
+                employee.LastCourierHeartbeatAt = isAvailable ? DateTime.UtcNow : null;
             await _employeeRepository.UpdateAsync(employee);
 
-            // Si se puso disponible, reintenta asignar pedidos que quedaron sin repartidor
-            var isRepartidor = employee.User?.UserRoles.Any(ur => ur.Role.Name == RoleNames.Repartidor) ?? false;
+            // Solo los repartidores reactivan la cola, sin modificar otros roles.
             if (isAvailable && isRepartidor && employee.BranchId.HasValue)
             {
                 try

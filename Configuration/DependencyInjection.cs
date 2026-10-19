@@ -52,6 +52,7 @@ using SaborExpress.Modules.Orders.Validators;
 using SaborExpress.Modules.Payments.Interfaces;
 using SaborExpress.Modules.Payments.Repositories;
 using SaborExpress.Modules.Payments.Services;
+using SaborExpress.Modules.CashClosures.Services;
 using SaborExpress.Modules.Payments.Validators;
 
 using SaborExpress.Modules.Tables.Interfaces;
@@ -113,6 +114,7 @@ namespace SaborExpress.Configuration
             services.AddCustomersModule();
             services.AddEmployeesModule();
             services.AddBranchesModule();
+            services.AddScoped<BranchAvailabilityService>();
             services.AddCategoriesModule();
             services.AddProductsModule();
             services.AddOrderDetailModule();
@@ -272,6 +274,7 @@ namespace SaborExpress.Configuration
         {
             services.AddScoped<IPaymentRepository, PaymentRepository>();
             services.AddScoped<IPaymentService, PaymentService>();
+            services.AddScoped<CashClosureService>();
             services.AddScoped<PaymentValidator>();
             services.AddHttpClient<IWompiClient, WompiClient>();
 
