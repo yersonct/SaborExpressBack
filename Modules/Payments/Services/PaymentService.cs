@@ -343,11 +343,30 @@ namespace SaborExpress.Modules.Payments.Services
 
             if (payment == null)
             {
-                _logger.LogWarning("Webhook Wompi: no existe un pago con la referencia {Ref}", tx.Reference);
+                _logger.LogWarning("Webhook Wompi: no existe un pago para la referencia recibida.");
                 return;
             }
 
-            await ApplyWompiResultAsync(payment, tx.Id, tx.Status, tx.AmountInCents);
+            // La firma puede NO cubrir transaction.reference: sus propiedades son
+            // variables según Wompi. Confirmar la referencia y el ID contra la API
+            // autenticada de Wompi antes de modificar pagos de nuestra BD.
+            var confirmed = await _wompiClient.GetTransactionByReferenceAsync(tx.Reference);
+            if (confirmed == null)
+            {
+                _logger.LogWarning("No se pudo corroborar el evento Wompi con la API oficial.");
+                throw new HttpRequestException("No fue posible verificar la transacción Wompi.");
+            }
+
+            if (!string.Equals(confirmed.Reference, tx.Reference, StringComparison.Ordinal) ||
+                !string.Equals(confirmed.Id, tx.Id, StringComparison.Ordinal) ||
+                !string.Equals(confirmed.Status, tx.Status, StringComparison.Ordinal) ||
+                confirmed.AmountInCents != tx.AmountInCents)
+            {
+                _logger.LogWarning("Evento Wompi firmado no coincide con la transacción consultada.");
+                throw new UnauthorizedAccessException("La transacción Wompi no coincide.");
+            }
+
+            await ApplyWompiResultAsync(payment, confirmed.Id, confirmed.Status, confirmed.AmountInCents);
         }
 
         // Respaldo del webhook: el front llama esto mientras hace polling.
@@ -370,7 +389,8 @@ namespace SaborExpress.Modules.Payments.Services
             if (payment.Status == PaymentStatus.Pending && payment.WompiReference != null)
             {
                 var tx = await _wompiClient.GetTransactionByReferenceAsync(payment.WompiReference);
-                if (tx != null)
+                if (tx != null && string.Equals(tx.Reference, payment.WompiReference,
+                    StringComparison.Ordinal))
                     await ApplyWompiResultAsync(payment, tx.Id, tx.Status, tx.AmountInCents);
             }
 
@@ -391,7 +411,8 @@ namespace SaborExpress.Modules.Payments.Services
                 try
                 {
                     var tx = await _wompiClient.GetTransactionByReferenceAsync(payment.WompiReference!);
-                    if (tx != null)
+                    if (tx != null && string.Equals(tx.Reference, payment.WompiReference,
+                        StringComparison.Ordinal))
                         await ApplyWompiResultAsync(payment, tx.Id, tx.Status, tx.AmountInCents);
                 }
                 catch (Exception ex)
@@ -415,17 +436,30 @@ namespace SaborExpress.Modules.Payments.Services
                 return;
             }
 
-            payment.WompiTransactionId = txId;
+            var terminalStatus = status switch
+            {
+                "APPROVED" => PaymentStatus.Completed,
+                "DECLINED" or "ERROR" or "VOIDED" => PaymentStatus.Failed,
+                _ => PaymentStatus.Pending
+            };
+
+            if (terminalStatus == PaymentStatus.Pending)
+                return;
+
+            // Compare-and-set SQL. Solamente el proceso ganador dispara efectos
+            // posteriores (notificaciones, confirmación del pedido, mesa y SignalR).
+            if (!await _paymentRepository.TryTransitionWompiStatusAsync(
+                payment.Id, terminalStatus, txId))
+            {
+                _logger.LogDebug("Resultado Wompi repetido o ya procesado (pago {Id})", payment.Id);
+                return;
+            }
+
             _logger.LogInformation("Pago {Id} -> estado Wompi {Status}", payment.Id, status);
 
             switch (status)
             {
                 case "APPROVED":
-                    payment.Status = PaymentStatus.Completed;
-                    await _paymentRepository.UpdateAsync(payment);
-                    await _paymentRepository.SaveChangesAsync();
-                    await _realtime.PaymentsChangedAsync();
-
                     var order = await _orderRepository.GetByIdAsync(payment.OrderId);
                     _logger.LogInformation("Pago {PaymentId} aprobado. Pedido {OrderId} estado actual: {Status}", payment.Id, payment.OrderId, order?.Status);
                     if (order != null && order.Status == OrderStatus.Pending)
@@ -451,6 +485,8 @@ namespace SaborExpress.Modules.Payments.Services
                         if (order.OrderType == OrderType.Delivery && payment.CashierId == null)
                             await NotifyPaidDeliveryAsync(order.Id, order.BranchId);
                     }
+
+                    await _realtime.PaymentsChangedAsync();
 
                     // 1) Primero el cliente: es lo más importante y no debe depender de nada más
                     if (order != null)
@@ -486,9 +522,6 @@ namespace SaborExpress.Modules.Payments.Services
                 case "DECLINED":
                 case "ERROR":
                 case "VOIDED":
-                    payment.Status = PaymentStatus.Failed;
-                    await _paymentRepository.UpdateAsync(payment);
-                    await _paymentRepository.SaveChangesAsync();
                     await _realtime.PaymentsChangedAsync();
                     await _realtime.OrdersChangedAsync();
                     break;

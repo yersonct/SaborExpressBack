@@ -7,6 +7,7 @@ using SaborExpress.Modules.Tables.Models;
 using SaborExpress.Modules.Tables.Validators;
 using SaborExpress.Modules.Tables.Enum;
 using SaborExpress.Shared.Constants;
+using SaborExpress.Shared.Exceptions;
 using SaborExpress.Shared.Extensions;
 using SaborExpress.Shared.Interfaces;
 
@@ -20,6 +21,7 @@ namespace SaborExpress.Modules.Tables.Services
         private readonly IAuthorizationService _authorizationService;
         private readonly IRealtimeNotifier _realtime;
         private readonly ITableAvailabilityService _tableAvailabilityService;
+        private readonly TableReleaseWorkflow _releaseWorkflow;
 
         public TableService(
             ITableRepository tableRepository,
@@ -27,9 +29,11 @@ namespace SaborExpress.Modules.Tables.Services
             IAuthRepository authRepository,
             IAuthorizationService authorizationService,
             IRealtimeNotifier realtime,
-            ITableAvailabilityService tableAvailabilityService)
+            ITableAvailabilityService tableAvailabilityService,
+            TableReleaseWorkflow releaseWorkflow)
         {
             _tableAvailabilityService = tableAvailabilityService;
+            _releaseWorkflow = releaseWorkflow;
             _realtime = realtime;
             _tableRepository = tableRepository;
             _validator = validator;
@@ -37,18 +41,29 @@ namespace SaborExpress.Modules.Tables.Services
             _authorizationService = authorizationService;              
         }
 
-        public async Task<List<TableResponseDto>> GetByBranchIdAsync(int branchId)
+        public Task<TableReleaseReviewDto> GetReleaseReviewAsync(int id, int currentUserId)
+            => _releaseWorkflow.GetReviewAsync(id, currentUserId);
+
+        public Task<List<TableReleaseReviewDto>> GetPreviousDayReleaseReviewsAsync(int branchId, int currentUserId)
+            => _releaseWorkflow.ListPreviousAsync(branchId, currentUserId);
+
+        public Task<TableResponseDto> ReleasePreviousDayAsync(int id, ReleasePreviousTableDto dto, int currentUserId)
+            => _releaseWorkflow.ReleasePreviousAsync(id, dto, currentUserId);
+
+        public async Task<List<TableResponseDto>> GetByBranchIdAsync(int branchId, int currentUserId)
         {
+            await EnsureCanReadTablesAsync(branchId, currentUserId);
             var tables = await _tableRepository.GetByBranchIdAsync(branchId);
             return tables.Select(TableMapper.ToResponse).ToList();
         }
 
-        public async Task<TableResponseDto> GetByIdAsync(int id)
+        public async Task<TableResponseDto> GetByIdAsync(int id, int currentUserId)
         {
             var table = await _tableRepository.GetByIdAsync(id);
             if (table == null)
                 throw new ArgumentException("La mesa no existe");
 
+            await EnsureCanReadTablesAsync(table.BranchId, currentUserId);
             return TableMapper.ToResponse(table);
         }
 
@@ -100,6 +115,12 @@ namespace SaborExpress.Modules.Tables.Services
 
             if (dto.Status == TableStatus.Available)
             {
+                // Caja no puede evadir la revisión de jornada anterior usando PATCH /status.
+                var actor = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                    ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+                if (actor.HasRole(RoleNames.Cajero) &&
+                    !actor.HasRole(RoleNames.Administrador) && !actor.HasRole(RoleNames.Gerente))
+                    throw new InvalidOperationException("Para liberar mesas usa el cierre validado de jornada anterior.");
                 await _tableAvailabilityService.EnsureCanSetAvailableAsync(id);
                 table.CurrentSessionId = null;
             }
@@ -132,6 +153,27 @@ namespace SaborExpress.Modules.Tables.Services
             await _realtime.TablesChangedAsync();
         }
 
+        // Las consultas de mesas también requieren aislamiento entre sedes.
+        // Gerente: acceso global; empleados operativos: exclusivamente su sede.
+        private async Task EnsureCanReadTablesAsync(int branchId, int currentUserId)
+        {
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            if (currentUser.HasRole(RoleNames.Gerente))
+                return;
+
+            if (currentUser.Employee?.BranchId != branchId)
+                throw new ForbiddenException("No tienes permiso para consultar mesas de esta sede.");
+
+            if (!currentUser.HasRole(RoleNames.Administrador) &&
+                !currentUser.HasRole(RoleNames.Mesero) &&
+                !currentUser.HasRole(RoleNames.Cajero) &&
+                !currentUser.HasRole(RoleNames.Cocinero) &&
+                !currentUser.HasRole(RoleNames.AuxiliarCocina))
+                throw new ForbiddenException("No tienes permiso para consultar mesas.");
+        }
+
         // Para Create/Update/Delete: estructura de la mesa en sí.
         // Solo Gerente (cualquier sede) o Administrador (su propia sede).
         private async Task EnsureCanManageTableAsync(int branchId, int currentUserId)
@@ -143,7 +185,7 @@ namespace SaborExpress.Modules.Tables.Services
                 return;
 
             if (currentUser.Employee?.BranchId != branchId)
-                throw new InvalidOperationException("Solo puedes gestionar mesas de la sede a la que perteneces.");
+                throw new ForbiddenException("Solo puedes gestionar mesas de la sede a la que perteneces.");
         }
 
         // Para UpdateStatus: operación del día a día.
@@ -158,7 +200,7 @@ namespace SaborExpress.Modules.Tables.Services
                 return;
 
             if (currentUser.Employee?.BranchId != branchId)
-                throw new InvalidOperationException("Solo puedes gestionar mesas de la sede a la que perteneces.");
+                throw new ForbiddenException("Solo puedes gestionar mesas de la sede a la que perteneces.");
 
             if (currentUser.HasRole(RoleNames.Administrador) || currentUser.HasRole(RoleNames.Cajero))
                 return;
