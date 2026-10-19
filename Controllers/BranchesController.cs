@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SaborExpress.Modules.Branches.DTOs;
@@ -74,13 +74,20 @@ namespace SaborExpress.Controllers
             [FromQuery] decimal longitude)
         {
             var branch = await _branchService.FindNearestBranchAsync(latitude, longitude);
-            return Ok(new PublicBranchDto
+            // La sede más cercana también incluye el estado actualizado,
+            // para que la pantalla del cliente no muestre una sede cerrada como abierta.
+            var publicBranches = await _branchService.GetPublicActiveAsync();
+            var publicBranch = publicBranches.FirstOrDefault(b => b.Id == branch.Id);
+            return Ok(publicBranch ?? new PublicBranchDto
             {
                 Id = branch.Id,
                 Name = branch.Name,
                 Address = branch.Address,
                 Latitude = branch.Latitude,
                 Longitude = branch.Longitude,
+                IsActive = true,
+                IsOpen = false,
+                UnavailableReason = "No se pudo verificar el horario de la sede."
             });
         }
     }

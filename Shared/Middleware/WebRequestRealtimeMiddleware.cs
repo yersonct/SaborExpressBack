@@ -29,19 +29,19 @@ public sealed class WebRequestRealtimeMiddleware
         // El cambio ya fue procesado por el controlador. Avisamos a las
         // sesiones del panel inmediatamente, solo cuando la escritura terminó
         // correctamente; la respuesta HTTP no se reemplaza ni se retrasa.
-        if (context.Response.StatusCode is >= 200 and < 300
-            && !HasExistingRealtimeEvent(module))
+        if (context.Response.StatusCode is >= 200 and < 300)
         {
-            _ = SendSafeAsync(
-                hub,
-                logger,
-                "AdminDataChanged",
-                new
-                {
-                    module,
-                    method,
-                    changedAt = DateTimeOffset.UtcNow
-                });
+            if (!HasExistingRealtimeEvent(module))
+            {
+                await SendSafeAsync(
+                    hub, logger, "AdminDataChanged",
+                    new { module, method, changedAt = DateTimeOffset.UtcNow });
+            }
+            if (module == "EmployeeSchedules")
+            {
+                try { await hub.Clients.All.SendAsync("EmployeeSchedulesChanged"); }
+                catch (Exception ex) { logger.LogWarning(ex, "Error notificando turnos por SignalR"); }
+            }
         }
     }
 
@@ -62,17 +62,14 @@ public sealed class WebRequestRealtimeMiddleware
             || HttpMethods.IsPut(request.Method)
             || HttpMethods.IsPatch(request.Method)
             || HttpMethods.IsDelete(request.Method);
-        var isAdminWebRequest = string.Equals(
-            request.Headers["X-Client-App"].ToString(),
-            "admin-web",
-            StringComparison.OrdinalIgnoreCase);
-        var isManagementUser = context.User.IsInRole(RoleNames.Gerente)
-            || context.User.IsInRole(RoleNames.Administrador);
-
+        // Registrar también mutaciones del móvil y paneles administrativos.
+        // Evitar negociar eventos en autenticación o rutas fuera de /api.
         return isWriteRequest
-            && isAdminWebRequest
-            && isManagementUser
-            && request.Path.StartsWithSegments("/api");
+            && context.User.Identity?.IsAuthenticated == true
+            && request.Path.StartsWithSegments("/api")
+            && !request.Path.StartsWithSegments("/api/auth")
+            && !request.Path.StartsWithSegments("/api/notifications")
+            && !request.Path.StartsWithSegments("/api/CashClosures");
     }
 
     private static string GetModule(PathString path)

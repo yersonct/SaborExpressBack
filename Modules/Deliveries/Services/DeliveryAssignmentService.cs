@@ -9,6 +9,7 @@ using SaborExpress.Modules.Notifications.Interfaces;
 using SaborExpress.Modules.Orders.Enum;
 using SaborExpress.Modules.Orders.Interfaces;
 using SaborExpress.Shared.Helpers;
+using SaborExpress.Shared.Interfaces;
 
 namespace SaborExpress.Modules.Deliveries.Services
 {
@@ -24,6 +25,7 @@ namespace SaborExpress.Modules.Deliveries.Services
         private readonly IBranchOperationalSettingsRepository _settingsRepository;
         private readonly IUserNotificationService _notificationService;
         private readonly IAuthRepository _authRepository;
+        private readonly IRealtimeNotifier _realtime;
         private readonly ILogger<DeliveryAssignmentService> _logger;
 
         public DeliveryAssignmentService(
@@ -33,6 +35,7 @@ namespace SaborExpress.Modules.Deliveries.Services
             IBranchOperationalSettingsRepository settingsRepository,
             IUserNotificationService notificationService,
             IAuthRepository authRepository,
+            IRealtimeNotifier realtime,
             ILogger<DeliveryAssignmentService> logger)
         {
             _deliveryRepository = deliveryRepository;
@@ -41,6 +44,7 @@ namespace SaborExpress.Modules.Deliveries.Services
             _settingsRepository = settingsRepository;
             _notificationService = notificationService;
             _authRepository = authRepository;
+            _realtime = realtime;
             _logger = logger;
         }
 
@@ -91,7 +95,10 @@ namespace SaborExpress.Modules.Deliveries.Services
             if (order == null
                 || order.OrderType != OrderType.Delivery
                 || order.BranchId != branchId
-                || order.AddressId is null)
+                || order.AddressId is null
+                || (order.Status != OrderStatus.Confirmed
+                    && order.Status != OrderStatus.InPreparation
+                    && order.Status != OrderStatus.Ready))
                 return;
 
             if (await _deliveryRepository.OrderHasDeliveryAsync(orderId))
@@ -141,6 +148,16 @@ namespace SaborExpress.Modules.Deliveries.Services
 
             await _deliveryRepository.AddAsync(delivery);
             await _deliveryRepository.SaveChangesAsync();
+
+            // La persistencia ya terminó: notificar a móvil y panel web.
+            try
+            {
+                await _realtime.DeliveriesChangedAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Entrega {OrderId} asignada, pero falló el evento en tiempo real.", orderId);
+            }
 
             _logger.LogInformation(
                 "Pedido {OrderId} asignado al repartidor {EmployeeId}, que tenía {ActiveCount} domicilios activos.",

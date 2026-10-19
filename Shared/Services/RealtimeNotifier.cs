@@ -30,7 +30,12 @@ public class RealtimeNotifier : IRealtimeNotifier
     public Task ProductsChangedAsync() => SendSafeAsync("ProductsChanged");
     public Task PaymentsChangedAsync() => SendSafeAsync("PaymentsChanged");
     public Task PublicMenuChangedAsync() => SendPublicMenuChangedSafe();
-    public Task PublicBranchesChangedAsync() => SendPublicBranchesChangedSafe();
+    public async Task PublicBranchesChangedAsync()
+    {
+        await Task.WhenAll(
+            SendPublicBranchesChangedSafe(),
+            SendSafeAsync("PublicBranchesChanged"));
+    }
     public Task AdminDataChangedAsync(string module) => SendAdminDataChangedSafe(module);
     public Task ReviewsChangedAsync() => SendSafeAsync("ReviewsChanged");
     public Task DeliveriesChangedAsync() => SendSafeAsync("DeliveriesChanged");

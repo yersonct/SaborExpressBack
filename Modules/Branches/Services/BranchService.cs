@@ -1,4 +1,4 @@
-﻿using SaborExpress.Modules.Branches.DTOs;
+using SaborExpress.Modules.Branches.DTOs;
 using SaborExpress.Modules.Branches.Interfaces;
 using SaborExpress.Modules.Configurations.Interfaces;
 using SaborExpress.Modules.Branches.Mappings;
@@ -15,6 +15,7 @@ namespace SaborExpress.Modules.Branches.Services
     {
         private readonly IBranchRepository _branchRepository;
         private readonly IBranchOperationalSettingsRepository _settingsRepository;
+        private readonly BranchAvailabilityService _availability;
         private readonly BranchValidator _validator;
         private readonly IBranchAccessGuard _accessGuard;
         private readonly IGeocodingService _geocodingService;
@@ -32,8 +33,10 @@ namespace SaborExpress.Modules.Branches.Services
             IAuthRepository authRepository,
             IEmployeeRepository employeeRepository,
             IRefreshTokenRepository refreshTokenRepository,
-            IRealtimeNotifier realtime)
+            IRealtimeNotifier realtime,
+            BranchAvailabilityService availability)
         {
+            _availability = availability;
             _branchRepository = branchRepository;
             _settingsRepository = settingsRepository;
             _validator = validator;
@@ -90,19 +93,31 @@ namespace SaborExpress.Modules.Branches.Services
         public async Task<List<PublicBranchDto>> GetPublicActiveAsync()
         {
             var summaries = await _branchRepository.GetAllSummariesAsync();
-
-            return summaries
-                .Where(s => s.Status) // solo sedes activas
-                .Select(s => new PublicBranchDto
+            var result = new List<PublicBranchDto>();
+            // Una sola instancia DbContext por petición: no ejecutar estas
+            // consultas en paralelo (EF Core no permite operaciones concurrentes).
+            foreach (var summary in summaries)
+            {
+                var available = await _availability.GetAsync(summary.Id);
+                result.Add(new PublicBranchDto
                 {
-                    Id = s.Id,
-                    Name = s.Name,
-                    Address = s.Address,
-                    Phone = s.Phone,
-                    Latitude = s.Latitude,
-                    Longitude = s.Longitude,
-                })
-                .ToList();
+                    Id = summary.Id,
+                    Name = summary.Name,
+                    Address = summary.Address,
+                    Phone = summary.Phone,
+                    Latitude = summary.Latitude,
+                    Longitude = summary.Longitude,
+                    IsActive = available.IsActive,
+                    IsOpen = available.IsOpen,
+                    HasSchedule = available.HasSchedule,
+                    OpeningTime = available.OpeningTime,
+                    ClosingTime = available.ClosingTime,
+                    UnavailableReason = available.UnavailableReason
+                });
+            }
+            // Incluso las sedes cerradas siguen visibles en el mapa,
+            // pero el cliente no puede seleccionarlas para realizar un pedido.
+            return result;
         }
         public async Task<BranchResponseDto> UpdateAsync(int id, UpdateBranchDto dto, int currentUserId)
         {
