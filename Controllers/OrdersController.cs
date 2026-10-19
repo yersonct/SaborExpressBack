@@ -8,6 +8,9 @@ using SaborExpress.Modules.Payments.Enum;
 using SaborExpress.Modules.Payments.Interfaces;
 using SaborExpress.Shared.Extensions;
 using SaborExpress.Shared.Constants;
+using SaborExpress.Modules.Auth.Interfaces;
+using SaborExpress.Modules.Tables.Interfaces;
+using SaborExpress.Shared.Security;
 
 namespace SaborExpress.Controllers
 {
@@ -19,12 +22,27 @@ namespace SaborExpress.Controllers
     {
         private readonly IOrderService _orderService;
         private readonly IPaymentRepository _paymentRepository;
+        private readonly IAuthRepository _authRepository;
+        private readonly IOrderRepository _orderRepository;
+        private readonly ITableRepository _tableRepository;
 
-        public OrdersController(IOrderService orderService, IPaymentRepository paymentRepository)
+        public OrdersController(
+            IOrderService orderService,
+            IPaymentRepository paymentRepository,
+            IAuthRepository authRepository,
+            IOrderRepository orderRepository,
+            ITableRepository tableRepository)
         {
             _orderService = orderService;
             _paymentRepository = paymentRepository;
+            _authRepository = authRepository;
+            _orderRepository = orderRepository;
+            _tableRepository = tableRepository;
         }
+
+        private async Task<SaborExpress.Modules.Auth.Models.User> GetActorAsync()
+            => await _authRepository.GetByIdWithRelationsAsync(this.GetCurrentUserId())
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
 
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateOrderDto dto)
@@ -39,21 +57,48 @@ namespace SaborExpress.Controllers
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
+            var order = await _orderRepository.GetByIdAsync(id);
+            if (order == null) return NotFound();
+
+            var actor = await GetActorAsync();
+            if (!ResourceReadPolicy.CanReadOrder(User, actor, order)) return Forbid();
+
             var result = await _orderService.GetByIdAsync(id);
             return Ok(result);
         }
 
         [HttpGet]
+        [Authorize(Roles = "GERENTE,ADMINISTRADOR,MESERO,CAJERO,COCINERO,AUXILIAR_COCINA")]
         public async Task<IActionResult> GetAll([FromQuery] OrderFilterDto filter)
         {
-            var currentUserId = this.GetCurrentUserId();
-            var result = await _orderService.GetAllAsync(filter, currentUserId);
+            var actor = await GetActorAsync();
+            if (!User.IsInRole(RoleNames.Gerente))
+            {
+                var branchId = actor.Employee?.BranchId;
+                if (!branchId.HasValue ||
+                    (filter.BranchId.HasValue && filter.BranchId != branchId)) return Forbid();
+
+                // No confiar en los roles persistentes del servicio: forzar la sede efectiva.
+                filter.BranchId = branchId;
+            }
+
+            var result = await _orderService.GetAllAsync(filter, actor.Id);
+            // No ampliar la visibilidad del MESERO si tiene otros roles historicos asignados.
+            if (User.IsInRole(RoleNames.Mesero))
+                return Ok(result.Where(order => order.EmployeeId == actor.Employee?.Id).ToList());
             return Ok(result);
         }
 
         [HttpGet("table/{tableId:int}")]
+        [Authorize(Roles = "GERENTE,ADMINISTRADOR,MESERO,CAJERO,COCINERO,AUXILIAR_COCINA")]
         public async Task<IActionResult> GetByTable(int tableId)
         {
+            var table = await _tableRepository.GetByIdAsync(tableId);
+            if (table == null) return NotFound();
+
+            var actor = await GetActorAsync();
+            if (!ResourceReadPolicy.CanReadBranch(User, actor, table.BranchId)) return Forbid();
+
             var result = await _orderService.GetByTableIdAsync(tableId);
             return Ok(result);
         }
@@ -61,25 +106,37 @@ namespace SaborExpress.Controllers
         [HttpGet("customer/{customerId:int}")]
         public async Task<IActionResult> GetByCustomer(int customerId)
         {
+            var actor = await GetActorAsync();
+            if (User.IsInRole(RoleNames.Cliente) && actor.Customer?.Id != customerId)
+                return Forbid();
+
             var result = await _orderService.GetByCustomerIdAsync(customerId);
-            return Ok(result);
+            // Para empleados, limitar al ámbito permitido; repartidores, solo asignados.
+            var visible = result.Where(order =>
+                ResourceReadPolicy.CanReadOrderSummary(User, actor, order)).ToList();
+            return Ok(visible);
         }
 
         [HttpGet("branch/{branchId:int}")]
+        [Authorize(Roles = "GERENTE,ADMINISTRADOR,MESERO,CAJERO,COCINERO,AUXILIAR_COCINA")]
         public async Task<IActionResult> GetByBranch(int branchId)
         {
-            var currentUserId = this.GetCurrentUserId();
-            var result = await _orderService.GetByBranchIdAsync(branchId, currentUserId);
+            var actor = await GetActorAsync();
+            if (!ResourceReadPolicy.CanReadBranch(User, actor, branchId)) return Forbid();
+
+            var result = await _orderService.GetByBranchIdAsync(branchId, actor.Id);
             return Ok(result);
         }
 
         [HttpGet("branch/{branchId:int}/occupied-tables")]
+        [Authorize(Roles = "GERENTE,ADMINISTRADOR,MESERO,CAJERO,COCINERO,AUXILIAR_COCINA")]
         public async Task<IActionResult> GetOccupiedTableWaiters(int branchId)
         {
-            var currentUserId = this.GetCurrentUserId();
+            var actor = await GetActorAsync();
+            if (!ResourceReadPolicy.CanReadBranch(User, actor, branchId)) return Forbid();
+
             var result = await _orderService.GetOccupiedTableWaitersByBranchIdAsync(
-                branchId,
-                currentUserId);
+                branchId, actor.Id);
             return Ok(result);
         }
 

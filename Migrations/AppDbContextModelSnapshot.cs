@@ -1565,6 +1565,55 @@ namespace SaborExpress.Migrations
                     b.ToTable("roles", (string)null);
                 });
 
+            modelBuilder.Entity("SaborExpress.Modules.Tables.Models.TableReleaseAudit", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Administrative")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ActorUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OrderIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("OutstandingAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("PreviousSessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("ReleasedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TableId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TableNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId", "TableId", "ReleasedAtUtc");
+
+                    b.ToTable("table_release_audits", (string)null);
+                });
+
             modelBuilder.Entity("SaborExpress.Modules.Tables.Models.Table", b =>
                 {
                     b.Property<int>("Id")

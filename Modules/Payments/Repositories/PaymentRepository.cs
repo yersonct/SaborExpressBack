@@ -100,6 +100,38 @@ namespace SaborExpress.Modules.Payments.Repositories
             await _context.SaveChangesAsync();
         }
 
+        // Operación atómica en SQL: solo un webhook o sincronizador gana el cambio
+        // de Pending a estado terminal, incluso si llegan peticiones concurrentes.
+        public async Task<bool> TryTransitionWompiStatusAsync(
+            int paymentId, PaymentStatus targetStatus, string transactionId)
+        {
+            if (targetStatus != PaymentStatus.Completed && targetStatus != PaymentStatus.Failed)
+                throw new ArgumentOutOfRangeException(nameof(targetStatus));
+
+            if (string.IsNullOrWhiteSpace(transactionId))
+                throw new ArgumentException("El ID de transacción Wompi es obligatorio.", nameof(transactionId));
+
+            var updated = await _context.Payments
+                .Where(p => p.Id == paymentId &&
+                            p.Method == PaymentMethod.Wompi &&
+                            p.Status == PaymentStatus.Pending)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(p => p.Status, targetStatus)
+                    .SetProperty(p => p.WompiTransactionId, transactionId));
+
+            if (updated != 1)
+                return false;
+
+            // ExecuteUpdate no actualiza los objetos EF ya cargados en este scope.
+            // Recargarlos evita que el siguiente SaveChanges restaure un estado antiguo.
+            var tracked = _context.ChangeTracker.Entries<Payment>()
+                .FirstOrDefault(e => e.Entity.Id == paymentId);
+            if (tracked != null)
+                await tracked.ReloadAsync();
+
+            return true;
+        }
+
         public async Task<Payment?> GetByWompiReferenceAsync(string reference)
         {
             return await _context.Payments

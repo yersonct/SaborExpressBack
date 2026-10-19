@@ -7,6 +7,8 @@ namespace SaborExpress.Modules.Payments.Interfaces
     {
         Task<Payment?> GetByIdAsync(int id);
         Task<Payment?> GetByWompiReferenceAsync(string reference); // nuevo
+        Task<bool> TryTransitionWompiStatusAsync(int paymentId,
+            SaborExpress.Modules.Payments.Enum.PaymentStatus targetStatus, string transactionId);
         Task<List<Payment>> GetByOrderIdAsync(int orderId);
         Task<List<Payment>> GetAllAsync(int? branchId, DateTime? fromDate, DateTime? toDate);
         Task<List<Payment>> GetByCashierInRangeAsync(int cashierId, DateTime fromUtc, DateTime toUtc);
