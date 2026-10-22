@@ -33,6 +33,9 @@ namespace SaborExpress.Modules.Invoices.Mappings
                         .Where(value => !string.IsNullOrWhiteSpace(value)))
                     : null,
                 PaymentMethod = invoice.Payment?.Method.ToString(),
+                PaymentReference = invoice.Payment?.WompiTransactionId
+                    ?? invoice.Payment?.WompiReference
+                    ?? invoice.PaymentId.ToString(),
                 PaymentAmount = invoice.Payment?.Amount,
                 PaidAt = invoice.Payment?.PaidAt,
                 Items = invoice.Order?.OrderDetails?
@@ -55,6 +58,7 @@ namespace SaborExpress.Modules.Invoices.Mappings
                 DeliveryFee = invoice.DeliveryFee,
                 Total = invoice.Total,
                 IsVoided = invoice.IsVoided,
+                VoidReason = invoice.VoidReason,
                 IssuedAt = invoice.IssuedAt
             };
         }
