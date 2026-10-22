@@ -40,7 +40,7 @@ namespace SaborExpress.Shared.Services
                     htmlContent = BuildEmailTemplate(subject, body)
                 };
 
-                var client = _httpFactory.CreateClient();
+                var client = _httpFactory.CreateClient("email");
                 client.Timeout = TimeSpan.FromSeconds(20);
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.brevo.com/v3/smtp/email")
