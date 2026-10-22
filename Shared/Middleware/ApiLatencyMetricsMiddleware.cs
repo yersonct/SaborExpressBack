@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using System.Diagnostics.Metrics;
 using System.Globalization;
 using Microsoft.AspNetCore.Routing;
+using SaborExpress.Shared.Observability;
 
 namespace SaborExpress.Shared.Middleware;
 
@@ -11,23 +11,30 @@ namespace SaborExpress.Shared.Middleware;
 /// </summary>
 public sealed class ApiLatencyMetricsMiddleware
 {
-    private static readonly Meter Meter = new("SaborExpress.Api", "1.0.0");
-    private static readonly Histogram<double> RequestDuration = Meter.CreateHistogram<double>(
-        "sabor_express.http.server.request.duration",
-        unit: "ms",
-        description: "Tiempo de procesamiento HTTP del servidor; no incluye la latencia de red del cliente.");
-
     private readonly RequestDelegate _next;
+    private readonly ApiMetricsRegistry _metrics;
+    private readonly ApiRouteCatalog _routeCatalog;
 
-    public ApiLatencyMetricsMiddleware(RequestDelegate next) => _next = next;
+    public ApiLatencyMetricsMiddleware(
+        RequestDelegate next,
+        ApiMetricsRegistry metrics,
+        ApiRouteCatalog routeCatalog)
+    {
+        _next = next;
+        _metrics = metrics;
+        _routeCatalog = routeCatalog;
+    }
 
     public async Task InvokeAsync(HttpContext context)
     {
         var stopwatch = Stopwatch.StartNew();
+        var route = GetRouteTemplate(context);
+        double? responseStartDurationMs = null;
         context.Response.OnStarting(() =>
         {
-            context.Response.Headers["Server-Timing"] =
-                $"app;dur={stopwatch.Elapsed.TotalMilliseconds.ToString("F2", CultureInfo.InvariantCulture)}";
+            responseStartDurationMs = stopwatch.Elapsed.TotalMilliseconds;
+            var duration = responseStartDurationMs.Value.ToString("F2", CultureInfo.InvariantCulture);
+            context.Response.Headers["Server-Timing"] = $"app;dur={duration};desc=\"{route}\"";
             return Task.CompletedTask;
         });
         try
@@ -37,15 +44,20 @@ public sealed class ApiLatencyMetricsMiddleware
         finally
         {
             stopwatch.Stop();
-            var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "unmatched";
-            var tags = new TagList
+            if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase) &&
+                !context.Request.Path.StartsWithSegments("/api/telemetry/client-latency", StringComparison.OrdinalIgnoreCase))
             {
-                { "http.request.method", context.Request.Method },
-                { "http.route", route },
-                { "http.response.status_code", context.Response.StatusCode },
-            };
-
-            RequestDuration.Record(stopwatch.Elapsed.TotalMilliseconds, tags);
+                _routeCatalog.RegisterTrustedRouteTemplate(route);
+                _metrics.RecordServerRequest(
+                    context.Request.Method,
+                    route,
+                    context.Response.StatusCode,
+                    responseStartDurationMs ?? stopwatch.Elapsed.TotalMilliseconds);
+            }
         }
     }
+
+    private static string GetRouteTemplate(HttpContext context) =>
+        ApiMetricsRegistry.NormalizeRouteTemplate(
+            (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText);
 }
