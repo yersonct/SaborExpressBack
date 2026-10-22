@@ -18,6 +18,7 @@ public sealed class ApiExceptionFilter : IExceptionFilter
             ForbiddenException ex => new ObjectResult(new { error = ex.Message }) { StatusCode = 403 },
             UnauthorizedAccessException ex => new ObjectResult(new { error = ex.Message }) { StatusCode = 401 },
             KeyNotFoundException ex => new ObjectResult(new { error = ex.Message }) { StatusCode = 404 },
+            PersistenceException ex => new ObjectResult(new { error = ex.Message }) { StatusCode = 500 },
             InvalidOperationException ex => new ObjectResult(new { error = ex.Message }) { StatusCode = 409 },
             ArgumentException ex => new ObjectResult(new { error = ex.Message }) { StatusCode = 400 },
             _ => new ObjectResult(new { error = "No se pudo completar la solicitud." }) { StatusCode = 400 }

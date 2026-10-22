@@ -2,6 +2,7 @@ using SaborExpress.Modules.Auth.Interfaces;
 using SaborExpress.Modules.Branches.Interfaces;
 using SaborExpress.Shared.Constants;
 using SaborExpress.Shared.Extensions;
+using SaborExpress.Shared.Exceptions;
 
 namespace SaborExpress.Modules.Branches.Services
 {
@@ -37,7 +38,7 @@ namespace SaborExpress.Modules.Branches.Services
                 return;
 
             if (user.Employee?.BranchId != branchId)
-                throw new InvalidOperationException("Solo puedes operar sobre la sede a la que perteneces.");
+                throw new ForbiddenException("Solo puedes operar sobre la sede a la que perteneces.");
         }
     }
 }
