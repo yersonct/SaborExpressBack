@@ -1,0 +1,41 @@
+name: QA Wompi sandbox contract
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test/HU-QA-02-wompi-sandbox
+  pull_request:
+    branches:
+      - qa
+
+permissions:
+  contents: read
+
+jobs:
+  wompi-contract-tests:
+    runs-on: ubuntu-latest
+    env:
+      WOMPI_TEST_EVIDENCE_ENVIRONMENT: SANDBOX_SIMULATED
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Run Wompi contract and payment recovery tests
+        run: >-
+          dotnet test tests/SaborExpressBack.QA.Tests/SaborExpressBack.QA.Tests.csproj
+          --configuration Release
+          --logger "trx;LogFileName=HU-QA-02-WOMPI.trx"
+          --results-directory TestResults
+
+      - name: Preserve sandbox-labelled execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HU-QA-02-WOMPI-SANDBOX-SIMULATED-${{ github.run_number }}
+          path: TestResults/**/*.trx
+          if-no-files-found: warn
+          retention-days: 30
