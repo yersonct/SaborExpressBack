@@ -31,13 +31,21 @@ namespace SaborExpress.Controllers
             Ok(await _service.GetByBranchTodayAsync(branchId, ObtenerUsuarioActualId()));
 
         // Cualquier usuario autenticado puede consultar el turno activo
-        // de un empleado ahora mismo (no solo Gerente/Administrador) —
-        // sin [Authorize(Roles=...)] a nivel de clase, este [Authorize]
-        // sí queda como "cualquier autenticado", tal como se pretendía.
+        // propio. Los gerentes pueden consultar el de cualquier empleado.
         [HttpGet("employee/{employeeId:int}/current")]
         [Authorize]
-        public async Task<IActionResult> GetCurrentShift(int employeeId) =>
-            Ok(await _service.GetCurrentShiftAsync(employeeId));
+        public async Task<IActionResult> GetCurrentShift(int employeeId)
+        {
+            if (!User.IsInRole(RoleNames.Gerente))
+            {
+                var employeeClaim = User.FindFirst("EmployeeId")?.Value;
+                if (!int.TryParse(employeeClaim, out var currentEmployeeId) ||
+                    currentEmployeeId != employeeId)
+                    return Forbid();
+            }
+
+            return Ok(await _service.GetCurrentShiftAsync(employeeId));
+        }
 
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador}")]
         [HttpPost]

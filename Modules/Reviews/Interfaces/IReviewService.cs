@@ -14,6 +14,6 @@ namespace SaborExpress.Modules.Reviews.Interfaces
         Task<List<ReviewResponseDto>> GetByBranchIdAsync(int branchId, int currentUserId);
 
         Task<BranchReviewSummaryDto> GetBranchSummaryAsync(int branchId);
-        Task DeleteAsync(int id, int currentUserId);
+        Task DeleteAsync(int id, int currentUserId, bool isGerente, bool isAdministrador);
     }
 }

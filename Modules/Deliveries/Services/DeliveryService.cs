@@ -133,9 +133,9 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
             };
         }
 
-        public async Task<List<DeliveryResponseDto>> GetByDeliveryPersonIdAsync(int deliveryPersonId)
+        public async Task<List<DeliveryResponseDto>> GetByDeliveryPersonIdAsync(int deliveryPersonId, bool activeOnly = false)
         {
-            var deliveries = await _deliveryRepository.GetByDeliveryPersonIdAsync(deliveryPersonId);
+            var deliveries = await _deliveryRepository.GetByDeliveryPersonIdAsync(deliveryPersonId, activeOnly);
             return deliveries.Select(DeliveryMapper.ToResponse).ToList();
         }
 
@@ -184,16 +184,18 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
                         "La cocina aún no termina este pedido. Espera a que esté listo para salir.");
             }
 
-            delivery.Status = dto.Status;
+            var deliveredAt = dto.Status == DeliveryStatus.Delivered ? DateTime.UtcNow : (DateTime?)null;
+            if (!await _deliveryRepository.TryTransitionStatusAsync(
+                    id, delivery.Status, dto.Status, deliveredAt))
+                throw new InvalidOperationException(
+                    "El estado de este domicilio cambiÃ³ en otro dispositivo. Actualiza la lista e intÃ©ntalo de nuevo.");
 
             if (dto.Status == DeliveryStatus.Delivered)
             {
-                delivery.DeliveredAt = DateTime.UtcNow;
                 await RegisterCashCollectionIfNeededAsync(delivery);
                 await MarkOrderDeliveredAsync(delivery.OrderId);
             }
 
-            await _deliveryRepository.UpdateAsync(delivery);
             await _deliveryRepository.SaveChangesAsync();
 
             // El cajero ve al instante que salió o se entregó (y el cobro en efectivo)
@@ -339,7 +341,7 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
             var pending = order.Total - alreadyPaid;
             if (pending <= 0) return;
 
-            await _paymentRepository.AddAsync(new Payment
+            await _paymentRepository.TryAddCompletedPaymentAtomicallyAsync(new Payment
             {
                 OrderId = order.Id,
                 CashierId = delivery.DeliveryPersonId, // quién cobró el efectivo
