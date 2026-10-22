@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: saborexpress-api
+    metrics_path: /metrics
+    static_configs:
+      # For local development on Windows/macOS. Change this target for a hosted API.
+      - targets: [host.docker.internal:8080]
