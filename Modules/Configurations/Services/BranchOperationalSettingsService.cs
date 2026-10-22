@@ -9,6 +9,8 @@ using SaborExpress.Modules.EmployeeSchedules.Interfaces;
 using SaborExpress.Shared.Helpers;
 using SaborExpress.Shared.Interfaces;
 using SaborExpress.Modules.Deliveries.Interfaces;
+using Npgsql;
+using SaborExpress.Shared.Exceptions;
 
 namespace SaborExpress.Modules.Configurations.Services
 {
@@ -69,22 +71,55 @@ namespace SaborExpress.Modules.Configurations.Services
 
             var openingTime = BranchOperationalSettingsValidator.ParseTime(dto.OpeningTime, "La hora de apertura");
             var closingTime = BranchOperationalSettingsValidator.ParseTime(dto.ClosingTime, "La hora de cierre");
-            settings.OpeningTime = openingTime;
-            settings.ClosingTime = closingTime;
-            settings.TaxRate = dto.TaxRate;
-            settings.DeliveryFee = dto.DeliveryFee;
-            settings.DeliveryRadiusKm = dto.DeliveryRadiusKm;
-            if (dto.MaxActiveDeliveriesPerCourier.HasValue)
-                settings.MaxActiveDeliveriesPerCourier = dto.MaxActiveDeliveriesPerCourier.Value;
-            settings.UpdatedAt = DateTime.UtcNow;
+            ApplySettings(settings);
 
             if (isNew) await _repository.AddAsync(settings);
 
             try
             {
                 await _repository.SaveChangesAsync();
-                // Los turnos de hoy y futuros usan siempre el horario vigente.
-                // Los días pasados conservan el horario que realmente tuvieron.
+            }
+            catch (DbUpdateException ex) when (isNew && IsBranchSettingsUniqueConflict(ex))
+            {
+                // Dos guardados simultáneos pueden intentar crear la primera fila.
+                // El índice único protege la sede; al perder la carrera, se vuelve
+                // a leer la fila creada por la otra solicitud y se actualiza.
+                _repository.Detach(settings);
+                var createdByConcurrentRequest = await _repository.GetByBranchIdAsync(branchId);
+                if (createdByConcurrentRequest is null)
+                {
+                    _logger.LogError(ex,
+                        "Falló la creación concurrente de configuración operativa para la sede {BranchId}.",
+                        branchId);
+                    throw new PersistenceException("No se pudo guardar la configuración. Intenta de nuevo.", ex);
+                }
+
+                settings = createdByConcurrentRequest;
+                ApplySettings(settings);
+                try
+                {
+                    await _repository.SaveChangesAsync();
+                }
+                catch (DbUpdateException retryException)
+                {
+                    _logger.LogError(retryException,
+                        "Falló el reintento de configuración operativa para la sede {BranchId}.",
+                        branchId);
+                    throw new PersistenceException("No se pudo guardar la configuración. Intenta de nuevo.", retryException);
+                }
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex,
+                    "La base de datos rechazó la configuración operativa de la sede {BranchId}.",
+                    branchId);
+                throw new PersistenceException("No se pudo guardar la configuración. Intenta de nuevo.", ex);
+            }
+
+            // Los turnos de hoy y futuros usan siempre el horario vigente;
+            // los días pasados conservan el horario que realmente tuvieron.
+            try
+            {
                 var todayInColombia = DateOnly.FromDateTime(ColombiaTime.Now);
                 await _scheduleRepository.ApplyBranchHoursToUpcomingAsync(
                     branchId,
@@ -92,9 +127,12 @@ namespace SaborExpress.Modules.Configurations.Services
                     openingTime,
                     closingTime);
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException ex)
             {
-                throw new InvalidOperationException("No se pudo guardar la configuración. Intenta de nuevo.");
+                _logger.LogError(ex,
+                    "Se guardó la configuración de la sede {BranchId}, pero falló la actualización del horario de sus turnos.",
+                    branchId);
+                throw new PersistenceException("La configuración se guardó, pero no se pudieron actualizar los turnos. Intenta de nuevo.", ex);
             }
 
             await _realtime.AdminDataChangedAsync("EmployeeSchedules");
@@ -112,6 +150,30 @@ namespace SaborExpress.Modules.Configurations.Services
                     branchId);
             }
             return BranchOperationalSettingsMapper.ToResponse(settings);
+
+            void ApplySettings(BranchOperationalSettings target)
+            {
+                target.OpeningTime = openingTime;
+                target.ClosingTime = closingTime;
+                target.TaxRate = dto.TaxRate;
+                target.DeliveryFee = dto.DeliveryFee;
+                target.DeliveryRadiusKm = dto.DeliveryRadiusKm;
+                if (dto.MaxActiveDeliveriesPerCourier.HasValue)
+                    target.MaxActiveDeliveriesPerCourier = dto.MaxActiveDeliveriesPerCourier.Value;
+                target.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        private static bool IsBranchSettingsUniqueConflict(DbUpdateException exception)
+        {
+            for (var cause = exception.InnerException; cause is not null; cause = cause.InnerException)
+            {
+                if (cause is PostgresException postgresException &&
+                    postgresException.SqlState == PostgresErrorCodes.UniqueViolation &&
+                    postgresException.ConstraintName == "IX_branch_operational_settings_branch_id")
+                    return true;
+            }
+            return false;
         }
     }
 }
