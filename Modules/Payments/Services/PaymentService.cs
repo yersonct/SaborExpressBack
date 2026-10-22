@@ -337,7 +337,15 @@ namespace SaborExpress.Modules.Payments.Services
             if (webhook.Event != "transaction.updated")
                 return;
 
-            var tx = webhook.Data.Transaction;
+            var tx = webhook?.Data?.Transaction;
+            if (tx == null || string.IsNullOrWhiteSpace(tx.Id) ||
+                string.IsNullOrWhiteSpace(tx.Reference) || tx.Reference.Length > 100 ||
+                string.IsNullOrWhiteSpace(tx.Status) || tx.AmountInCents <= 0)
+            {
+                _logger.LogWarning("Webhook Wompi firmado con datos de transacción incompletos.");
+                throw new ArgumentException("El evento Wompi no contiene una transacción válida.");
+            }
+
             var payment = await _paymentRepository.GetByWompiReferenceAsync(tx.Reference);
 
             if (payment == null)
@@ -356,10 +364,7 @@ namespace SaborExpress.Modules.Payments.Services
                 throw new HttpRequestException("No fue posible verificar la transacción Wompi.");
             }
 
-            if (!string.Equals(confirmed.Reference, tx.Reference, StringComparison.Ordinal) ||
-                !string.Equals(confirmed.Id, tx.Id, StringComparison.Ordinal) ||
-                !string.Equals(confirmed.Status, tx.Status, StringComparison.Ordinal) ||
-                confirmed.AmountInCents != tx.AmountInCents)
+            if (!WompiTransactionConfirmation.MatchesAuthoritativeTransaction(tx, confirmed))
             {
                 _logger.LogWarning("Evento Wompi firmado no coincide con la transacción consultada.");
                 throw new UnauthorizedAccessException("La transacción Wompi no coincide.");
@@ -411,7 +416,8 @@ namespace SaborExpress.Modules.Payments.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error sincronizando el pago {PaymentId} con Wompi", payment.Id);
+                    _logger.LogError("Error sincronizando el pago Wompi {PaymentId} ({ErrorType}).",
+                        payment.Id, ex.GetType().Name);
                 }
             }
 
@@ -424,9 +430,9 @@ namespace SaborExpress.Modules.Payments.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex,
-                        "No se pudieron completar los efectos posteriores del pago Wompi {PaymentId}; se reintentará.",
-                        payment.Id);
+                    _logger.LogError(
+                        "No se pudieron completar los efectos posteriores del pago Wompi {PaymentId} ({ErrorType}); se reintentará.",
+                        payment.Id, ex.GetType().Name);
                 }
             }
         }
@@ -511,14 +517,18 @@ namespace SaborExpress.Modules.Payments.Services
 
                 if (order.OrderType == OrderType.Delivery && order.Status != OrderStatus.Cancelled)
                 {
-                    await _deliveryAssignmentService.AssignPendingForBranchAsync(order.BranchId);
+                    await _deliveryAssignmentService.AssignPendingForBranchAsync(
+                        order.BranchId,
+                        retryNotificationForOrderId: order.Id,
+                        throwOnNotificationFailure: true);
                     if (payment.CashierId == null)
                         await NotifyPaidDeliveryAsync(order.Id, order.BranchId, payment.Id);
                 }
 
                 await _realtime.PaymentsChangedAsync();
                 await NotifyCustomerPaymentApprovedAsync(order, payment.Id);
-                await _tableAvailabilityService.TryReleaseAfterConfirmationAsync(payment.OrderId);
+                await _tableAvailabilityService.TryReleaseAfterConfirmationAsync(
+                    payment.OrderId, throwOnNotificationFailure: true);
                 await _realtime.OrdersChangedAsync();
                 await _realtime.TablesChangedAsync();
 
@@ -535,13 +545,14 @@ namespace SaborExpress.Modules.Payments.Services
                 }
                 catch (Exception releaseError)
                 {
-                    _logger.LogError(releaseError,
-                        "No se pudo liberar el reclamo de posprocesamiento del pago {PaymentId}.", paymentId);
+                    _logger.LogError(
+                        "No se pudo liberar el reclamo de posprocesamiento del pago {PaymentId} ({ErrorType}).",
+                        paymentId, releaseError.GetType().Name);
                 }
 
-                _logger.LogError(ex,
-                    "Falló el posprocesamiento del pago Wompi {PaymentId}; queda disponible para reintento.",
-                    paymentId);
+                _logger.LogError(
+                    "Falló el posprocesamiento del pago Wompi {PaymentId} ({ErrorType}); queda disponible para reintento.",
+                    paymentId, ex.GetType().Name);
                 throw;
             }
         }

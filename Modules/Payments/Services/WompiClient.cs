@@ -77,17 +77,40 @@ namespace SaborExpress.Modules.Payments.Services
                         return false;
                 }
 
-                var timestamp = root.GetProperty("timestamp").ToString();
+                if (!root.TryGetProperty("timestamp", out var timestampElement) ||
+                    timestampElement.ValueKind != JsonValueKind.Number ||
+                    !timestampElement.TryGetInt64(out var timestampValue))
+                    return false;
+
+                if (!signature.TryGetProperty("properties", out var properties) ||
+                    properties.ValueKind != JsonValueKind.Array || properties.GetArrayLength() == 0 ||
+                    !root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+                    return false;
 
                 var sb = new StringBuilder();
-                foreach (var prop in signature.GetProperty("properties").EnumerateArray())
+                foreach (var prop in properties.EnumerateArray())
                 {
-                    var current = root.GetProperty("data");
-                    foreach (var part in prop.GetString()!.Split('.'))
-                        current = current.GetProperty(part);
+                    if (prop.ValueKind != JsonValueKind.String)
+                        return false;
+
+                    var path = prop.GetString();
+                    if (string.IsNullOrWhiteSpace(path))
+                        return false;
+
+                    var current = data;
+                    foreach (var part in path.Split('.'))
+                    {
+                        if (string.IsNullOrWhiteSpace(part) || current.ValueKind != JsonValueKind.Object ||
+                            !current.TryGetProperty(part, out var next))
+                            return false;
+                        current = next;
+                    }
+
+                    if (current.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                        return false;
                     sb.Append(current.ToString());
                 }
-                sb.Append(timestamp);
+                sb.Append(timestampValue);
                 sb.Append(_eventsSecret);
 
                 var computed = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));

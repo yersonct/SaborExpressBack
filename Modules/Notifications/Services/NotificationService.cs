@@ -34,12 +34,13 @@ namespace SaborExpress.Modules.Notifications.Services
             string? relatedEntityType = null, int? relatedEntityId = null,
             string? idempotencyKey = null)
         {
+            var shouldPush = true;
             var entity = string.IsNullOrWhiteSpace(idempotencyKey)
                 ? null
                 : await _repository.GetByIdempotencyKeyAsync(idempotencyKey);
             if (entity == null)
             {
-                entity = new Notification
+                var notification = new Notification
                 {
                     UserId = userId,
                     Title = title,
@@ -50,8 +51,25 @@ namespace SaborExpress.Modules.Notifications.Services
                     IdempotencyKey = idempotencyKey
                 };
 
-                await _repository.AddAsync(entity);
+                if (string.IsNullOrWhiteSpace(idempotencyKey))
+                {
+                    entity = await _repository.AddAsync(notification);
+                }
+                else
+                {
+                    var result = await _repository.AddIdempotentAsync(notification);
+                    entity = result.Notification;
+                    shouldPush = result.Created;
+                }
             }
+            else
+            {
+                shouldPush = false;
+            }
+
+            if (entity.UserId != userId)
+                throw new InvalidOperationException("La clave de idempotencia pertenece a otro destinatario.");
+
             var dto = entity.ToDto();
 
             var language = LanguageOptions.DefaultLanguage;
@@ -66,7 +84,10 @@ namespace SaborExpress.Modules.Notifications.Services
                 // Language lookup must not prevent a saved notification from being delivered.
             }
 
-            await PushAsync(userId, dto, language);
+            // La fila durable es la fuente de verdad. Un reintento no vuelve a
+            // emitir el mismo aviso en tiempo real ni duplica el push.
+            if (shouldPush)
+                await PushAsync(userId, dto, language);
             return dto;
         }
 
@@ -216,21 +237,28 @@ namespace SaborExpress.Modules.Notifications.Services
             var localizedTitle = _messageLocalizer.Localize(dto.Title, language);
             var localizedMessage = _messageLocalizer.Localize(dto.Message, language);
 
-            await _hubContext.Clients
-                .Group(NotificationHub.GroupName(userId))
-                .SendAsync("ReceiveNotification", new NotificationDto
-                {
-                    Id = dto.Id,
-                    UserId = dto.UserId,
-                    Title = localizedTitle,
-                    Message = localizedMessage,
-                    Type = dto.Type,
-                    RelatedEntityType = dto.RelatedEntityType,
-                    RelatedEntityId = dto.RelatedEntityId,
-                    IsRead = dto.IsRead,
-                    ReadAt = dto.ReadAt,
-                    CreatedAt = dto.CreatedAt
-                });
+            try
+            {
+                await _hubContext.Clients
+                    .Group(NotificationHub.GroupName(userId))
+                    .SendAsync("ReceiveNotification", new NotificationDto
+                    {
+                        Id = dto.Id,
+                        UserId = dto.UserId,
+                        Title = localizedTitle,
+                        Message = localizedMessage,
+                        Type = dto.Type,
+                        RelatedEntityType = dto.RelatedEntityType,
+                        RelatedEntityId = dto.RelatedEntityId,
+                        IsRead = dto.IsRead,
+                        ReadAt = dto.ReadAt,
+                        CreatedAt = dto.CreatedAt
+                    });
+            }
+            catch
+            {
+                // La notificación ya quedó guardada; SignalR se recupera al consultar la bandeja.
+            }
 
             // El push es complementario a SignalR: un problema con Expo no debe
             // hacer fallar la creaciÃ³n del pedido ni el aviso en tiempo real.

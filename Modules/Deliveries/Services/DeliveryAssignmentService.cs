@@ -71,15 +71,25 @@ namespace SaborExpress.Modules.Deliveries.Services
             }
         }
 
-        public async Task AssignPendingForBranchAsync(int branchId)
+        public async Task AssignPendingForBranchAsync(
+            int branchId,
+            int? retryNotificationForOrderId = null,
+            bool throwOnNotificationFailure = false)
         {
             var gate = BranchLocks.GetOrAdd(branchId, _ => new SemaphoreSlim(1, 1));
             await gate.WaitAsync();
             try
             {
                 var orderIds = await _deliveryRepository.GetUnassignedDeliveryOrderIdsAsync(branchId);
+                if (retryNotificationForOrderId.HasValue)
+                    orderIds = orderIds.Append(retryNotificationForOrderId.Value).Distinct().ToList();
+
                 foreach (var orderId in orderIds)
-                    await AssignOrderUnderBranchLockAsync(orderId, branchId);
+                    await AssignOrderUnderBranchLockAsync(
+                        orderId,
+                        branchId,
+                        retryNotificationForOrderId == orderId,
+                        throwOnNotificationFailure);
             }
             finally
             {
@@ -87,7 +97,11 @@ namespace SaborExpress.Modules.Deliveries.Services
             }
         }
 
-        private async Task AssignOrderUnderBranchLockAsync(int orderId, int branchId)
+        private async Task AssignOrderUnderBranchLockAsync(
+            int orderId,
+            int branchId,
+            bool retryExistingNotification = false,
+            bool throwOnNotificationFailure = false)
         {
             // Releer dentro del bloqueo evita asignar dos veces si pago y confirmación
             // intentan procesar el mismo pedido casi al mismo tiempo.
@@ -101,8 +115,14 @@ namespace SaborExpress.Modules.Deliveries.Services
                     && order.Status != OrderStatus.Ready))
                 return;
 
-            if (await _deliveryRepository.OrderHasDeliveryAsync(orderId))
+            var existingDeliveries = await _deliveryRepository.GetByOrderIdAsync(orderId);
+            if (existingDeliveries.Count > 0)
+            {
+                if (retryExistingNotification)
+                    await NotifyAssignedCourierAsync(
+                        existingDeliveries[0], orderId, throwOnNotificationFailure);
                 return;
+            }
 
             var settings = await _settingsRepository.GetByBranchIdAsync(branchId);
             var maxActiveDeliveries = settings?.MaxActiveDeliveriesPerCourier
@@ -165,14 +185,19 @@ namespace SaborExpress.Modules.Deliveries.Services
                 chosen.EmployeeId,
                 chosen.ActiveDeliveryCount);
 
+            await NotifyAssignedCourierAsync(delivery, orderId, throwOnNotificationFailure);
+        }
+
+        private async Task NotifyAssignedCourierAsync(
+            Delivery delivery, int orderId, bool throwOnNotificationFailure)
+        {
             try
             {
-                var courierUserId = await _authRepository.GetUserIdByEmployeeIdAsync(chosen.EmployeeId);
+                var courierUserId = await _authRepository.GetUserIdByEmployeeIdAsync(delivery.DeliveryPersonId);
                 if (courierUserId == null)
                 {
-                    _logger.LogWarning(
-                        "El empleado {EmployeeId} no tiene UserId; no se pudo notificar la entrega.",
-                        chosen.EmployeeId);
+                    if (throwOnNotificationFailure)
+                        throw new InvalidOperationException("El repartidor asignado no tiene usuario asociado.");
                     return;
                 }
 
@@ -182,12 +207,16 @@ namespace SaborExpress.Modules.Deliveries.Services
                     "Se te asignó un pedido para entrega.",
                     SaborExpress.Modules.Notifications.Enum.NotificationType.DeliveryAssigned,
                     relatedEntityType: "Order",
-                    relatedEntityId: orderId);
+                    relatedEntityId: orderId,
+                    idempotencyKey: $"delivery:{delivery.Id}:assigned:{courierUserId.Value}");
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                // La entrega ya quedó guardada; un fallo al notificar no la revierte.
-                _logger.LogError(ex, "No se pudo notificar al repartidor del pedido {OrderId}", orderId);
+                // El Wompi outbox reintentará este aviso por pedido cuando se solicite.
+                _logger.LogWarning("No se pudo guardar el aviso del domicilio ({ErrorType}).",
+                    exception.GetType().Name);
+                if (throwOnNotificationFailure)
+                    throw;
             }
         }
 
