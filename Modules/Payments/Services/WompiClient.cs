@@ -155,6 +155,9 @@ namespace SaborExpress.Modules.Payments.Services
                 Id = chosen.GetProperty("id").GetString() ?? string.Empty,
                 Reference = chosen.GetProperty("reference").GetString() ?? string.Empty,
                 Status = chosen.GetProperty("status").GetString() ?? string.Empty,
+                Currency = chosen.TryGetProperty("currency", out var currency)
+                    ? currency.GetString() ?? string.Empty
+                    : string.Empty,
                 AmountInCents = chosen.GetProperty("amount_in_cents").GetInt32()
             };
         }

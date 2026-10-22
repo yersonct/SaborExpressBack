@@ -18,6 +18,9 @@ public static class WompiTransactionConfirmation
         return string.Equals(authoritativeTransaction.Id, webhookTransaction.Id, StringComparison.Ordinal) &&
                string.Equals(authoritativeTransaction.Reference, webhookTransaction.Reference, StringComparison.Ordinal) &&
                string.Equals(authoritativeTransaction.Status, webhookTransaction.Status, StringComparison.Ordinal) &&
+               string.Equals(authoritativeTransaction.Currency, "COP", StringComparison.Ordinal) &&
+               (string.IsNullOrWhiteSpace(webhookTransaction.Currency) ||
+                string.Equals(authoritativeTransaction.Currency, webhookTransaction.Currency, StringComparison.Ordinal)) &&
                authoritativeTransaction.AmountInCents == webhookTransaction.AmountInCents;
     }
 }
