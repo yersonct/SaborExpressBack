@@ -404,7 +404,6 @@ namespace SaborExpress.Configuration
         {
             services.AddScoped<IInvoiceRepository, InvoiceRepository>();
             services.AddScoped<IInvoiceService, InvoiceService>();
-            services.AddSingleton<IInvoicePdfGenerator, InvoicePdfGenerator>();
             services.AddScoped<InvoiceValidator>();
 
             return services;

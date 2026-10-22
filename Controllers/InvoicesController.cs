@@ -19,7 +19,6 @@ namespace SaborExpress.Controllers
     {
         private readonly IInvoiceService _invoiceService;
         private readonly IInvoiceRepository _invoiceRepository;
-        private readonly IInvoicePdfGenerator _invoicePdfGenerator;
         private readonly IPaymentRepository _paymentRepository;
         private readonly IOrderRepository _orderRepository;
         private readonly IAuthRepository _authRepository;
@@ -27,14 +26,12 @@ namespace SaborExpress.Controllers
         public InvoicesController(
             IInvoiceService invoiceService,
             IInvoiceRepository invoiceRepository,
-            IInvoicePdfGenerator invoicePdfGenerator,
             IPaymentRepository paymentRepository,
             IOrderRepository orderRepository,
             IAuthRepository authRepository)
         {
             _invoiceService = invoiceService;
             _invoiceRepository = invoiceRepository;
-            _invoicePdfGenerator = invoicePdfGenerator;
             _paymentRepository = paymentRepository;
             _orderRepository = orderRepository;
             _authRepository = authRepository;
@@ -107,8 +104,10 @@ namespace SaborExpress.Controllers
         }
 
         // GET /api/Invoices/{id}/pdf
+        // TODO: requiere una libreria de generacion de PDF (ej. QuestPDF, iText7).
+        // Este endpoint queda como placeholder hasta que se instale una de esas librerias.
         [HttpGet("{id:int}/pdf")]
-        public async Task<IActionResult> GetPdf(int id, [FromQuery] string? lang = null)
+        public async Task<IActionResult> GetPdf(int id)
         {
             var invoice = await _invoiceRepository.GetByIdAsync(id);
             if (invoice == null) return NotFound();
@@ -116,15 +115,8 @@ namespace SaborExpress.Controllers
             var accessResult = await EnsureCanReadOrderAsync(invoice.OrderId);
             if (accessResult != null) return accessResult;
 
-            var invoiceData = await _invoiceService.GetByIdAsync(id);
-            var language = string.IsNullOrWhiteSpace(lang)
-                ? Request.Headers.AcceptLanguage.ToString()
-                : lang;
-            var pdf = _invoicePdfGenerator.Generate(invoiceData, language);
-
-            Response.Headers.CacheControl = "private, no-store";
-            Response.Headers.XContentTypeOptions = "nosniff";
-            return File(pdf, "application/pdf", $"factura-{invoiceData.Id}.pdf");
+            await _invoiceService.GetByIdAsync(id);
+            return StatusCode(501, new { message = "Generacion de PDF pendiente de implementar. Consulta el TODO en InvoicesController." });
         }
 
         private async Task<IActionResult?> EnsureCanReadOrderAsync(int orderId)

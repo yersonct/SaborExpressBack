@@ -28,18 +28,7 @@
 		<PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.8" />
 		<PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
-		<PackageReference Include="PDFsharp-MigraDoc" Version="6.2.4" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Compile Remove="tests/**/*.cs" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <EmbeddedResource Include="Modules\Invoices\Fonts\Carlito-Regular.ttf" LogicalName="SaborExpress.Modules.Invoices.Fonts.Carlito-Regular.ttf" />
-	  <EmbeddedResource Include="Modules\Invoices\Fonts\Carlito-Bold.ttf" LogicalName="SaborExpress.Modules.Invoices.Fonts.Carlito-Bold.ttf" />
-	  <None Remove="Modules\Invoices\Fonts\Carlito-Regular.ttf;Modules\Invoices\Fonts\Carlito-Bold.ttf" />
 	</ItemGroup>
 
 	<ItemGroup>

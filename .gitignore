@@ -4,7 +4,6 @@
 # Carpetas de compilación
 bin/
 obj/
-TestResults/
 Properties/launchSettings.json
 # Visual Studio
 .vs/
