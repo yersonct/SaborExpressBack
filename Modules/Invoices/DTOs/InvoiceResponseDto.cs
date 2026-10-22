@@ -20,6 +20,7 @@ namespace SaborExpress.Modules.Invoices.DTOs
         public int? TableNumber { get; set; }
         public string? CashierName { get; set; }
         public string? PaymentMethod { get; set; }
+        public string? PaymentReference { get; set; }
         public decimal? PaymentAmount { get; set; }
         public DateTime? PaidAt { get; set; }
         public List<InvoiceItemResponseDto> Items { get; set; } = new();
@@ -30,6 +31,7 @@ namespace SaborExpress.Modules.Invoices.DTOs
         public decimal DeliveryFee { get; set; }
         public decimal Total { get; set; }
         public bool IsVoided { get; set; }
+        public string? VoidReason { get; set; }
         public DateTime IssuedAt { get; set; }
     }
 
