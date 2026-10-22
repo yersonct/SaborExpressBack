@@ -44,8 +44,11 @@ namespace SaborExpress.Modules.Payments.Validators
             // NUEVO: sumar pagos ya completados (sin contar los reembolsados)
             // y validar que el nuevo pago no exceda lo que falta por cobrar
             var existingPayments = await _paymentRepository.GetByOrderIdAsync(dto.OrderId);
+            // Un cobro QR pendiente ya reserva ese saldo. No aceptar efectivo u
+            // otro pago mientras Wompi aún puede aprobarse y duplicar el cobro.
             var alreadyPaid = existingPayments
-                .Where(p => p.Status == PaymentStatus.Completed)
+                .Where(p => p.Status == PaymentStatus.Completed ||
+                    (p.Method == PaymentMethod.Wompi && p.Status == PaymentStatus.Pending))
                 .Sum(p => p.Amount);
 
             var remaining = order.Total - alreadyPaid;

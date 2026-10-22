@@ -12,29 +12,30 @@ using SaborExpress.Modules.Branches.Services;
 using SaborExpress.Shared.Authorization;
 using SaborExpress.Shared.Localization;
 using SaborExpress.Shared.Middleware;
+using SaborExpress.Shared.Security;
 
 // Carga el archivo .env ANTES de crear el builder
 DotNetEnv.Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
-var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? [];
+var configuredOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? [];
+var isDevelopment = builder.Environment.IsDevelopment();
+var allowedOrigins = CorsOriginPolicy.FilterConfiguredOrigins(configuredOrigins, isDevelopment);
+
+if (!isDevelopment && allowedOrigins.Count == 0)
+    throw new InvalidOperationException(
+        "Configure al menos un origen productivo exacto en AllowedOrigins antes de iniciar el backend.");
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        // Los orígenes de dev tunnels / red local se permiten siempre,
-        // sin importar el ambiente (evita que un ASPNETCORE_ENVIRONMENT
-        // mal configurado tumbe la conexión de SignalR en pruebas).
         policy.SetIsOriginAllowed(origin =>
-                    origin.EndsWith(".devtunnels.ms") ||
-                    origin.StartsWith("http://localhost") ||
-                    origin.StartsWith("https://localhost") ||
-                    origin.StartsWith("http://192.168.") ||
-                    allowedOrigins.Contains(origin))
+                CorsOriginPolicy.IsAllowedOrigin(origin, allowedOrigins, isDevelopment))
               .AllowAnyMethod()
               .AllowAnyHeader()
+              .WithExposedHeaders("Server-Timing")
               .AllowCredentials();
     });
 });
@@ -94,6 +95,8 @@ await app.MigrarYSembrarBaseDeDatosAsync();
 
 if (app.Environment.IsDevelopment())
     app.UseSwaggerConfiguration();
+app.UseRouting();
+app.UseMiddleware<ApiLatencyMetricsMiddleware>();
 app.UseStaticFiles();
 app.UseCors("AllowAll");
 

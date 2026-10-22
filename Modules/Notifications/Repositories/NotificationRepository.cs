@@ -35,6 +35,13 @@ namespace SaborExpress.Modules.Notifications.Repositories
             return await _context.Notifications.FirstOrDefaultAsync(n => n.Id == id);
         }
 
+        public async Task<Notification?> GetByIdempotencyKeyAsync(string key)
+        {
+            return await _context.Notifications
+                .AsNoTracking()
+                .FirstOrDefaultAsync(notification => notification.IdempotencyKey == key);
+        }
+
         public async Task<List<Notification>> GetByUserIdAsync(int userId, bool? unreadOnly = null)
         {
             var query = _context.Notifications.Where(n => n.UserId == userId);

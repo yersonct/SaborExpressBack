@@ -7,7 +7,8 @@ namespace SaborExpress.Modules.Notifications.Interfaces
     {
         Task<NotificationDto> CreateAsync(
             int userId, string title, string message, NotificationType type,
-            string? relatedEntityType = null, int? relatedEntityId = null);
+            string? relatedEntityType = null, int? relatedEntityId = null,
+            string? idempotencyKey = null);
 
         Task<List<NotificationDto>> CreateBulkAsync(
             List<int> userIds, string title, string message, NotificationType type,

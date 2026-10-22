@@ -47,7 +47,13 @@ namespace SaborExpress.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateOrderDto dto)
         {
-            var isClienteChannel = User.IsInRole(RoleNames.Cliente);
+            var hasOperationalShiftRole =
+                User.IsInRole(RoleNames.Mesero) ||
+                User.IsInRole(RoleNames.Cajero) ||
+                User.IsInRole(RoleNames.Cocinero) ||
+                User.IsInRole(RoleNames.AuxiliarCocina) ||
+                User.IsInRole(RoleNames.Repartidor);
+            var isClienteChannel = User.IsInRole(RoleNames.Cliente) && !hasOperationalShiftRole;
             int? employeeId = isClienteChannel ? null : this.GetCurrentEmployeeId();
 
             var result = await _orderService.CreateAsync(dto, employeeId, isClienteChannel);

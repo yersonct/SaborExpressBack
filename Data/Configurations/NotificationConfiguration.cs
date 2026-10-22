@@ -24,6 +24,12 @@ namespace SaborExpress.Data.Configurations
                 .OnDelete(DeleteBehavior.Cascade);
 
             builder.HasIndex(n => new { n.UserId, n.IsRead });
+
+            builder.Property(n => n.IdempotencyKey)
+                .HasMaxLength(128);
+
+            builder.HasIndex(n => n.IdempotencyKey)
+                .HasDatabaseName("IX_Notifications_IdempotencyKey");
         }
     }
 }
