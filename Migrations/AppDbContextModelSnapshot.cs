@@ -949,6 +949,8 @@ namespace SaborExpress.Migrations
                     b.HasIndex("UserId", "IsRead");
 
                     b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL")
                         .HasDatabaseName("IX_Notifications_IdempotencyKey");
 
                     b.ToTable("Notifications");

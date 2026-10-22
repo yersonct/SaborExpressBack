@@ -23,6 +23,31 @@ namespace SaborExpress.Modules.Notifications.Repositories
             return notification;
         }
 
+        public async Task<(Notification Notification, bool Created)> AddIdempotentAsync(
+            Notification notification)
+        {
+            if (string.IsNullOrWhiteSpace(notification.IdempotencyKey))
+                throw new ArgumentException("La clave de idempotencia es obligatoria.", nameof(notification));
+
+            _context.Notifications.Add(notification);
+            try
+            {
+                await _context.SaveChangesAsync();
+                return (notification, true);
+            }
+            catch (DbUpdateException)
+            {
+                _context.Entry(notification).State = EntityState.Detached;
+                var existing = await _context.Notifications
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.IdempotencyKey == notification.IdempotencyKey);
+                if (existing == null)
+                    throw;
+
+                return (existing, false);
+            }
+        }
+
         public async Task<List<Notification>> AddRangeAsync(List<Notification> notifications)
         {
             _context.Notifications.AddRange(notifications);
