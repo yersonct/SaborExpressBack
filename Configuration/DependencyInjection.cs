@@ -36,6 +36,7 @@ using SaborExpress.Modules.UserRoles.Repositories;
 using SaborExpress.Modules.UserRoles.Services;
 using SaborExpress.Shared.Interfaces;
 using SaborExpress.Shared.Services;
+using SaborExpress.Shared.Observability;
 using SaborExpress.Modules.Categories.Interfaces;
 using SaborExpress.Modules.Categories.Repositories;
 using SaborExpress.Modules.Categories.Services;
@@ -276,7 +277,9 @@ namespace SaborExpress.Configuration
             services.AddScoped<IPaymentService, PaymentService>();
             services.AddScoped<CashClosureService>();
             services.AddScoped<PaymentValidator>();
-            services.AddHttpClient<IWompiClient, WompiClient>();
+            services.AddHttpClient<IWompiClient, WompiClient>()
+                .AddHttpMessageHandler(provider => new ProviderMetricsDelegatingHandler(
+                    provider.GetRequiredService<ApiMetricsRegistry>(), "wompi"));
 
             return services;
         }

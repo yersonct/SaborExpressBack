@@ -13,6 +13,7 @@ using SaborExpress.Shared.Authorization;
 using SaborExpress.Shared.Localization;
 using SaborExpress.Shared.Middleware;
 using SaborExpress.Shared.Security;
+using SaborExpress.Shared.Observability;
 
 // Carga el archivo .env ANTES de crear el builder
 DotNetEnv.Env.Load();
@@ -42,6 +43,8 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddSingleton<IApiMessageLocalizer, ApiMessageLocalizer>();
 builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<ApiMetricsRegistry>();
+builder.Services.AddSingleton<ApiRouteCatalog>();
 builder.Services.AddScoped<ApiExceptionFilter>();
 builder.Services.AddScoped<ApiMessageLocalizationFilter>();
 
@@ -68,7 +71,15 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddDependencies();
-builder.Services.AddHttpClient<IGeocodingService, GeocodingService>();
+builder.Services.AddHttpClient<IGeocodingService, GeocodingService>()
+    .AddHttpMessageHandler(provider => new ProviderMetricsDelegatingHandler(
+        provider.GetRequiredService<ApiMetricsRegistry>(), "geocoding"));
+builder.Services.AddHttpClient("email")
+    .AddHttpMessageHandler(provider => new ProviderMetricsDelegatingHandler(
+        provider.GetRequiredService<ApiMetricsRegistry>(), "email"));
+builder.Services.AddHttpClient("push")
+    .AddHttpMessageHandler(provider => new ProviderMetricsDelegatingHandler(
+        provider.GetRequiredService<ApiMetricsRegistry>(), "push"));
 builder.Services.AddSwaggerConfiguration();
 builder.Services.AddSignalR(options =>
 {
@@ -107,6 +118,10 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications"); // ← NUEVO
 app.MapHub<PublicMenuHub>("/hubs/public-menu");
+
+app.MapGet("/metrics", (ApiMetricsRegistry metrics) =>
+        Results.Text(metrics.RenderPrometheus(), "text/plain; version=0.0.4; charset=utf-8"))
+    .AllowAnonymous();
 
 app.Run();
 

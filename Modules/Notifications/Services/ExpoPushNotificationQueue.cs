@@ -132,7 +132,7 @@ namespace SaborExpress.Modules.Notifications.Services
                 }
             };
 
-            var client = _httpClientFactory.CreateClient();
+            var client = _httpClientFactory.CreateClient("push");
             var accessToken = _configuration["Expo:PushAccessToken"]
                 ?? _configuration["EXPO_PUSH_ACCESS_TOKEN"];
 
