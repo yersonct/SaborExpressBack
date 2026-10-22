@@ -1,5 +1,6 @@
 // Modules/Deliveries/Interfaces/IDeliveryRepository.cs
 using SaborExpress.Modules.Deliveries.Models;
+using SaborExpress.Modules.Deliveries.Enum;
 using SaborExpress.Modules.Orders.Models;
 
 namespace SaborExpress.Modules.Deliveries.Interfaces
@@ -8,7 +9,7 @@ public interface IDeliveryRepository
 {
     Task<Delivery?> GetByIdAsync(int id);
     Task<List<Delivery>> GetByOrderIdAsync(int orderId);
-    Task<List<Delivery>> GetByDeliveryPersonIdAsync(int deliveryPersonId);
+    Task<List<Delivery>> GetByDeliveryPersonIdAsync(int deliveryPersonId, bool activeOnly = false);
 
     // ELIMINADO: Task<List<Order>> GetAvailableOrdersAsync(int branchId);
     // Ya no hay modelo "pull" — el repartidor no elige pedidos disponibles.
@@ -23,6 +24,8 @@ public interface IDeliveryRepository
     Task<bool> AddressExistsAsync(int addressId);
     Task<bool> AddressBelongsToCustomerAsync(int addressId, int customerId);
     Task<bool> OrderHasDeliveryAsync(int orderId);
+    Task<bool> TryTransitionStatusAsync(
+        int deliveryId, DeliveryStatus expectedStatus, DeliveryStatus targetStatus, DateTime? deliveredAt);
 
     Task AddAsync(Delivery delivery);
 

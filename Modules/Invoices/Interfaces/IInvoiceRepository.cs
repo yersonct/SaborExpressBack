@@ -9,8 +9,6 @@ namespace SaborExpress.Modules.Invoices.Interfaces
         Task<Invoice?> GetByPaymentIdAsync(int paymentId);
         Task<List<Invoice>> GetByOrderIdAsync(int orderId);
         Task<List<Invoice>> GetByBranchIdAsync(int branchId);
-        Task<int> GetNextInvoiceNumberAsync(int branchId);
-        Task AddAsync(Invoice invoice);
-        Task SaveChangesAsync();
+        Task AddWithAssignedNumberAsync(Invoice invoice);
     }
 }

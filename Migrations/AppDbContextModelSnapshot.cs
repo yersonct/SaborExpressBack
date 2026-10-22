@@ -892,7 +892,11 @@ namespace SaborExpress.Migrations
 
                     b.HasIndex("OrderId");
 
-                    b.HasIndex("PaymentId");
+                    b.HasIndex("InvoiceNumber")
+                        .IsUnique();
+
+                    b.HasIndex("PaymentId")
+                        .IsUnique();
 
                     b.ToTable("Invoices");
                 });
@@ -936,9 +940,16 @@ namespace SaborExpress.Migrations
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("UserId", "IsRead");
+
+                    b.HasIndex("IdempotencyKey")
+                        .HasDatabaseName("IX_Notifications_IdempotencyKey");
 
                     b.ToTable("Notifications");
                 });
@@ -1319,6 +1330,14 @@ namespace SaborExpress.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("wompi_transaction_id");
 
+                    b.Property<DateTime?>("WompiPostProcessingStartedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("wompi_post_processing_started_at_utc");
+
+                    b.Property<DateTime?>("WompiPostProcessingCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("wompi_post_processing_completed_at_utc");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CashierId");
@@ -1328,6 +1347,9 @@ namespace SaborExpress.Migrations
                     b.HasIndex("WompiReference")
                         .IsUnique()
                         .HasFilter("wompi_reference IS NOT NULL");
+
+                    b.HasIndex("Method", "Status", "WompiPostProcessingCompletedAtUtc", "WompiPostProcessingStartedAtUtc")
+                        .HasDatabaseName("IX_payments_wompi_post_processing");
 
                     b.ToTable("payments", (string)null);
                 });

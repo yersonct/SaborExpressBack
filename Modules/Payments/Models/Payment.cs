@@ -28,6 +28,8 @@ namespace SaborExpress.Modules.Payments.Models
 
         // Id de transacción que Wompi asigna una vez procesa el pago.
         public string? WompiTransactionId { get; set; }
+        public DateTime? WompiPostProcessingStartedAtUtc { get; set; }
+        public DateTime? WompiPostProcessingCompletedAtUtc { get; set; }
 
         // Motivo escrito al reembolsar (solo tiene valor si Status = Refunded)
         public string? RefundReason { get; set; }

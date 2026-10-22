@@ -156,7 +156,7 @@ namespace SaborExpress.Modules.Reviews.Services
             };
         }
 
-        public async Task DeleteAsync(int id, int currentUserId)
+        public async Task DeleteAsync(int id, int currentUserId, bool isGerente, bool isAdministrador)
         {
             // CAMBIADO: usa GetByIdWithOrderAsync porque ValidateDelete
             // necesita saber review.Order.BranchId
@@ -167,8 +167,6 @@ namespace SaborExpress.Modules.Reviews.Services
             var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
                 ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
 
-            var isGerente = currentUser.HasRole(RoleNames.Gerente);
-            var isAdministrador = currentUser.HasRole(RoleNames.Administrador);
             var currentCustomerId = currentUser.Customer?.Id;
             var adminBranchId = currentUser.Employee?.BranchId;
 

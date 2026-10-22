@@ -23,19 +23,32 @@ namespace SaborExpress.Modules.Invoices.Repositories
                     .ThenInclude(o => o.Customer);
         }
 
+        // Los recibos necesitan los conceptos, el comprador y el pago. Las listas de
+        // facturas mantienen una consulta más liviana para no cargar ese detalle en lote.
+        private IQueryable<Invoice> DetailedQuery()
+        {
+            return _context.Invoices
+                .Include(x => x.Branch)
+                .Include(x => x.Order).ThenInclude(o => o.Customer).ThenInclude(c => c!.User)
+                .Include(x => x.Order).ThenInclude(o => o.OrderDetails).ThenInclude(d => d.Product)
+                .Include(x => x.Order).ThenInclude(o => o.Table)
+                .Include(x => x.Order).ThenInclude(o => o.Address)
+                .Include(x => x.Payment).ThenInclude(p => p.Cashier);
+        }
+
         public async Task<Invoice?> GetByIdAsync(int id)
         {
-            return await BaseQuery().FirstOrDefaultAsync(x => x.Id == id);
+            return await DetailedQuery().FirstOrDefaultAsync(x => x.Id == id);
         }
 
         public async Task<Invoice?> GetByPaymentIdAsync(int paymentId)
         {
-            return await BaseQuery().FirstOrDefaultAsync(x => x.PaymentId == paymentId);
+            return await DetailedQuery().FirstOrDefaultAsync(x => x.PaymentId == paymentId);
         }
 
         public async Task<List<Invoice>> GetByOrderIdAsync(int orderId)
         {
-            return await BaseQuery()
+            return await DetailedQuery()
                 .Where(x => x.OrderId == orderId)
                 .OrderByDescending(x => x.IssuedAt)
                 .ToListAsync();
@@ -49,22 +62,29 @@ namespace SaborExpress.Modules.Invoices.Repositories
                 .ToListAsync();
         }
 
-        public async Task<int> GetNextInvoiceNumberAsync(int branchId)
+        public async Task AddWithAssignedNumberAsync(Invoice invoice)
         {
-            var count = await _context.Invoices
-                .CountAsync(x => x.BranchId == branchId);
+            // The transaction keeps the temporary number invisible. Using the
+            // generated identity avoids count+1 races when two cashiers invoice
+            // different payments at the same time.
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                invoice.InvoiceNumber = $"PENDING-{Guid.NewGuid():N}";
+                await _context.Invoices.AddAsync(invoice);
+                await _context.SaveChangesAsync();
 
-            return count + 1;
-        }
+                invoice.InvoiceNumber = $"SUC{invoice.BranchId:000}-{invoice.Id:000000}";
+                await _context.SaveChangesAsync();
 
-        public async Task AddAsync(Invoice invoice)
-        {
-            await _context.Invoices.AddAsync(invoice);
-        }
-
-        public async Task SaveChangesAsync()
-        {
-            await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                _context.Entry(invoice).State = EntityState.Detached;
+                throw;
+            }
         }
     }
 }

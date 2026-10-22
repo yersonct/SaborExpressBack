@@ -10,6 +10,7 @@ namespace SaborExpress.Modules.Auth.DTOs
         public List<string> Roles { get; set; } = new();
         public string RefreshToken { get; set; } = string.Empty;
         public string Identifier { get; set; } = string.Empty;
+        public int? EmployeeId { get; set; }
 
         public bool HasActiveShift { get; set; } = true;
 
