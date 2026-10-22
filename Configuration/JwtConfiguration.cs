@@ -3,6 +3,7 @@ using Microsoft.IdentityModel.Tokens;
 using SaborExpress.Modules.Auth.Interfaces;
 using SaborExpress.Modules.Auth.Helpers;
 using SaborExpress.Shared.Constants;
+using SaborExpress.Shared.Security;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -75,6 +76,33 @@ namespace SaborExpress.Configuration
                     {
                         context.Token = accessToken;
                     }
+                    else if (string.IsNullOrEmpty(context.Request.Headers.Authorization) &&
+                        (string.Equals(context.Request.Headers[AuthCookieNames.WebClientHeader],
+                            AuthCookieNames.WebClientValue, StringComparison.Ordinal) ||
+                         path.StartsWithSegments("/hubs")))
+                    {
+                        // Cookies authenticate browser WebSocket connections without an
+                        // Authorization header. Check their Origin explicitly because
+                        // browsers do not apply CORS preflight to WebSocket upgrades.
+                        if (path.StartsWithSegments("/hubs") && string.IsNullOrEmpty(accessToken))
+                        {
+                            var services = context.HttpContext.RequestServices;
+                            var configuration = services.GetRequiredService<IConfiguration>();
+                            var environment = services.GetRequiredService<IHostEnvironment>();
+                            var allowedOrigins = CorsOriginPolicy.FilterConfiguredOrigins(
+                                configuration.GetSection("AllowedOrigins").Get<string[]>() ?? [],
+                                environment.IsDevelopment());
+                            if (!CorsOriginPolicy.IsAllowedOrigin(
+                                context.Request.Headers.Origin.ToString(),
+                                allowedOrigins,
+                                environment.IsDevelopment()))
+                            {
+                                return Task.CompletedTask;
+                            }
+                        }
+
+                        context.Token = context.Request.Cookies[AuthCookieNames.AccessToken];
+                    }
 
                     return Task.CompletedTask;
                 },
@@ -111,6 +139,11 @@ namespace SaborExpress.Configuration
 
                     if (string.IsNullOrEmpty(rawToken))
                         rawToken = context.HttpContext.Request.Query["access_token"].ToString();
+                    if (string.IsNullOrEmpty(rawToken) &&
+                        (string.Equals(context.HttpContext.Request.Headers[AuthCookieNames.WebClientHeader],
+                            AuthCookieNames.WebClientValue, StringComparison.Ordinal) ||
+                         context.HttpContext.Request.Path.StartsWithSegments("/hubs")))
+                        rawToken = context.HttpContext.Request.Cookies[AuthCookieNames.AccessToken] ?? string.Empty;
 
                     var config = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
                     var singleSession = config.GetValue("Auth:SingleSession", true);

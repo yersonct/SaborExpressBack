@@ -7,6 +7,7 @@ namespace SaborExpress.Modules.Notifications.Interfaces
         Task<Notification> AddAsync(Notification notification);
         Task<List<Notification>> AddRangeAsync(List<Notification> notifications);
         Task<Notification?> GetByIdAsync(int id);
+        Task<Notification?> GetByIdempotencyKeyAsync(string key);
         Task<List<Notification>> GetByUserIdAsync(int userId, bool? unreadOnly = null);
         Task<int> GetUnreadCountAsync(int userId);
         Task<Dictionary<int, string>> GetLanguagesByUserIdsAsync(IReadOnlyCollection<int> userIds);
