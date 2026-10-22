@@ -17,6 +17,9 @@ namespace SaborExpress.Modules.Configurations.Repositories
         public async Task AddAsync(BranchOperationalSettings settings)
             => await _context.BranchOperationalSettings.AddAsync(settings);
 
+        public void Detach(BranchOperationalSettings settings)
+            => _context.Entry(settings).State = EntityState.Detached;
+
         public async Task SaveChangesAsync() => await _context.SaveChangesAsync();
     }
 }
