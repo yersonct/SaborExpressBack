@@ -6,6 +6,7 @@ namespace SaborExpress.Modules.Configurations.Interfaces
     {
         Task<BranchOperationalSettings?> GetByBranchIdAsync(int branchId);
         Task AddAsync(BranchOperationalSettings settings);
+        void Detach(BranchOperationalSettings settings);
         Task SaveChangesAsync();
     }
 }
