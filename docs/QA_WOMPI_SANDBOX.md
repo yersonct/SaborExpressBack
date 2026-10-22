@@ -1,6 +1,7 @@
 # HU-QA-02 — Validación de Wompi en sandbox
 
-**Rama:** `test/HU-QA-02-wompi-sandbox`  
+**Rama:** `test/HU-QA-02-wompi-sandbox`
+
 **Ambiente:** Sandbox de Wompi; ninguna evidencia de este procedimiento representa un cobro real.
 
 ## Ejecución automatizada reproducible
