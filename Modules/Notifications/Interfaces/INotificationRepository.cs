@@ -5,6 +5,7 @@ namespace SaborExpress.Modules.Notifications.Interfaces
     public interface INotificationRepository
     {
         Task<Notification> AddAsync(Notification notification);
+        Task<(Notification Notification, bool Created)> AddIdempotentAsync(Notification notification);
         Task<List<Notification>> AddRangeAsync(List<Notification> notifications);
         Task<Notification?> GetByIdAsync(int id);
         Task<Notification?> GetByIdempotencyKeyAsync(string key);

@@ -29,6 +29,8 @@ namespace SaborExpress.Data.Configurations
                 .HasMaxLength(128);
 
             builder.HasIndex(n => n.IdempotencyKey)
+                .IsUnique()
+                .HasFilter("\"IdempotencyKey\" IS NOT NULL")
                 .HasDatabaseName("IX_Notifications_IdempotencyKey");
         }
     }

@@ -181,6 +181,7 @@ namespace SaborExpress.Controllers
 
         // POST /api/Payments/wompi/webhook
         [AllowAnonymous]
+        [RequestSizeLimit(64 * 1024)]
         [HttpPost("wompi/webhook")]
         public async Task<IActionResult> WompiWebhook()
         {
@@ -200,9 +201,9 @@ namespace SaborExpress.Controllers
                     rawBody,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             }
-            catch (JsonException ex)
+            catch (JsonException)
             {
-                _logger.LogError(ex, "Webhook Wompi con JSON inválido");
+                _logger.LogWarning("Webhook Wompi rechazado por formato JSON inválido.");
                 return BadRequest();
             }
 
