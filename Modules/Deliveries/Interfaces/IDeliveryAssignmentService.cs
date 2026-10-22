@@ -4,6 +4,9 @@ namespace SaborExpress.Modules.Deliveries.Interfaces
     public interface IDeliveryAssignmentService
     {
         Task AssignAutomaticallyAsync(int orderId);
-        Task AssignPendingForBranchAsync(int branchId);
+        Task AssignPendingForBranchAsync(
+            int branchId,
+            int? retryNotificationForOrderId = null,
+            bool throwOnNotificationFailure = false);
     }
 }
