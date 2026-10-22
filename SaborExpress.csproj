@@ -32,6 +32,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <!-- Los casos de QA viven dentro del repositorio pero no forman parte del binario API. -->
+	  <Compile Remove="tests/**/*.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <Folder Include="Middleware\" />
 	  <Folder Include="Data\Migrations\" />
 	  <Folder Include="Migrations\" />
