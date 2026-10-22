@@ -5,6 +5,8 @@ using SaborExpress.Modules.Auth.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using SaborExpress.Shared.Constants;
+using SaborExpress.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace SaborExpress.Controllers
 {
@@ -16,23 +18,38 @@ namespace SaborExpress.Controllers
         private readonly IPasswordResetService _passwordResetService;
         private readonly IEmailConfirmationService _emailConfirmationService;
         private readonly IEmployeeActivationService _employeeActivationService;
+        private readonly IConfiguration _configuration;
+        private readonly IHostEnvironment _hostEnvironment;
+        private readonly JwtSettings _jwtSettings;
 
         public AuthController(
             IAuthService authService,
             IPasswordResetService passwordResetService,
             IEmailConfirmationService emailConfirmationService,
-            IEmployeeActivationService employeeActivationService)
+            IEmployeeActivationService employeeActivationService,
+            IConfiguration configuration,
+            IHostEnvironment hostEnvironment,
+            IOptions<JwtSettings> jwtSettings)
         {
             _authService = authService;
             _passwordResetService = passwordResetService;
             _emailConfirmationService = emailConfirmationService;
             _employeeActivationService = employeeActivationService;
+            _configuration = configuration;
+            _hostEnvironment = hostEnvironment;
+            _jwtSettings = jwtSettings.Value;
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
             var response = await _authService.LoginAsync(dto);
+            if (IsAdminWebClient())
+            {
+                SetSessionCookies(response);
+                response.Token = string.Empty;
+                response.RefreshToken = string.Empty;
+            }
             return Ok(response);
         }
 
@@ -71,7 +88,13 @@ namespace SaborExpress.Controllers
 
         [Authorize]
         [HttpGet("session")]
-        public IActionResult ValidateSession() => NoContent();
+        public IActionResult ValidateSession()
+        {
+            if (!IsAdminWebClient())
+                return NoContent();
+
+            return Ok(GetSafeSessionResponse());
+        }
 
         [Authorize]
         [HttpPost("logout")]
@@ -83,6 +106,8 @@ namespace SaborExpress.Controllers
                 return Unauthorized();
 
             await _authService.LogoutAsync(userId);
+            if (IsAdminWebClient())
+                ClearSessionCookies();
             return Ok(new { message = "Sesion cerrada correctamente." });
         }
 
@@ -107,6 +132,26 @@ namespace SaborExpress.Controllers
             var response = await _authService.RefreshTokenAsync(dto);
             return Ok(response);
         }
+
+        [HttpPost("web-refresh-token")]
+        public async Task<IActionResult> WebRefreshToken()
+        {
+            if (!IsAdminWebClient())
+                return Forbid();
+
+            var refreshToken = Request.Cookies[AuthCookieNames.RefreshToken];
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                return Unauthorized();
+
+            var response = await _authService.RefreshTokenAsync(new RefreshTokenRequestDto
+            {
+                RefreshToken = refreshToken
+            });
+            SetSessionCookies(response);
+            response.Token = string.Empty;
+            response.RefreshToken = string.Empty;
+            return Ok(response);
+        }
         [HttpPost("resend-activation-code")]
         public async Task<IActionResult> ResendActivationCode([FromBody] ResendActivationDto dto)
         {
@@ -119,6 +164,59 @@ namespace SaborExpress.Controllers
         {
             await _employeeActivationService.ActivateAccountAsync(dto);
             return Ok(new { message = "Cuenta activada correctamente. Ya puedes iniciar sesion con tu nueva contrasena." });
+        }
+
+        private bool IsAdminWebClient() =>
+            string.Equals(Request.Headers[AuthCookieNames.WebClientHeader],
+                AuthCookieNames.WebClientValue, StringComparison.Ordinal);
+
+        private object GetSafeSessionResponse()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            return new
+            {
+                userId = int.TryParse(userId, out var parsedUserId) ? parsedUserId : 0,
+                identifier = User.FindFirstValue(ClaimTypes.Name) ?? string.Empty,
+                employeeId = int.TryParse(User.FindFirstValue("EmployeeId"), out var parsedEmployeeId)
+                    ? parsedEmployeeId
+                    : (int?)null,
+                roles = User.FindAll(ClaimTypes.Role).Select(claim => claim.Value).ToArray()
+            };
+        }
+
+        private void SetSessionCookies(AuthResponseDto response)
+        {
+            var options = CreateCookieOptions("/");
+            options.Expires = DateTimeOffset.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes);
+            Response.Cookies.Append(AuthCookieNames.AccessToken, response.Token, options);
+
+            var refreshOptions = CreateCookieOptions("/api/Auth/web-refresh-token");
+            refreshOptions.Expires = DateTimeOffset.UtcNow.AddHours(_jwtSettings.RefreshTokenExpirationHours);
+            Response.Cookies.Append(AuthCookieNames.RefreshToken, response.RefreshToken, refreshOptions);
+        }
+
+        private void ClearSessionCookies()
+        {
+            Response.Cookies.Delete(AuthCookieNames.AccessToken, CreateCookieOptions("/"));
+            Response.Cookies.Delete(AuthCookieNames.RefreshToken,
+                CreateCookieOptions("/api/Auth/web-refresh-token"));
+        }
+
+        private CookieOptions CreateCookieOptions(string path)
+        {
+            var sameSiteSetting = _configuration["Auth:Cookies:SameSite"];
+            if (!Enum.TryParse<SameSiteMode>(sameSiteSetting, ignoreCase: true, out var sameSite))
+                sameSite = SameSiteMode.Lax;
+
+            return new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = !_hostEnvironment.IsDevelopment() || Request.IsHttps,
+                SameSite = sameSite,
+                Path = path,
+                Domain = _configuration["Auth:Cookies:Domain"],
+                IsEssential = true
+            };
         }
     }
 }

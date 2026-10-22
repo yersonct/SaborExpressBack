@@ -18,6 +18,7 @@ namespace SaborExpress.Modules.Notifications.Models
         // Referencia polimórfica: a qué entidad apunta esta notificación
         public string? RelatedEntityType { get; set; } // "Order", "Delivery", "Payment"...
         public int? RelatedEntityId { get; set; }
+        public string? IdempotencyKey { get; set; }
 
         public bool IsRead { get; set; } = false;
         public DateTime? ReadAt { get; set; }

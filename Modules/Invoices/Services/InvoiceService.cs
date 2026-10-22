@@ -5,6 +5,7 @@ using SaborExpress.Modules.Invoices.Mappings;
 using SaborExpress.Modules.Invoices.Models;
 using SaborExpress.Modules.Invoices.Validators;
 using SaborExpress.Modules.Payments.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace SaborExpress.Modules.Invoices.Services
 {
@@ -28,19 +29,19 @@ namespace SaborExpress.Modules.Invoices.Services
         {
             await _validator.ValidateCreateAsync(dto);
 
+            var existing = await _invoiceRepository.GetByPaymentIdAsync(dto.PaymentId);
+            if (existing != null)
+                return InvoiceMapper.ToResponse(existing);
+
             var payment = await _paymentRepository.GetByIdAsync(dto.PaymentId);
             var order = payment!.Order;
             var branchId = order.BranchId;
-
-            var nextNumber = await _invoiceRepository.GetNextInvoiceNumberAsync(branchId);
-            var invoiceNumber = $"SUC{branchId:000}-{nextNumber:000000}";
 
             var invoice = new Invoice
             {
                 PaymentId = payment.Id,
                 OrderId = order.Id,
                 BranchId = branchId,
-                InvoiceNumber = invoiceNumber,
                 SubTotal = order.SubTotal,
                Tax = order.Tax,
                 TaxRate = order.TaxRate,
@@ -50,8 +51,20 @@ namespace SaborExpress.Modules.Invoices.Services
                 IssuedAt = DateTime.UtcNow
             };
 
-            await _invoiceRepository.AddAsync(invoice);
-            await _invoiceRepository.SaveChangesAsync();
+            try
+            {
+                await _invoiceRepository.AddWithAssignedNumberAsync(invoice);
+            }
+            catch (DbUpdateException)
+            {
+                // A concurrent retry may have won the unique PaymentId index.
+                // Return that invoice after the failed insert transaction ends.
+                var concurrentInvoice = await _invoiceRepository.GetByPaymentIdAsync(dto.PaymentId);
+                if (concurrentInvoice == null)
+                    throw;
+
+                return InvoiceMapper.ToResponse(concurrentInvoice);
+            }
 
             var created = await _invoiceRepository.GetByIdAsync(invoice.Id);
             return InvoiceMapper.ToResponse(created!);

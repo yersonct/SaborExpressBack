@@ -84,8 +84,9 @@ namespace SaborExpress.Modules.Payments.Services
                 PaidAt = DateTime.UtcNow
             };
 
-            await _paymentRepository.AddAsync(payment);
-            await _paymentRepository.SaveChangesAsync();
+            if (!await _paymentRepository.TryAddCompletedPaymentAtomicallyAsync(payment))
+                throw new InvalidOperationException(
+                    "El saldo del pedido cambiÃ³ o ya fue pagado. Actualiza la lista antes de volver a cobrar.");
             await _realtime.PaymentsChangedAsync();
             // El pago es una de las dos confirmaciones requeridas para liberar la mesa.
             await _tableAvailabilityService.TryReleaseAfterConfirmationAsync(dto.OrderId);
@@ -115,7 +116,10 @@ namespace SaborExpress.Modules.Payments.Services
                         $"Se registró un pago de ${payment.Amount:N0}.",
                         NotificationType.PaymentConfirmed,
                         relatedEntityType: "Order",
-                        relatedEntityId: payment.OrderId);
+                        relatedEntityId: payment.OrderId,
+                        idempotencyKey: payment.Method == PaymentMethod.Wompi
+                            ? $"wompi:{payment.Id}:cashier"
+                            : null);
                 }
             }
             // El aviso de mesa disponible se envía cuando también se confirma
@@ -132,7 +136,10 @@ namespace SaborExpress.Modules.Payments.Services
                         "Se cobró un pedido.",
                         SaborExpress.Modules.Notifications.Enum.NotificationType.PaymentConfirmed,
                         relatedEntityType: "Order",
-                        relatedEntityId: payment.OrderId);
+                        relatedEntityId: payment.OrderId,
+                        idempotencyKey: payment.Method == PaymentMethod.Wompi
+                            ? $"wompi:{payment.Id}:waiter"
+                            : null);
                 }
             }
         }
@@ -240,30 +247,29 @@ namespace SaborExpress.Modules.Payments.Services
             if (amount <= 0)
                 throw new InvalidOperationException("El pedido no tiene un total válido.");
 
-            var reference = $"SABOREXPRESS-{order.Id}-{Guid.NewGuid():N}";
+            var (payment, created) = await _paymentRepository.GetOrCreatePendingWompiPaymentAsync(
+                new Payment
+                {
+                    OrderId = order.Id,
+                    CashierId = null,
+                    Method = PaymentMethod.Wompi,
+                    Amount = amount,
+                    Status = PaymentStatus.Pending,
+                    PaidAt = DateTime.UtcNow,
+                    WompiReference = $"SABOREXPRESS-{order.Id}-{Guid.NewGuid():N}"
+                },
+                OrderStatus.Pending);
 
-            var payment = new Payment
-            {
-                OrderId = order.Id,
-                CashierId = null,
-                Method = PaymentMethod.Wompi,
-                Amount = amount,
-                Status = PaymentStatus.Pending,
-                PaidAt = DateTime.UtcNow,
-                WompiReference = reference
-            };
+            if (created)
+                await _realtime.PaymentsChangedAsync();
 
-            await _paymentRepository.AddAsync(payment);
-            await _paymentRepository.SaveChangesAsync();
-            await _realtime.PaymentsChangedAsync();
-
-            var amountInCents = (int)Math.Round(amount * 100m, MidpointRounding.AwayFromZero);
-            var signature = _wompiClient.BuildIntegritySignature(reference, amountInCents, "COP");
+            var amountInCents = (int)Math.Round(payment.Amount * 100m, MidpointRounding.AwayFromZero);
+            var signature = _wompiClient.BuildIntegritySignature(payment.WompiReference!, amountInCents, "COP");
 
             return new WompiWidgetDataDto
             {
                 PaymentId = payment.Id,
-                Reference = reference,
+                Reference = payment.WompiReference!,
                 AmountInCents = amountInCents,
                 Currency = "COP",
                 PublicKey = _wompiClient.PublicKey,
@@ -290,15 +296,8 @@ namespace SaborExpress.Modules.Payments.Services
                 throw new InvalidOperationException("Este pedido ya está pagado.");
 
             // Si el cajero vuelve a tocar "QR", reusamos el pago pendiente (mismo QR, sin duplicados)
-            var payment = existing.FirstOrDefault(p =>
-                p.Method == PaymentMethod.Wompi &&
-                p.Status == PaymentStatus.Pending &&
-                p.Amount == amount &&
-                p.WompiReference != null);
-
-            if (payment == null)
-            {
-                payment = new Payment
+            var (payment, created) = await _paymentRepository.GetOrCreatePendingWompiPaymentAsync(
+                new Payment
                 {
                     OrderId = order.Id,
                     CashierId = cashierId,
@@ -307,13 +306,13 @@ namespace SaborExpress.Modules.Payments.Services
                     Status = PaymentStatus.Pending,
                     PaidAt = DateTime.UtcNow,
                     WompiReference = $"SABOREXPRESS-{order.Id}-{Guid.NewGuid():N}"
-                };
-                await _paymentRepository.AddAsync(payment);
-                await _paymentRepository.SaveChangesAsync();
-                await _realtime.PaymentsChangedAsync();
-            }
+                },
+                requiredOrderStatus: null);
 
-            var amountInCents = (int)Math.Round(amount * 100m, MidpointRounding.AwayFromZero);
+            if (created)
+                await _realtime.PaymentsChangedAsync();
+
+            var amountInCents = (int)Math.Round(payment.Amount * 100m, MidpointRounding.AwayFromZero);
             var signature = _wompiClient.BuildIntegritySignature(payment.WompiReference!, amountInCents, "COP");
 
             return new WompiWidgetDataDto
@@ -401,11 +400,6 @@ namespace SaborExpress.Modules.Payments.Services
         public async Task SyncPendingWompiPaymentsAsync()
         {
             var pending = await _paymentRepository.GetPendingWompiSinceAsync(DateTime.UtcNow.AddMinutes(-30));
-            if (pending.Count == 0)
-                return;
-
-            Console.WriteLine($"[SYNC] Pagos Wompi pendientes: {pending.Count}");
-
             foreach (var payment in pending)
             {
                 try
@@ -420,11 +414,33 @@ namespace SaborExpress.Modules.Payments.Services
                     _logger.LogError(ex, "Error sincronizando el pago {PaymentId} con Wompi", payment.Id);
                 }
             }
+
+            var postProcessing = await _paymentRepository.GetWompiPostProcessingPendingAsync(50);
+            foreach (var payment in postProcessing)
+            {
+                try
+                {
+                    await ProcessWompiPostProcessingAsync(payment.Id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "No se pudieron completar los efectos posteriores del pago Wompi {PaymentId}; se reintentará.",
+                        payment.Id);
+                }
+            }
         }
         // Lógica única para aplicar el resultado de Wompi (webhook o sincronización)
         private async Task ApplyWompiResultAsync(Payment payment, string txId, string status, int amountInCents)
         {
-            if (payment.Status == PaymentStatus.Completed || payment.Status == PaymentStatus.Failed)
+            if (payment.Status == PaymentStatus.Completed)
+            {
+                if (string.Equals(status, "APPROVED", StringComparison.Ordinal))
+                    await ProcessWompiPostProcessingAsync(payment.Id);
+                return;
+            }
+
+            if (payment.Status == PaymentStatus.Failed)
                 return;
 
             // Seguridad: el monto que Wompi cobró debe ser el monto del pago
@@ -457,143 +473,125 @@ namespace SaborExpress.Modules.Payments.Services
 
             _logger.LogInformation("Pago {Id} -> estado Wompi {Status}", payment.Id, status);
 
-            switch (status)
+            if (terminalStatus == PaymentStatus.Completed)
             {
-                case "APPROVED":
-                    var order = await _orderRepository.GetByIdAsync(payment.OrderId);
-                    _logger.LogInformation("Pago {PaymentId} aprobado. Pedido {OrderId} estado actual: {Status}", payment.Id, payment.OrderId, order?.Status);
-                    if (order != null && order.Status == OrderStatus.Pending)
-                    {
-                        order.Status = OrderStatus.Confirmed;
-                        order.UpdatedAt = DateTime.UtcNow;
-                        await _orderRepository.UpdateAsync(order);
-                        await _orderRepository.SaveChangesAsync();
-
-                        if (order.OrderType == OrderType.Delivery)
-                        {
-                            try
-                            {
-                                await _deliveryAssignmentService.AssignPendingForBranchAsync(order.BranchId);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "No se pudo asignar repartidor al pedido {OrderId}", order.Id);
-                            }
-                        }
-
-                        // Pago del cliente aprobado: recién ahora se avisa a cocina y caja
-                        if (order.OrderType == OrderType.Delivery && payment.CashierId == null)
-                            await NotifyPaidDeliveryAsync(order.Id, order.BranchId);
-                    }
-
-                    await _realtime.PaymentsChangedAsync();
-
-                    // 1) Primero el cliente: es lo más importante y no debe depender de nada más
-                    if (order != null)
-                        await NotifyCustomerPaymentApprovedAsync(order);
-
-                    // 2) Liberar mesa (protegido: un fallo aquí no debe tumbar el resto)
-                    try
-                    {
-                        await _tableAvailabilityService.TryReleaseAfterConfirmationAsync(payment.OrderId);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "No se pudo liberar la mesa del pedido {OrderId}", payment.OrderId);
-                    }
-
-                    await _realtime.OrdersChangedAsync();
-                    await _realtime.TablesChangedAsync();
-
-                    // 3) Cobro iniciado por un cajero (QR en mesa): avisar al cajero y al mesero
-                    if (payment.CashierId != null)
-                    {
-                        try
-                        {
-                            await NotifyPaymentConfirmedAsync(payment);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "No se pudo notificar el pago {PaymentId} al cajero/mesero", payment.Id);
-                        }
-                    }
-                    break;
-
-                case "DECLINED":
-                case "ERROR":
-                case "VOIDED":
-                    await _realtime.PaymentsChangedAsync();
-                    await _realtime.OrdersChangedAsync();
-                    break;
-
-                // PENDING: no se toca, se espera el siguiente evento
+                await ProcessWompiPostProcessingAsync(payment.Id);
+                return;
             }
+
+            await _realtime.PaymentsChangedAsync();
+            await _realtime.OrdersChangedAsync();
         }
-                private async Task NotifyCustomerPaymentApprovedAsync(Order order)
+
+        private async Task ProcessWompiPostProcessingAsync(int paymentId)
         {
+            var nowUtc = DateTime.UtcNow;
+            if (!await _paymentRepository.TryClaimWompiPostProcessingAsync(
+                paymentId, nowUtc.AddMinutes(-5), nowUtc))
+                return;
+
             try
             {
-                if (!order.CustomerId.HasValue)
+                var payment = await _paymentRepository.GetByIdAsync(paymentId);
+                if (payment == null || payment.Status != PaymentStatus.Completed ||
+                    payment.Method != PaymentMethod.Wompi || payment.WompiTransactionId == null)
                 {
-                    _logger.LogWarning("Pedido {OrderId} sin CustomerId: no se notifica al cliente.", order.Id);
+                    await _paymentRepository.ReleaseWompiPostProcessingClaimAsync(paymentId);
                     return;
                 }
 
-                var customerUserId = await _customerRepository.GetUserIdByCustomerIdAsync(order.CustomerId.Value);
-                if (customerUserId == null)
+                var order = payment.Order;
+                if (order.Status == OrderStatus.Pending)
                 {
-                    _logger.LogWarning("No se encontró UserId para el cliente {CustomerId} (pedido {OrderId}).",
-                        order.CustomerId.Value, order.Id);
-                    return;
+                    order.Status = OrderStatus.Confirmed;
+                    order.UpdatedAt = DateTime.UtcNow;
+                    await _orderRepository.UpdateAsync(order);
+                    await _orderRepository.SaveChangesAsync();
                 }
 
+                if (order.OrderType == OrderType.Delivery && order.Status != OrderStatus.Cancelled)
+                {
+                    await _deliveryAssignmentService.AssignPendingForBranchAsync(order.BranchId);
+                    if (payment.CashierId == null)
+                        await NotifyPaidDeliveryAsync(order.Id, order.BranchId, payment.Id);
+                }
+
+                await _realtime.PaymentsChangedAsync();
+                await NotifyCustomerPaymentApprovedAsync(order, payment.Id);
+                await _tableAvailabilityService.TryReleaseAfterConfirmationAsync(payment.OrderId);
+                await _realtime.OrdersChangedAsync();
+                await _realtime.TablesChangedAsync();
+
+                if (payment.CashierId != null)
+                    await NotifyPaymentConfirmedAsync(payment);
+
+                await _paymentRepository.MarkWompiPostProcessingCompletedAsync(paymentId, DateTime.UtcNow);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    await _paymentRepository.ReleaseWompiPostProcessingClaimAsync(paymentId);
+                }
+                catch (Exception releaseError)
+                {
+                    _logger.LogError(releaseError,
+                        "No se pudo liberar el reclamo de posprocesamiento del pago {PaymentId}.", paymentId);
+                }
+
+                _logger.LogError(ex,
+                    "Falló el posprocesamiento del pago Wompi {PaymentId}; queda disponible para reintento.",
+                    paymentId);
+                throw;
+            }
+        }
+        private async Task NotifyCustomerPaymentApprovedAsync(Order order, int paymentId)
+        {
+            if (!order.CustomerId.HasValue)
+            {
+                _logger.LogWarning("Pedido {OrderId} sin CustomerId: no se notifica al cliente.", order.Id);
+                return;
+            }
+
+            var customerUserId = await _customerRepository.GetUserIdByCustomerIdAsync(order.CustomerId.Value);
+            if (customerUserId == null)
+            {
+                _logger.LogWarning("No se encontrÃ³ UserId para el cliente {CustomerId} (pedido {OrderId}).",
+                    order.CustomerId.Value, order.Id);
+                return;
+            }
+
+            await _notificationService.CreateAsync(
+                customerUserId.Value,
+                "Pago confirmado",
+                "Tu pago fue aprobado.",
+                NotificationType.PaymentConfirmed,
+                relatedEntityType: "Order",
+                relatedEntityId: order.Id,
+                idempotencyKey: $"wompi:{paymentId}:customer");
+
+            _logger.LogInformation("NotificaciÃ³n de pago enviada al usuario {UserId} (pedido {OrderId}).",
+                customerUserId.Value, order.Id);
+        }
+        private async Task NotifyPaidDeliveryAsync(int orderId, int branchId, int paymentId)
+        {
+            var userIds = (await _employeeRepository.GetUserIdsByBranchAndRolesAsync(
+                    branchId, RoleNames.Cocinero, RoleNames.Administrador, RoleNames.Cajero))
+                .Concat(await _employeeRepository.GetUserIdsByRolesAsync(RoleNames.Gerente))
+                .Distinct();
+
+            foreach (var userId in userIds)
+            {
                 await _notificationService.CreateAsync(
-                    customerUserId.Value,
-                    "Pago confirmado",
-                    "Tu pago fue aprobado.",
-                    NotificationType.PaymentConfirmed,
+                    userId,
+                    "Pedido nuevo",
+                    "LlegÃ³ un pedido (ya pagado en lÃ­nea).",
+                    NotificationType.OrderCreated,
                     relatedEntityType: "Order",
-                    relatedEntityId: order.Id);
-
-                _logger.LogInformation("Notificación de pago enviada al usuario {UserId} (pedido {OrderId}).",
-                    customerUserId.Value, order.Id);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "No se pudo notificar el pago aprobado al cliente (pedido {OrderId})", order.Id);
+                    relatedEntityId: orderId,
+                    idempotencyKey: $"wompi:{paymentId}:delivery:{userId}");
             }
         }
-                // Domicilio pagado en línea: avisa a cocina, admin, gerente y cajeros.
-        // Es el aviso que antes salía al crear el pedido, aunque nadie hubiera pagado.
-        private async Task NotifyPaidDeliveryAsync(int orderId, int branchId)
-        {
-            try
-            {
-                var userIds = (await _employeeRepository.GetUserIdsByBranchAndRolesAsync(
-                        branchId, RoleNames.Cocinero, RoleNames.Administrador, RoleNames.Cajero))
-                    .Concat(await _employeeRepository.GetUserIdsByRolesAsync(RoleNames.Gerente))
-                    .Distinct();
-
-                foreach (var userId in userIds)
-                {
-                    await _notificationService.CreateAsync(
-                        userId,
-                        "Pedido nuevo",
-                    "Llegó un pedido (ya pagado en línea).",
-                        NotificationType.OrderCreated,
-                        relatedEntityType: "Order",
-                        relatedEntityId: orderId);
-                }
-            }
-            catch (Exception ex)
-            {
-                // El pago ya quedó guardado; un fallo al notificar no debe romperlo.
-                _logger.LogError(ex, "No se pudo notificar el pedido pagado {OrderId}", orderId);
-            }
-        }
-        // Nuevo: revisa si el pedido quedó 100% pagado, y si tiene mesa
-        // asociada, la libera automáticamente. No hace nada si falta saldo
-        // por cobrar, o si el pedido no tenía mesa (domicilio/para llevar).
         private async Task EnsureCanRegisterPaymentAsync(int currentUserId)
         {
             var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)

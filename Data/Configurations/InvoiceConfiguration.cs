@@ -8,6 +8,10 @@ namespace SaborExpress.Data.Configurations
     {
         public void Configure(EntityTypeBuilder<Invoice> builder)
         {
+            // A payment may produce only one invoice, including under concurrent retries.
+            builder.HasIndex(x => x.PaymentId).IsUnique();
+            builder.HasIndex(x => x.InvoiceNumber).IsUnique();
+
             builder.Property(x => x.TaxRate)
                 .HasColumnName("tax_rate")
                 .HasColumnType("decimal(5,2)")

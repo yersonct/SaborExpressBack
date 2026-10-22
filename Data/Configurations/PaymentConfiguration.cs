@@ -70,6 +70,20 @@ namespace SaborExpress.Data.Configurations
                 .HasColumnName("wompi_transaction_id")
                 .HasMaxLength(100);
 
+            builder.Property(x => x.WompiPostProcessingStartedAtUtc)
+                .HasColumnName("wompi_post_processing_started_at_utc");
+
+            builder.Property(x => x.WompiPostProcessingCompletedAtUtc)
+                .HasColumnName("wompi_post_processing_completed_at_utc");
+
+            builder.HasIndex(x => new
+            {
+                x.Method,
+                x.Status,
+                x.WompiPostProcessingCompletedAtUtc,
+                x.WompiPostProcessingStartedAtUtc
+            }).HasDatabaseName("IX_payments_wompi_post_processing");
+
             builder.Property(x => x.RefundReason)
                 .HasColumnName("refund_reason")
                 .HasMaxLength(500);

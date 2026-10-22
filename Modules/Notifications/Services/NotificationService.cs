@@ -31,19 +31,27 @@ namespace SaborExpress.Modules.Notifications.Services
 
         public async Task<NotificationDto> CreateAsync(
             int userId, string title, string message, NotificationType type,
-            string? relatedEntityType = null, int? relatedEntityId = null)
+            string? relatedEntityType = null, int? relatedEntityId = null,
+            string? idempotencyKey = null)
         {
-            var entity = new Notification
+            var entity = string.IsNullOrWhiteSpace(idempotencyKey)
+                ? null
+                : await _repository.GetByIdempotencyKeyAsync(idempotencyKey);
+            if (entity == null)
             {
-                UserId = userId,
-                Title = title,
-                Message = message,
-                Type = type,
-                RelatedEntityType = relatedEntityType,
-                RelatedEntityId = relatedEntityId
-            };
+                entity = new Notification
+                {
+                    UserId = userId,
+                    Title = title,
+                    Message = message,
+                    Type = type,
+                    RelatedEntityType = relatedEntityType,
+                    RelatedEntityId = relatedEntityId,
+                    IdempotencyKey = idempotencyKey
+                };
 
-            await _repository.AddAsync(entity);
+                await _repository.AddAsync(entity);
+            }
             var dto = entity.ToDto();
 
             var language = LanguageOptions.DefaultLanguage;

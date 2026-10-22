@@ -91,10 +91,20 @@ namespace SaborExpress.Modules.Deliveries.Repositories
             return deliveries;
         }
 
-        public async Task<List<Delivery>> GetByDeliveryPersonIdAsync(int deliveryPersonId)
+        public async Task<List<Delivery>> GetByDeliveryPersonIdAsync(int deliveryPersonId, bool activeOnly = false)
         {
-            var deliveries = await BaseQuery()
-                .Where(x => x.DeliveryPersonId == deliveryPersonId)
+            var query = BaseQuery()
+                .AsNoTracking()
+                .Where(x => x.DeliveryPersonId == deliveryPersonId);
+
+            if (activeOnly)
+            {
+                query = query.Where(x =>
+                    x.Status != DeliveryStatus.Delivered &&
+                    x.Order.Status != OrderStatus.Cancelled);
+            }
+
+            var deliveries = await query
                 .OrderByDescending(x => x.AssignedAt)
                 .ToListAsync();
 
@@ -221,6 +231,23 @@ namespace SaborExpress.Modules.Deliveries.Repositories
         public async Task<bool> OrderHasDeliveryAsync(int orderId)
         {
             return await _context.Deliveries.AnyAsync(x => x.OrderId == orderId);
+        }
+
+        public async Task<bool> TryTransitionStatusAsync(
+            int deliveryId, DeliveryStatus expectedStatus, DeliveryStatus targetStatus, DateTime? deliveredAt)
+        {
+            var updated = await _context.Deliveries
+                .Where(delivery => delivery.Id == deliveryId && delivery.Status == expectedStatus)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(delivery => delivery.Status, targetStatus)
+                    .SetProperty(delivery => delivery.DeliveredAt, deliveredAt));
+
+            if (updated != 1) return false;
+
+            var tracked = _context.ChangeTracker.Entries<Delivery>()
+                .FirstOrDefault(entry => entry.Entity.Id == deliveryId);
+            if (tracked != null) await tracked.ReloadAsync();
+            return true;
         }
 
         public async Task AddAsync(Delivery delivery)

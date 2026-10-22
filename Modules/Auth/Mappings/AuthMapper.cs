@@ -11,6 +11,7 @@ namespace SaborExpress.Modules.Auth.Mappings
             return new AuthResponseDto
             {
                 UserId = user.Id,
+                EmployeeId = user.Employee?.Id,
                 Token = token,
                 RefreshToken = refreshToken,
                 Roles = (effectiveRoles ?? user.UserRoles.Select(ur => ur.Role.Name).ToList()).ToList(),

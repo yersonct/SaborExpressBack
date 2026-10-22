@@ -3,8 +3,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SaborExpress.Modules.Deliveries.DTOs;
 using SaborExpress.Modules.Deliveries.Interfaces;
+using SaborExpress.Modules.Auth.Interfaces;
+using SaborExpress.Modules.Orders.Interfaces;
 using SaborExpress.Shared.Constants;
 using SaborExpress.Shared.Extensions;
+using SaborExpress.Shared.Security;
+using System.Security.Claims;
 
 namespace SaborExpress.Modules.Deliveries.Controllers
 {
@@ -15,16 +19,19 @@ namespace SaborExpress.Modules.Deliveries.Controllers
     {
         private readonly IDeliveryService _deliveryService;
         private readonly IDeliveryRepository _deliveryRepository;
-        private readonly IDeliveryAssignmentService _deliveryAssignmentService;
+        private readonly IOrderRepository _orderRepository;
+        private readonly IAuthRepository _authRepository;
 
         public DeliveriesController(
             IDeliveryService deliveryService,
             IDeliveryRepository deliveryRepository,
-            IDeliveryAssignmentService deliveryAssignmentService)
+            IOrderRepository orderRepository,
+            IAuthRepository authRepository)
         {
             _deliveryService = deliveryService;
             _deliveryRepository = deliveryRepository;
-            _deliveryAssignmentService = deliveryAssignmentService;
+            _orderRepository = orderRepository;
+            _authRepository = authRepository;
         }
 
 
@@ -43,6 +50,15 @@ namespace SaborExpress.Modules.Deliveries.Controllers
         [HttpGet("order/{orderId}")]
         public async Task<IActionResult> GetByOrderId(int orderId)
         {
+            var order = await _orderRepository.GetByIdAsync(orderId);
+            if (order == null) return NotFound();
+
+            var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(userIdValue, out var userId)) return Unauthorized();
+            var actor = await _authRepository.GetByIdWithRelationsAsync(userId);
+            if (actor == null || !ResourceReadPolicy.CanReadOrder(User, actor, order))
+                return Forbid();
+
             var result = await _deliveryService.GetByOrderIdAsync(orderId);
             return Ok(result);
         }
@@ -57,36 +73,38 @@ namespace SaborExpress.Modules.Deliveries.Controllers
         }
 
         [HttpGet("employee/{deliveryPersonId}")]
+        [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador},{RoleNames.Repartidor}")]
         public async Task<IActionResult> GetByDeliveryPersonId(int deliveryPersonId)
         {
-            var currentEmployeeId = this.GetCurrentEmployeeId();
             var isGerente = User.IsInRole(RoleNames.Gerente);
             var isAdmin = User.IsInRole(RoleNames.Administrador);
             var isRepartidor = User.IsInRole(RoleNames.Repartidor);
+            int? currentEmployeeId = null;
+            if (!isGerente)
+            {
+                var employeeIdValue = User.FindFirst("EmployeeId")?.Value;
+                if (!int.TryParse(employeeIdValue, out var employeeId)) return Forbid();
+                currentEmployeeId = employeeId;
+            }
 
             if (isRepartidor && !isGerente && !isAdmin && deliveryPersonId != currentEmployeeId)
                 return StatusCode(403, new { message = "No puedes ver las entregas de otro repartidor" });
 
-            // Reintenta asignar los pedidos confirmados que quedaron pendientes cuando
-            // este repartidor abre/refresca su lista. Esto recupera pedidos confirmados
-            // antes de que hubiera un repartidor disponible.
-            if (isRepartidor && deliveryPersonId == currentEmployeeId)
-            {
-                var employeeBranchId = await _deliveryRepository.GetEmployeeBranchIdAsync(currentEmployeeId);
-                if (employeeBranchId.HasValue)
-                    await _deliveryAssignmentService.AssignPendingForBranchAsync(employeeBranchId.Value);
-            }
-
             if (isAdmin && !isGerente)
             {
-                var adminBranchId = await _deliveryRepository.GetEmployeeBranchIdAsync(currentEmployeeId);
+                var adminBranchId = await _deliveryRepository.GetEmployeeBranchIdAsync(currentEmployeeId!.Value);
                 var targetBranchId = await _deliveryRepository.GetEmployeeBranchIdAsync(deliveryPersonId);
 
                 if (adminBranchId == null || targetBranchId == null || adminBranchId != targetBranchId)
                     return StatusCode(StatusCodes.Status403Forbidden, new { message = "Ese repartidor no pertenece a tu sede" });
             }
 
-            var result = await _deliveryService.GetByDeliveryPersonIdAsync(deliveryPersonId);
+            // La app del repartidor solo necesita las entregas activas. Gerencia
+            // conserva el historial completo para sus consultas.
+            var activeOnly = isRepartidor
+                && currentEmployeeId.HasValue
+                && deliveryPersonId == currentEmployeeId.Value;
+            var result = await _deliveryService.GetByDeliveryPersonIdAsync(deliveryPersonId, activeOnly);
             return Ok(result);
         }
 
@@ -125,10 +143,21 @@ namespace SaborExpress.Modules.Deliveries.Controllers
         }
 
         [HttpPatch("{id}/status")]
+        [Authorize(Roles = $"{RoleNames.Repartidor},{RoleNames.Administrador}")]
         public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateDeliveryStatusDto dto)
         {
             var currentEmployeeId = this.GetCurrentEmployeeId();
             var isAdmin = User.IsInRole(RoleNames.Administrador);
+
+            if (isAdmin)
+            {
+                var delivery = await _deliveryRepository.GetByIdAsync(id);
+                if (delivery == null) return NotFound();
+
+                var adminBranchId = await _deliveryRepository.GetEmployeeBranchIdAsync(currentEmployeeId);
+                if (!adminBranchId.HasValue || adminBranchId.Value != delivery.Order.BranchId)
+                    return Forbid();
+            }
 
             var result = await _deliveryService.UpdateStatusAsync(id, dto, currentEmployeeId, isAdmin);
             return Ok(result);

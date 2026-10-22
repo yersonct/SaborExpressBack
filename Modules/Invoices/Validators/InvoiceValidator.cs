@@ -1,6 +1,5 @@
 // Modules/Invoices/Validators/InvoiceValidator.cs
 using SaborExpress.Modules.Invoices.DTOs;
-using SaborExpress.Modules.Invoices.Interfaces;
 using SaborExpress.Modules.Payments.Enum;
 using SaborExpress.Modules.Payments.Interfaces;
 
@@ -9,14 +8,9 @@ namespace SaborExpress.Modules.Invoices.Validators
     public class InvoiceValidator
     {
         private readonly IPaymentRepository _paymentRepository;
-        private readonly IInvoiceRepository _invoiceRepository;
-
-        public InvoiceValidator(
-            IPaymentRepository paymentRepository,
-            IInvoiceRepository invoiceRepository)
+        public InvoiceValidator(IPaymentRepository paymentRepository)
         {
             _paymentRepository = paymentRepository;
-            _invoiceRepository = invoiceRepository;
         }
 
         public async Task ValidateCreateAsync(CreateInvoiceDto dto)
@@ -31,9 +25,6 @@ namespace SaborExpress.Modules.Invoices.Validators
             if (payment.Status != PaymentStatus.Completed)
                 throw new ArgumentException("Solo se puede facturar un pago completado");
 
-            var existing = await _invoiceRepository.GetByPaymentIdAsync(dto.PaymentId);
-            if (existing != null)
-                throw new ArgumentException("Este pago ya tiene una factura generada");
         }
     }
 }
