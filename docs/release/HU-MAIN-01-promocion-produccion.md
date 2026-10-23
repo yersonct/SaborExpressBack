@@ -1,60 +1,93 @@
-# HU-MAIN-01 — Promover una versión aprobada
+# HU-MAIN-01 — Promover una versión aprobada en Render
 
-## Flujo de ramas
-
-La implementación de esta HU vive en `feature/HU-MAIN-01-promocion-produccion`, creada desde `develop`. Su primer PR apunta a `develop`. Los cambios siguen el recorrido normal del producto, mediante PR y controles en cada etapa:
+## Flujo de ramas y despliegues
 
 ```text
-feature/HU-MAIN-01-promocion-produccion → develop → qa → staging → main
+feature/fix → develop → qa → staging → main
+                              │        │
+                         Render de  Render de
+                          pruebas   producción
 ```
 
-Los cambios de código y de los controles de liberación deben recorrer `develop → qa → staging`. La promoción final se abre directamente desde `staging` hacia `main`: no requiere crear otra rama. `release/HU-MAIN-01-promocion-produccion` se conserva como origen compatible para liberaciones que ya la utilicen, con las mismas validaciones de evidencia y artefacto.
+Los cambios de código, scripts y workflows recorren `develop → qa → staging` mediante PR. La PR final se abre desde `staging` hacia `main`; no exige otra rama. `release/HU-MAIN-01-promocion-produccion` sigue siendo un origen compatible para una PR ya preparada, con los mismos controles. Los servicios Render continúan vinculados a Git: pruebas a `staging` y producción a `main`.
 
-## Artefacto inmutable
+La liberación identifica el código aprobado por su SHA y el despliegue real por sus IDs de servicio y despliegue de Render. Render construye cada servicio desde Git. Este contrato comprueba la procedencia del código y el despliegue probado; no acredita que las imágenes de ambos builds tengan los mismos bytes. El gate de producción no requiere una imagen GHCR ni un digest OCI.
 
-La imagen que se probó y desplegó en staging debe ser la misma que se promueve a producción. Se identifica por digest OCI; no se reconstruye desde Git para producción ni se despliega usando una etiqueta mutable.
+## Configuración inicial
 
-Al llegar a `staging`, prepare la liberación en este orden:
+En **GitHub → Settings → Secrets and variables → Actions**, configure:
 
-1. Ejecute las mediciones reales HU-STG-01 sobre el código desplegado en staging. Incorpore `security-gate-evidence.json` por el flujo normal, sin cambiar el código medido. El SHA medido será un ancestro del candidato de producción; no se vuelve a medir solo por agregar los metadatos de liberación.
-2. Elija como `sourceCommit` un SHA que ya incluya esa evidencia de seguridad, pertenezca a `staging` y tenga exactamente el mismo árbol que el candidato probado en QA. Confirme los checks exitosos `security-gate` y `GitGuardian Security Checks` en **ese SHA**. No dé por aprobados los checks de un merge solo porque sus padres los pasaron. **QA operational regression** y **Security release gate** admiten ejecución manual sobre la referencia que se desea validar.
-3. Incorpore en `staging` `production-release-candidate.json`, a partir de su plantilla, mediante un PR que solo prepare metadatos. Registre `sourceCommit` y marque `state` como `approved` solo si la aprobación es real. El push a `staging` ejecuta **Build production candidate artifact**; también puede ejecutarlo manualmente seleccionando `staging`. Valida las referencias y checks, compila exactamente el SHA fuente y publica `ghcr.io/yersonct/saborexpressback:<sha>`.
-4. Descargue `release-manifest-<sha>` y registre `commit`, `image`, `digest` y `workflow_run`. Prepare `production-release-evidence.json` con ese SHA, digest y ejecución de build. Despliegue ese digest en staging; no reconstruya ni use una etiqueta mutable.
-5. Incorpore la evidencia en `staging` y registre el digest como `STAGING_DEPLOYED_IMAGE_DIGEST` en el entorno GitHub `staging`. El push de la evidencia ejecuta **Staging release smoke**; también puede ejecutarlo manualmente seleccionando `staging`. El job verifica el digest y consulta health, readiness, login sintético, configuración, pedido, pago, entrega y factura con datos sintéticos.
-6. Actualice la evidencia con los IDs de las ejecuciones exitosas de QA y staging y la aprobación real. **Staging release smoke** se ejecuta sobre `sourceCommit`; actualizar la evidencia para registrar su resultado no cambia el código ni el digest probados. Después de elegir `sourceCommit`, solo pueden cambiar los dos JSON de producción. Cualquier cambio adicional exige preparar y aprobar un nuevo candidato.
+| Tipo | Nombre | Valor |
+| --- | --- | --- |
+| Repository secret | `RENDER_API_KEY` | API key creada en Render → Account Settings. No pegarla en la evidencia. |
+| Repository variable | `RENDER_STAGING_SERVICE_ID` | ID `srv-…` del servicio Git de pruebas, vinculado a `staging`. |
+| Repository variable | `RENDER_PRODUCTION_SERVICE_ID` | ID `srv-…` del servicio Git productivo, vinculado a `main`. Debe ser distinto del de pruebas. |
 
-## Evidencia de liberación
+Configure los entornos GitHub `staging` y `production` con sus propios datos:
 
-Copie `production-release-evidence.template.json` a `production-release-evidence.json` durante la preparación en `staging` y complete cada campo con evidencia real. No incluya credenciales, tokens, datos personales ni secretos. `runId` es el identificador numérico de GitHub Actions. El JSON debe incluir el resultado del smoke antes de aprobar la PR a `main`; no es necesario inventar un `runId` para iniciar el smoke, que solo lee `sourceCommit` y el digest.
+| Tipo | Nombres |
+| --- | --- |
+| Environment secrets | `RELEASE_SMOKE_API_URL`, `RELEASE_SMOKE_IDENTIFIER`, `RELEASE_SMOKE_PASSWORD` |
+| Environment variables | `RELEASE_SMOKE_BRANCH_ID`, `RELEASE_SMOKE_ORDER_ID`, `RELEASE_SMOKE_PAID_ORDER_ID`, `RELEASE_SMOKE_DELIVERY_ORDER_ID`, `RELEASE_SMOKE_INVOICE_ID` |
 
-El check `production-release-gate` rechaza una PR a `main` cuando falta evidencia, hay marcadores de plantilla, el SHA no pertenece a staging, falla un check de seguridad, el código probado en QA o staging no coincide, el manifiesto no corresponde al artefacto, staging no probó el mismo digest o faltan versión SemVer, notas, plan de migración, rollback o aprobación.
+La URL debe coincidir con la URL primaria que devuelve Render en `serviceDetails.url`; este contrato no admite dominios personalizados para el smoke. Use una cuenta sintética dedicada y datos de prueba accesibles por esa cuenta. El smoke consulta los flujos operativos y hace login; no inicia pagos ni crea pedidos. Proteja el entorno `production` con revisión antes de ejecutar sus jobs.
 
-Si no hay migraciones, indíquelo explícitamente en `migrationPlan`. Si cambia el esquema o los datos, registre antes de aprobar el respaldo verificado, compatibilidad hacia atrás, responsable y recuperación.
+## Preparación del candidato en staging
 
-## Promoción y verificación en producción
+1. Integre el código por el flujo normal y confirme en Render que el servicio de pruebas está `live` en el SHA que quiere probar. Ejecute QA y prepare los datos sintéticos necesarios para el smoke.
+2. Ejecute baseline y candidato de HU-STG-01 en staging con el mismo perfil aprobado. Guarde los reportes reales de p95 del servidor y tasa 5xx; una respuesta de health o una medición aislada no reemplaza esa evidencia. Incorpore `security-gate-evidence.json` sin modificar el código medido. El gate de seguridad admite después de medir únicamente ese reporte y los dos JSON de producción.
+3. Elija como `sourceCommit` un SHA que **ya contenga el reporte de seguridad**, sea parte de `staging` y tenga los checks exitosos `security-gate` y `GitGuardian Security Checks` en ese SHA. La ejecución QA debe haber probado el mismo código. Para comparar QA se permiten exclusivamente diferencias en `security-gate-evidence.json`, `production-release-candidate.json` y `production-release-evidence.json`, con esos nombres y rutas exactos. Si los checks no existen en el SHA fuente, ejecute **Security release gate** manualmente seleccionando esa referencia y confirme GitGuardian en ese commit; no herede el resultado de sus padres. **QA operational regression** también admite ejecución manual sobre la referencia que se desea comprobar.
+4. Para ejecutar el primer smoke antes de que su workflow exista en `main`, copie `production-release-candidate.template.json` a `production-release-candidate.json`, indique el `sourceCommit` aprobado del paso anterior y cambie `state` de `pending` a `ready-for-smoke`. Incorpore ese archivo a `staging` mediante PR. El push del JSON dispara **Staging release smoke**, consulta el despliegue actualmente `live` mediante la API de Render y comprueba que solo difiera del SHA fuente por los dos JSON de producción. No debe inventar un deploy ID ni un runId para iniciar este proceso. `ready-for-smoke` solicita una prueba; no declara aprobada la liberación.
+5. Exija resultado exitoso y conserve el artifact `staging-render-verification`, que contiene `render-staging-verification.json` con el SHA probado, servicio y despliegue. El gate obtiene ese artifact de la ejecución cuyo `runId` se registra en la evidencia; el JSON del artifact no necesita repetir ese `runId`. Una ejecución fallida no genera una aprobación de staging.
+6. Copie `production-release-evidence.template.json` a `production-release-evidence.json` y complete valores reales. Registre versión SemVer, `sourceCommit`, notas, migración, rollback, ejecución QA, ejecución smoke, SHA/servicio/despliegue de staging y aprobación real con fecha UTC. El smoke puede ejecutarse antes de crear este JSON; registre su `runId` después de que termine. No agregue contraseñas ni API keys.
+7. Después de elegir `sourceCommit`, solo pueden cambiar `docs/release/production-release-candidate.json` y `docs/release/production-release-evidence.json`. Cualquier cambio de código, documentación, scripts o workflows exige preparar nuevamente el candidato y repetir las comprobaciones afectadas.
 
-1. Abra o actualice la PR desde `staging` hacia `main`. No combine sin aprobación y checks requeridos verdes. El gate acepta este origen directamente y exige la misma evidencia que una rama de liberación.
-2. Despliegue exactamente la imagen por digest del manifiesto aprobado.
-3. Registre en el entorno GitHub `production` la variable `PRODUCTION_DEPLOYED_IMAGE_DIGEST` con el digest reportado por la plataforma.
-4. Ejecute **Production post-deployment smoke** con el digest aprobado. El job confirma el digest y consulta health, readiness y flujos sintéticos. No inicia pagos Wompi ni crea pedidos.
-5. Archive resultado, SHA, digest, versión, fecha UTC, notas, migraciones y responsable junto al release.
+Si Render todavía está desplegando el commit de metadata o cambia el despliegue durante la prueba, el smoke falla. Espere a que Render muestre `live` y use **Re-run jobs** en esa ejecución de Actions. Reejecutar no necesita otro commit ni otra medición cuando solo cambiaron los metadatos permitidos.
 
-El usuario de smoke y sus IDs deben ser sintéticos y de solo lectura. Guarde usuario y contraseña en secretos del entorno `production`, e IDs en variables. No use cuentas personales.
+Cuando el workflow ya esté disponible en `main`, también puede iniciarlo en **Actions → Staging release smoke → Run workflow**, seleccionando `staging` e indicando `tested_commit` (SHA completo realmente desplegado) y `deploy_id` (ID `dep-…`). En ambos modos se comprueban repositorio, rama, servicio, SHA, URL y estado `live` antes y después del smoke. GitHub exige el archivo en la rama predeterminada para mostrar **Run workflow**; el trigger por push permite obtener el primer smoke sin combinar una liberación incompleta a `main`.
 
-## Recuperación
+`production-release-candidate.json` prepara ese primer smoke; no dispara la construcción de una imagen OCI. **Build production candidate artifact (optional OCI)** se conserva como workflow manual opcional para usuarios del flujo anterior; su manifiesto no es requisito del contrato Render Git.
 
-Ante un health check, readiness o smoke crítico fallido, detenga la promoción. Si el esquema es compatible, operaciones puede volver manualmente al digest anterior y repetir health, readiness y smoke. No ejecute `Down()` ni restaure una base automáticamente. Para cambios incompatibles, el responsable de datos decide entre corrección hacia adelante y restauración del respaldo, documentando el punto de recuperación y las escrituras que se perderían.
+## Qué verifica el gate de producción
 
-## Estado conocido
+`production-release-gate` exige `schemaVersion: 2` y `deploymentProvider: "render-git"`. Además de validar versión, planes y aprobación, comprueba que:
 
-Las ejecuciones compartidas para `qa → staging` fallaban porque el workflow pedía `docs/release/security-gate-evidence.json` antes de que pudiera ejecutarse la medición HU-STG-01 en staging. Esta rama corrige el orden: la evidencia de latencia se requiere al promover a `main`; al promover a `staging` siguen ejecutándose las pruebas de seguridad y el escaneo de secretos. El candidato no queda aprobado por este cambio: después del despliegue en staging todavía se deben ejecutar HU-STG-01, registrar resultados reales y completar los checks antes de la promoción a `main`.
+- La PR proviene de `staging` o del origen de liberación compatible, y `sourceCommit` es ancestro del candidato y de `staging`. El reporte de seguridad debe existir ya en ese commit fuente; declararlo en el JSON de producción no lo sustituye.
+- Los checks de seguridad requeridos del SHA fuente terminaron correctamente.
+- La ejecución **QA operational regression** fue exitosa y corresponde al código fuente, con la excepción limitada de los tres JSON de evidencia.
+- La ejecución **Staging release smoke** fue exitosa, y su artifact vincula exactamente el SHA, servicio y despliegue declarados.
+- La API de Render identifica el servicio de pruebas configurado en GitHub, el repositorio esperado y la rama `staging`. El despliegue probado debe corresponder al SHA declarado. Puede quedar `deactivated` después de un despliegue posterior; el artifact conserva la verificación de que estuvo `live` durante el smoke.
+- El despliegue actualmente `live` de staging conserva el código aprobado. Solo puede diferir de `sourceCommit` por los dos JSON de producción, y su commit debe formar parte del candidato de la PR. Un redeploy automático causado por registrar la evidencia no autoriza otros cambios.
 
-La protección de `main` requiere configuración administrativa en GitHub. `main-branch-protection.md` documenta esos pasos; este código no afirma que la regla ya esté activada.
+No se confía únicamente en IDs escritos a mano, en una variable con un SHA supuesto ni en el color verde de un despliegue. La API de Render y la evidencia de Actions deben coincidir. Las llamadas usan `RENDER_API_KEY` del almacén de secretos; los reportes no contienen esa credencial.
 
-## Diagnóstico de una PR bloqueada
+## Promoción y comprobación de producción
 
-- Si el error exige `release/HU-MAIN-01-promocion-produccion`, la PR todavía usa la versión anterior del gate. Promueva esta corrección por `develop → qa → staging` y actualice la PR `staging → main`.
-- Si falta `production-release-evidence.json` o `security-gate-evidence.json`, todavía faltan resultados reales, aunque el código haya llegado a staging. Solo las plantillas no aprueban la promoción.
-- Reejecutar una ejecución antigua conserva su SHA. Para probar la corrección, use la nueva ejecución del PR actualizado.
+1. Abra o actualice la PR `staging → main`. Revise la evidencia, aprobación y checks requeridos antes de combinar. Configure la protección descrita en `main-branch-protection.md`.
+2. Al combinar, deje que el servicio Render vinculado a `main` construya y despliegue el commit resultante. El SHA del merge de `main` puede diferir del SHA probado en staging; la PR aprobada contiene el mismo código autorizado.
+3. Cuando ese despliegue esté `live`, ejecute **Production post-deployment smoke** seleccionando `main` e indicando su `deploy_id`. El workflow exige el SHA exacto de `main` seleccionado al iniciar esa ejecución, el servicio productivo configurado y la rama `main`. Comprueba el despliegue real y su URL antes y después del smoke.
+4. Archive los resultados, SHAs, IDs Render, versión, fechas UTC, planes y responsable. Una comprobación fallida requiere atención; no convierte el despliegue en aprobado.
 
-Las reglas de ramas, evidencia, checks y archivos permitidos se verifican sin red con `pwsh -File tests/release/production-promotion.Tests.ps1`. El workflow de seguridad ejecuta estas pruebas antes de las pruebas .NET.
+Si Render despliega automáticamente cada push a `main`, configure las aprobaciones y checks de la PR antes del merge. El smoke de producción verifica un despliegue ya realizado; no detiene por sí mismo un auto deploy de Render.
+
+## Migraciones y recuperación
+
+El backend aplica migraciones al arrancar. Si hay cambios de esquema, registre y verifique el respaldo antes del despliegue. Documente compatibilidad hacia atrás, responsable de datos y punto de recuperación; si no hay migraciones, indíquelo explícitamente en `migrationPlan`.
+
+Ante una falla crítica, detenga nuevas promociones. Si el esquema es compatible, el responsable puede volver manualmente al despliegue anterior de Render o desplegar el commit previo y repetir readiness y smoke. Render puede reconstruir al desplegar otro commit: conserve tanto el SHA como el ID del despliegue recuperado. No ejecute `Down()` ni restaure una base automáticamente. Para cambios incompatibles, el responsable de datos decide entre corrección hacia adelante y restauración verificada, documentando las escrituras que se perderían.
+
+## Diagnóstico y límites
+
+- Si falta `security-gate-evidence.json`, todavía faltan las mediciones reales y su incorporación a Git. Tener staging funcionando no genera ese reporte.
+- Si falta `production-release-evidence.json`, todavía falta registrar y aprobar la liberación. Una plantilla no es evidencia.
+- Si faltan la API key o los IDs de servicio en GitHub, configure esos valores antes de reejecutar el gate. No desactive las verificaciones.
+- Reejecutar un run antiguo conserva su SHA. Para comprobar un cambio integrado use la ejecución del PR actualizado.
+
+La guía `RENDER_GIT_PASOS.md` resume los próximos pasos de configuración. Las reglas se prueban localmente con `pwsh -File tests/release/production-promotion.Tests.ps1`; `pwsh -File tests/release/render-smoke.Tests.ps1` comprueba los wrappers que verifican Render antes y después del smoke. Esas pruebas usan fixtures y API simuladas: no reemplazan mediciones, smoke ni aprobación reales. Este cambio no afirma que se hayan completado ni que la protección administrativa de `main` esté activada.
+
+## Referencias oficiales
+
+- [Despliegues desde Git, auto deploy y selección de commits en Render](https://render.com/docs/deploys).
+- [API de Render y creación de API keys](https://render.com/docs/api).
+- [Consulta de un despliegue mediante servicio y deploy ID](https://api-docs.render.com/reference/retrieve-deploy).
+- [Requisitos de GitHub para ejecutar un workflow manual](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch).

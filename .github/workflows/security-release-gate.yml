@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [develop, qa, staging, main]
   push:
-    branches: [release/HU-STG-03-seguridad-gate]
+    branches: [release/HU-STG-03-seguridad-gate, staging]
   workflow_dispatch:
 
 permissions:
@@ -30,6 +30,10 @@ jobs:
       - name: Test production promotion rules
         shell: pwsh
         run: ./tests/release/production-promotion.Tests.ps1
+
+      - name: Test Render deployment smoke verification
+        shell: pwsh
+        run: ./tests/release/render-smoke.Tests.ps1
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v4

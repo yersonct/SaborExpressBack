@@ -1,10 +1,7 @@
-name: Build production candidate artifact
+name: Build production candidate artifact (optional OCI)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [staging, release/HU-MAIN-01-promocion-produccion]
-    paths: [docs/release/production-release-candidate.json]
 
 permissions:
   contents: read
