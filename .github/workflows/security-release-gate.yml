@@ -1,0 +1,50 @@
+name: Security release gate
+
+on:
+  pull_request:
+    branches: [develop, qa, staging, main]
+  push:
+    branches: [release/HU-STG-03-seguridad-gate]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  security-gate:
+    name: security-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history for secret scanning and evidence validation
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Scan repository changes for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Run negative security regression tests
+        run: dotnet test tests/SaborExpressBack.Security.Tests/SaborExpressBack.Security.Tests.csproj --configuration Release --logger "trx;LogFileName=security-gate.trx"
+
+      - name: Preserve test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-gate-results-${{ github.sha }}
+          path: tests/SaborExpressBack.Security.Tests/TestResults/*.trx
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Validate measured error and latency baseline before promotion
+        if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main')
+        shell: pwsh
+        run: ./scripts/release/security-gate.ps1 -EvidencePath docs/release/security-gate-evidence.json -ExpectedHeadSha '${{ github.event.pull_request.head.sha }}' -RepositoryPath .

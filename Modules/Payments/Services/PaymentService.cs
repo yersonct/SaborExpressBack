@@ -416,8 +416,7 @@ namespace SaborExpress.Modules.Payments.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError("Error sincronizando el pago Wompi {PaymentId} ({ErrorType}).",
-                        payment.Id, ex.GetType().Name);
+                    _logger.LogError("Error sincronizando pagos Wompi ({ErrorType}).", ex.GetType().Name);
                 }
             }
 
@@ -431,8 +430,8 @@ namespace SaborExpress.Modules.Payments.Services
                 catch (Exception ex)
                 {
                     _logger.LogError(
-                        "No se pudieron completar los efectos posteriores del pago Wompi {PaymentId} ({ErrorType}); se reintentará.",
-                        payment.Id, ex.GetType().Name);
+                        "No se pudieron completar efectos posteriores de pagos Wompi ({ErrorType}); se reintentará.",
+                        ex.GetType().Name);
                 }
             }
         }
@@ -446,15 +445,14 @@ namespace SaborExpress.Modules.Payments.Services
                 !string.Equals(transaction.Currency, "COP", StringComparison.Ordinal) ||
                 string.IsNullOrWhiteSpace(transaction.Status))
             {
-                _logger.LogWarning("Resultado Wompi no conciliable para el pago {PaymentId}.", payment.Id);
+                _logger.LogWarning("Se recibió un resultado Wompi que no pudo conciliarse.");
                 return;
             }
 
             var expectedAmountInCents = (int)Math.Round(payment.Amount * 100m, MidpointRounding.AwayFromZero);
             if (transaction.AmountInCents != expectedAmountInCents)
             {
-                _logger.LogError("Monto Wompi {Got} no coincide con el esperado {Expected} (pago {Id})",
-                    transaction.AmountInCents, expectedAmountInCents, payment.Id);
+                _logger.LogError("El monto reportado por Wompi no coincide con el esperado.");
                 return;
             }
 
@@ -483,11 +481,11 @@ namespace SaborExpress.Modules.Payments.Services
             if (!await _paymentRepository.TryTransitionWompiStatusAsync(
                 payment.Id, terminalStatus, transaction.Id))
             {
-                _logger.LogDebug("Resultado Wompi repetido o ya procesado (pago {Id})", payment.Id);
+                _logger.LogDebug("Se ignoró un resultado Wompi repetido o ya procesado.");
                 return;
             }
 
-            _logger.LogInformation("Pago {Id} -> estado Wompi {Status}", payment.Id, transaction.Status);
+            _logger.LogInformation("Se actualizó el estado de un pago Wompi a {Status}.", transaction.Status);
 
             if (terminalStatus == PaymentStatus.Completed)
             {
@@ -569,13 +567,13 @@ namespace SaborExpress.Modules.Payments.Services
                 catch (Exception releaseError)
                 {
                     _logger.LogError(
-                        "No se pudo liberar el reclamo de posprocesamiento del pago {PaymentId} ({ErrorType}).",
-                        paymentId, releaseError.GetType().Name);
+                        "No se pudo liberar el reclamo de posprocesamiento de un pago ({ErrorType}).",
+                        releaseError.GetType().Name);
                 }
 
                 _logger.LogError(
-                    "Falló el posprocesamiento del pago Wompi {PaymentId} ({ErrorType}); queda disponible para reintento.",
-                    paymentId, ex.GetType().Name);
+                    "Falló el posprocesamiento de un pago Wompi ({ErrorType}); queda disponible para reintento.",
+                    ex.GetType().Name);
                 throw;
             }
         }
@@ -583,15 +581,14 @@ namespace SaborExpress.Modules.Payments.Services
         {
             if (!order.CustomerId.HasValue)
             {
-                _logger.LogWarning("Pedido {OrderId} sin CustomerId: no se notifica al cliente.", order.Id);
+                _logger.LogWarning("Un pedido pagado no tiene cliente asociado; no se envió la notificación.");
                 return;
             }
 
             var customerUserId = await _customerRepository.GetUserIdByCustomerIdAsync(order.CustomerId.Value);
             if (customerUserId == null)
             {
-                _logger.LogWarning("No se encontrÃ³ UserId para el cliente {CustomerId} (pedido {OrderId}).",
-                    order.CustomerId.Value, order.Id);
+                _logger.LogWarning("No se encontró destinatario para una notificación de pago.");
                 return;
             }
 
@@ -604,8 +601,7 @@ namespace SaborExpress.Modules.Payments.Services
                 relatedEntityId: order.Id,
                 idempotencyKey: $"wompi:{paymentId}:customer");
 
-            _logger.LogInformation("NotificaciÃ³n de pago enviada al usuario {UserId} (pedido {OrderId}).",
-                customerUserId.Value, order.Id);
+            _logger.LogInformation("Se envió una notificación de pago al cliente.");
         }
         private async Task NotifyPaidDeliveryAsync(int orderId, int branchId, int paymentId)
         {
