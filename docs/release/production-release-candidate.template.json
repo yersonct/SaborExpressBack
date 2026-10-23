@@ -1,5 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "deploymentProvider": "render-git",
   "state": "pending",
-  "sourceCommit": "<full-40-character-sha-approved-in-staging>"
+  "sourceCommit": "<full-40-character-sha-including-committed-security-evidence>"
 }

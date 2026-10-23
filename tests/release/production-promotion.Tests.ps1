@@ -11,20 +11,25 @@ if ($RunCasePath) {
         $env:GITHUB_TOKEN = 'synthetic-test-token'
         $env:GITHUB_REPOSITORY = 'example/release-fixture'
         $env:GITHUB_API_URL = 'https://release-gate.invalid'
+        $env:RENDER_API_KEY = [string]$case.renderApiKey
+        $env:RENDER_STAGING_SERVICE_ID = [string]$case.renderServiceId
 
         function Invoke-RestMethod {
-            param($Method, [string]$Uri, $Headers, $TimeoutSec)
+            [CmdletBinding()]
+            param($Method, [string]$Uri, $Headers, $TimeoutSec, [int]$MaximumRedirection)
             $property = $case.responses.PSObject.Properties[$Uri]
             if ($null -eq $property) { throw "Unexpected API request in fixture: $Uri" }
+            if ($property.Value.PSObject.Properties['fixtureError']) { throw [string]$property.Value.fixtureError }
             return $property.Value
         }
 
         function Invoke-WebRequest {
-            param([string]$Uri, $Headers, [string]$OutFile, $TimeoutSec)
+            [CmdletBinding()]
+            param($Method, [string]$Uri, $Headers, [string]$OutFile, $TimeoutSec, [int]$MaximumRedirection)
             if ($Uri -ne 'https://release-gate.invalid/repos/example/release-fixture/actions/artifacts/41/zip') {
                 throw "Unexpected artifact request in fixture: $Uri"
             }
-            Copy-Item -LiteralPath $case.manifestZip -Destination $OutFile
+            Copy-Item -LiteralPath $case.reportZip -Destination $OutFile
         }
 
         $arguments = @{
@@ -54,6 +59,10 @@ $candidatePath = 'docs/release/production-release-candidate.json'
 $script:caseNumber = 0
 $script:passed = 0
 $script:failures = @()
+$script:serviceId = 'srv-' + ('a' * 20)
+$script:deployId = 'dep-' + ('b' * 20)
+$script:currentDeployId = 'dep-' + ('c' * 20)
+$script:stagingReport = $null
 
 function Invoke-FixtureGit {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
@@ -83,11 +92,20 @@ function Assert-Gate {
         [string]$HeadRef = 'staging',
         [bool]$ShouldPass = $true,
         [string]$ExpectedOutput = '',
-        $Responses = @{}
+        $Responses = @{},
+        $Report = $script:stagingReport,
+        [string]$RenderApiKey = 'synthetic-render-token',
+        [string]$RenderServiceId = $script:serviceId
     )
     Invoke-FixtureGit checkout --quiet --detach $HeadSha | Out-Null
     $script:caseNumber++
     $casePath = Join-Path $testRoot ("case-$script:caseNumber.json")
+    $reportZip = Join-Path $testRoot "report-$script:caseNumber.zip"
+    if ($null -ne $Report) {
+        $reportDirectory = Join-Path $testRoot "report-$script:caseNumber"
+        Write-FixtureJson $Report (Join-Path $reportDirectory 'render-staging-verification.json')
+        Compress-Archive -LiteralPath (Join-Path $reportDirectory 'render-staging-verification.json') -DestinationPath $reportZip
+    }
     Write-FixtureJson @{
         gate = $Gate
         scriptPath = $(if ($Gate -eq 'production') { $productionScript } else { $securityScript })
@@ -96,7 +114,9 @@ function Assert-Gate {
         headRef = $HeadRef
         repository = $fixtureRepo
         responses = $Responses
-        manifestZip = (Join-Path $testRoot 'manifest.zip')
+        reportZip = $reportZip
+        renderApiKey = $RenderApiKey
+        renderServiceId = $RenderServiceId
     } $casePath
     $output = (& $engine -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $PSCommandPath -RunCasePath $casePath 2>&1 | Out-String)
     $exitCode = $LASTEXITCODE
@@ -108,6 +128,16 @@ function Assert-Gate {
         $script:failures += $Name
         Write-Host "FAIL $Name (exit $exitCode)`n$output"
     }
+}
+
+function Copy-Fixture($Value) {
+    return ($Value | ConvertTo-Json -Depth 20 | ConvertFrom-Json)
+}
+
+function Commit-EvidenceVariant($Evidence, [string]$Message) {
+    Invoke-FixtureGit checkout --quiet --detach $script:metadataSha | Out-Null
+    Write-FixtureJson $Evidence (Join-Path $fixtureRepo $productionPath)
+    return Commit-Fixture $Message
 }
 
 try {
@@ -155,21 +185,18 @@ try {
     $approvedSha = Commit-Fixture 'Synthetic security evidence'
     Assert-Gate -Name 'security evidence by itself remains accepted' -Gate security -HeadSha $approvedSha -ExpectedOutput 'Security release gate: evidencia'
 
-    $digest = 'sha256:' + ('a' * 64)
-    $image = "ghcr.io/example/release-fixture@$digest"
     $productionEvidence = @{
-        schemaVersion = 1; version = '1.2.3'; sourceCommit = $approvedSha
+        schemaVersion = 2; deploymentProvider = 'render-git'; version = '1.2.3'; sourceCommit = $approvedSha
         releaseNotes = @('Synthetic fixture release')
         migrationPlan = 'Synthetic fixture: this release has no database migrations.'
-        rollbackPlan = 'Synthetic fixture: restore the previous approved image digest.'
-        artifact = @{ image = $image; digest = $digest; buildRunId = 11 }
+        rollbackPlan = 'Synthetic fixture: deploy the previously approved Git commit in Render.'
         qa = @{ runId = 12; testedCommit = $approvedSha }
-        staging = @{ runId = 13; testedCommit = $approvedSha; imageDigest = $digest }
+        staging = @{ runId = 13; testedCommit = $approvedSha; serviceId = $script:serviceId; deployId = $script:deployId }
         approval = @{ approvedBy = 'synthetic-fixture'; approvedAtUtc = '2026-01-01T02:00:00Z' }
     }
-    Write-FixtureJson @{ schemaVersion = 1; state = 'approved'; sourceCommit = $approvedSha } (Join-Path $fixtureRepo $candidatePath)
+    Write-FixtureJson @{ schemaVersion = 2; state = 'approved'; sourceCommit = $approvedSha } (Join-Path $fixtureRepo $candidatePath)
     Write-FixtureJson $productionEvidence (Join-Path $fixtureRepo $productionPath)
-    $metadataSha = Commit-Fixture 'Synthetic production metadata'
+    $script:metadataSha = Commit-Fixture 'Synthetic production metadata'
     Invoke-FixtureGit update-ref refs/remotes/origin/staging $metadataSha | Out-Null
     Assert-Gate -Name 'security accepts production metadata after measurement' -Gate security -HeadSha $metadataSha -ExpectedOutput 'Security release gate: evidencia'
 
@@ -180,10 +207,14 @@ try {
     Assert-Gate -Name 'security metadata allowlist requires the exact filename case' -Gate security -HeadSha $caseVariantSha -ShouldPass $false -ExpectedOutput 'solo se permite'
     Assert-Gate -Name 'production metadata allowlist requires the exact filename case' -Gate production -HeadSha $caseVariantSha -ShouldPass $false -ExpectedOutput 'contiene cambios adicionales'
 
-    $manifestDirectory = Join-Path $testRoot 'artifact'
-    Write-FixtureJson @{ commit = $approvedSha; image = $image; digest = $digest } (Join-Path $manifestDirectory 'manifest.json')
-    Compress-Archive -LiteralPath (Join-Path $manifestDirectory 'manifest.json') -DestinationPath (Join-Path $testRoot 'manifest.zip')
+    $script:stagingReport = @{
+        schemaVersion = 1; provider = 'render-git'; serviceId = $script:serviceId; deployId = $script:deployId
+        testedCommit = $approvedSha; apiUrl = 'https://stage.example.invalid'; verifiedAtUtc = '2026-01-01T01:30:00Z'
+    }
     $api = 'https://release-gate.invalid/repos/example/release-fixture'
+    $renderServiceApi = "https://api.render.com/v1/services/$script:serviceId"
+    $renderDeployApi = "$renderServiceApi/deploys/$script:deployId"
+    $renderLiveApi = "$renderServiceApi/deploys?status=live&limit=100"
     $responses = @{}
     $responses["$api/commits/$approvedSha/check-runs"] = @{
         check_runs = @(
@@ -191,12 +222,28 @@ try {
             @{ name = 'GitGuardian Security Checks'; status = 'completed'; conclusion = 'success'; started_at = '2026-01-01T02:00:00Z' }
         )
     }
-    $responses["$api/actions/runs/11"] = @{ status = 'completed'; conclusion = 'success'; name = 'Build production candidate artifact' }
-    $responses["$api/actions/runs/11/artifacts"] = @{ artifacts = @(@{ id = 41; name = "release-manifest-$approvedSha"; expired = $false }) }
-    $responses["$api/actions/runs/12"] = @{ status = 'completed'; conclusion = 'success'; name = 'QA operational regression'; head_sha = $approvedSha }
-    $responses["$api/actions/runs/13"] = @{ status = 'completed'; conclusion = 'success'; name = 'Staging release smoke' }
+    $responses["$api/actions/runs/12"] = @{
+        status = 'completed'; conclusion = 'success'; name = 'QA operational regression'
+        path = '.github/workflows/qa-operational-regression.yml'; head_sha = $approvedSha; head_branch = 'qa'
+        created_at = '2026-01-01T00:45:00Z'; updated_at = '2026-01-01T00:50:00Z'
+    }
+    $responses["$api/actions/runs/13"] = @{
+        status = 'completed'; conclusion = 'success'; name = 'Staging release smoke'
+        path = '.github/workflows/staging-release-smoke.yml'; head_sha = $approvedSha; head_branch = 'staging'
+        created_at = '2026-01-01T01:10:00Z'; updated_at = '2026-01-01T01:31:00Z'
+    }
+    $responses["$api/actions/runs/13/artifacts"] = @{ artifacts = @(@{ id = 41; name = 'staging-render-verification'; expired = $false }) }
+    $responses[$renderServiceApi] = @{
+        id = $script:serviceId; type = 'web_service'; repo = 'https://github.com/example/release-fixture'; branch = 'staging'
+        serviceDetails = @{ url = 'https://stage.example.invalid' }
+    }
+    $historicalDeploy = @{
+        id = $script:deployId; status = 'live'; commit = @{ id = $approvedSha }; finishedAt = '2026-01-01T01:00:00Z'
+    }
+    $responses[$renderDeployApi] = $historicalDeploy
+    $responses[$renderLiveApi] = @(@{ deploy = $historicalDeploy; cursor = 'synthetic-cursor' })
 
-    Assert-Gate -Name 'complete staging promotion passes with synthetic API and manifest' -Gate production -HeadSha $metadataSha -Responses $responses -ExpectedOutput 'Production release gate aprobado'
+    Assert-Gate -Name 'complete staging promotion passes with synthetic GitHub and Render APIs' -Gate production -HeadSha $metadataSha -Responses $responses -ExpectedOutput 'Production release gate aprobado'
     Assert-Gate -Name 'complete legacy release promotion remains compatible' -Gate production -HeadSha $metadataSha -HeadRef 'release/HU-MAIN-01-promocion-produccion' -Responses $responses -ExpectedOutput 'Production release gate aprobado'
 
     $responses["$api/commits/$approvedSha/check-runs"].check_runs[0].conclusion = 'failure'
@@ -204,11 +251,76 @@ try {
     $responses["$api/commits/$approvedSha/check-runs"].check_runs[0].conclusion = 'success'
 
     $responses["$api/actions/runs/12"].head_sha = $baselineSha
-    Assert-Gate -Name 'QA source mismatch still blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput 'probado por QA no coincide'
+    Assert-Gate -Name 'QA evidence must identify the actual workflow commit' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput 'qa.testedCommit'
+    $qaCodeMismatch = Copy-Fixture $productionEvidence
+    $qaCodeMismatch.qa.testedCommit = $baselineSha
+    $qaCodeMismatchSha = Commit-EvidenceVariant $qaCodeMismatch 'Synthetic QA of different application code'
+    Assert-Gate -Name 'QA source mismatch still blocks production' -Gate production -HeadSha $qaCodeMismatchSha -Responses $responses -ShouldPass $false -ExpectedOutput 'probado por QA no coincide'
     $responses["$api/actions/runs/12"].head_sha = $approvedSha
 
+    # QA may run before measured security evidence is committed; application code
+    # must match and only the three exact evidence paths may differ.
+    $responses["$api/actions/runs/12"].head_sha = $measuredSha
+    $qaBeforeEvidence = Copy-Fixture $productionEvidence
+    $qaBeforeEvidence.qa.testedCommit = $measuredSha
+    $qaBeforeEvidenceSha = Commit-EvidenceVariant $qaBeforeEvidence 'Synthetic QA before security metadata'
+    Assert-Gate -Name 'QA before security metadata remains compatible with identical application code' -Gate production -HeadSha $qaBeforeEvidenceSha -Responses $responses -ExpectedOutput 'Production release gate aprobado'
+    $responses["$api/actions/runs/12"].head_sha = $approvedSha
+
+    $responses[$renderServiceApi].repo = 'https://github.com/example/wrong-repository'
+    Assert-Gate -Name 'Render repository mismatch blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput 'Render'
+    $responses[$renderServiceApi].repo = 'https://github.com/example/release-fixture'
+    $responses[$renderServiceApi].branch = 'develop'
+    Assert-Gate -Name 'Render branch mismatch blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput 'Render'
+    $responses[$renderServiceApi].branch = 'staging'
+    $historicalDeploy.commit.id = $baselineSha
+    Assert-Gate -Name 'Render deployed commit mismatch blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput 'Render'
+    $historicalDeploy.commit.id = $approvedSha
+    $historicalDeploy.status = 'build_failed'
+    Assert-Gate -Name 'Render failed deployment blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput 'Render'
+    $historicalDeploy.status = 'live'
+
+    $newLiveDeploy = @{
+        id = $script:currentDeployId; status = 'live'; commit = @{ id = $metadataSha }; finishedAt = '2026-01-01T02:15:00Z'
+    }
+    $responses["$renderServiceApi/deploys/$script:currentDeployId"] = $newLiveDeploy
+    $responses[$renderLiveApi] = @(@{ deploy = $newLiveDeploy; cursor = 'synthetic-cursor' })
+    $historicalDeploy.status = 'deactivated'
+    Assert-Gate -Name 'historical smoke remains valid with a newer metadata-only live deployment' -Gate production -HeadSha $metadataSha -Responses $responses -ExpectedOutput 'Production release gate aprobado'
+    $responses[$renderLiveApi] = @(@{ deploy = $historicalDeploy; cursor = 'synthetic-cursor' })
+    $historicalDeploy.status = 'live'
+
+    $staleReport = Copy-Fixture $script:stagingReport
+    $staleReport.deployId = 'dep-' + ('d' * 20)
+    Assert-Gate -Name 'smoke artifact from another deployment blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -Report $staleReport -ShouldPass $false -ExpectedOutput 'smoke|Render|despliegue|reporte|informe'
+    $staleReport = Copy-Fixture $script:stagingReport
+    $staleReport.testedCommit = $baselineSha
+    Assert-Gate -Name 'smoke artifact from another commit blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -Report $staleReport -ShouldPass $false -ExpectedOutput 'smoke|Render|commit|reporte|informe'
+
+    Assert-Gate -Name 'evidence cannot override the trusted Render service' -Gate production -HeadSha $metadataSha -Responses $responses -RenderServiceId ('srv-' + ('e' * 20)) -ShouldPass $false -ExpectedOutput 'Render|RENDER_STAGING_SERVICE_ID|servicio'
+    $savedServiceResponse = $responses[$renderServiceApi]
+    $responses[$renderServiceApi] = @{ fixtureError = 'Synthetic Render transport failure' }
+    Assert-Gate -Name 'Render API failure blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput 'Render'
+    $responses[$renderServiceApi] = $savedServiceResponse
+    Assert-Gate -Name 'missing Render API key blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -RenderApiKey '' -ShouldPass $false -ExpectedOutput 'RENDER_API_KEY'
+
+    $earlyApproval = Copy-Fixture $productionEvidence
+    $earlyApproval.approval.approvedAtUtc = '2026-01-01T01:15:00Z'
+    $earlyApprovalSha = Commit-EvidenceVariant $earlyApproval 'Synthetic approval before smoke'
+    Assert-Gate -Name 'approval before verified smoke blocks production' -Gate production -HeadSha $earlyApprovalSha -Responses $responses -ShouldPass $false -ExpectedOutput 'approval|aprobaci|smoke'
+    $futureApproval = Copy-Fixture $productionEvidence
+    $futureApproval.approval.approvedAtUtc = '2099-01-01T02:00:00Z'
+    $futureApprovalSha = Commit-EvidenceVariant $futureApproval 'Synthetic future approval'
+    Assert-Gate -Name 'future approval blocks production' -Gate production -HeadSha $futureApprovalSha -Responses $responses -ShouldPass $false -ExpectedOutput 'approval|aprobaci|futur'
+
+    Invoke-FixtureGit checkout --quiet --detach $metadataSha | Out-Null
     [IO.File]::WriteAllText((Join-Path $fixtureRepo 'application.txt'), 'unmeasured code change')
     $changedCodeSha = Commit-Fixture 'Synthetic unmeasured code change'
+    $newLiveDeploy.commit.id = $changedCodeSha
+    $responses[$renderLiveApi] = @(@{ deploy = $newLiveDeploy; cursor = 'synthetic-cursor' })
+    Assert-Gate -Name 'live Render code drift blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput 'Render|cambios|commit|c.digo'
+    $newLiveDeploy.commit.id = $metadataSha
+    $responses[$renderLiveApi] = @(@{ deploy = $historicalDeploy; cursor = 'synthetic-cursor' })
     Assert-Gate -Name 'security rejects code changed after measurement' -Gate security -HeadSha $changedCodeSha -ShouldPass $false -ExpectedOutput 'solo se permite'
     Assert-Gate -Name 'production rejects code changed after approval' -Gate production -HeadSha $changedCodeSha -Responses $responses -ShouldPass $false -ExpectedOutput 'contiene cambios adicionales'
 
