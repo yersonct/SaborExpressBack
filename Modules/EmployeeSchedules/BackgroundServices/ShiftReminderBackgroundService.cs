@@ -45,7 +45,7 @@ namespace SaborExpress.Modules.EmployeeSchedules.BackgroundServices
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error al revisar turnos.");
+                    _logger.LogError("Error al revisar turnos ({ErrorType}).", ex.GetType().Name);
                 }
 
                 await Task.Delay(CheckInterval, stoppingToken);
@@ -134,7 +134,7 @@ namespace SaborExpress.Modules.EmployeeSchedules.BackgroundServices
                 };
 
                 await scheduleRepository.AddAsync(renewed);
-                _logger.LogInformation("Turno renovado automaticamente para EmployeeId {EmployeeId}.", schedule.EmployeeId);
+                _logger.LogInformation("Se renovó automáticamente un turno.");
             }
         }
     }

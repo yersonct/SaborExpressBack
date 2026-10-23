@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -110,9 +111,10 @@ public sealed class SecurityRegressionTests
     [Fact]
     public void ExpiredJwtIsRejectedWithoutClockSkew()
     {
+        var testJwtSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
         var values = new Dictionary<string, string?>
         {
-            ["JwtSettings:SecretKey"] = new string('k', 48),
+            ["JwtSettings:SecretKey"] = testJwtSecret,
             ["JwtSettings:Issuer"] = "security-regression-tests",
             ["JwtSettings:Audience"] = "security-regression-tests"
         };
@@ -175,11 +177,12 @@ public sealed class SecurityRegressionTests
     {
         const string recipient = "synthetic-recipient@example.invalid";
         const string providerDetail = "synthetic-provider-response-marker";
+        var testBrevoApiKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
         var logger = new CapturingLogger<NotificationService>();
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(
             new Dictionary<string, string?>
             {
-                ["Brevo:ApiKey"] = new string('k', 48),
+                ["Brevo:ApiKey"] = testBrevoApiKey,
                 ["EmailSettings:Username"] = "synthetic-sender@example.invalid"
             }).Build();
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(statusCode)

@@ -72,7 +72,7 @@ public class RealtimeNotifier : IRealtimeNotifier
     {
         try
         {
-            _logger.LogDebug("[Realtime] Emitiendo BranchOperationalSettingsChanged para la sede {BranchId}", branchId);
+            _logger.LogDebug("[Realtime] Emitiendo BranchOperationalSettingsChanged.");
             await _hub.Clients.All.SendAsync("BranchOperationalSettingsChanged", branchId);
         }
         catch (Exception ex)

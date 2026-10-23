@@ -97,7 +97,7 @@ namespace SaborExpress.Modules.Reviews.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "No se pudo notificar la reseña del pedido {OrderId}", review.OrderId);
+                _logger.LogError("No se pudo notificar la reseña del pedido ({ErrorType}).", ex.GetType().Name);
             }
         }
 

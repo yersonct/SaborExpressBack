@@ -31,7 +31,7 @@ gitleaks git --redact --exit-code 1
 
 ## Revisión de logs
 
-Se verificaron las rutas de autenticación/webhook, pagos Wompi, correo y notificaciones en tiempo real. Los eventos no deben registrar contraseñas, tokens, firmas, cuerpos de webhook, direcciones de correo, contenido de excepciones de proveedores, ubicaciones, ni identificadores de usuario/pedido cuando no sean necesarios para la operación. Los logs sanitizados conservan el tipo de error para diagnóstico.
+Se revisaron autenticación/webhook, pagos Wompi, correo, push, turnos, entregas, reseñas, configuración y notificaciones en tiempo real. Los fallos ya no serializan objetos de excepción ni registran destinatarios, ubicaciones o identificadores de usuario/pedido en esos eventos. Los logs conservan el tipo de error, el estado HTTP o conteos agregados para diagnóstico; nunca contraseñas, tokens, firmas, cuerpos de webhook ni respuestas de proveedores.
 
 La prueba de correo usa un destinatario sintético y un cuerpo de respuesta marcador, y verifica que ninguno aparezca en el log. La prueba Wompi verifica que el cuerpo y checksum marcadores no se registren.
 
