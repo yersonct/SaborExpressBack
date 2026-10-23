@@ -101,6 +101,38 @@ builder.Services.AddHostedService<WompiPendingPaymentsSyncService>();
 var app = builder.Build();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
+app.MapGet("/health/ready", async (AppDbContext context, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        if (!await context.Database.CanConnectAsync(cancellationToken))
+        {
+            return Results.Json(
+                new { status = "not_ready", database = "unavailable" },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var hasPendingMigrations = (await context.Database
+            .GetPendingMigrationsAsync(cancellationToken))
+            .Any();
+
+        if (hasPendingMigrations)
+        {
+            return Results.Json(
+                new { status = "not_ready", database = "connected", migrations = "pending" },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        return Results.Ok(new { status = "ready", database = "connected", migrations = "applied" });
+    }
+    catch
+    {
+        // Readiness is intentionally generic: connection details must never reach the response.
+        return Results.Json(
+            new { status = "not_ready", database = "unavailable" },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+}).AllowAnonymous();
 
 await app.MigrarYSembrarBaseDeDatosAsync();
 
