@@ -47,6 +47,6 @@ Ante un health check, readiness o smoke crítico fallido, detenga la promoción.
 
 ## Estado conocido
 
-Al preparar esta HU, el candidato de staging revisado tenía GitGuardian exitoso, pero `security-gate` fallaba por falta de evidencia real de carga HU-STG-01 en `docs/release/security-gate-evidence.json`. Ese SHA no está aprobado: no se debe activar el workflow de artefacto ni promoverlo hasta obtener la evidencia y los checks requeridos. El archivo activo de candidato se crea únicamente en la rama final, a partir de un SHA que haya completado `develop → qa → staging`.
+Las ejecuciones compartidas para `qa → staging` fallaban porque el workflow pedía `docs/release/security-gate-evidence.json` antes de que pudiera ejecutarse la medición HU-STG-01 en staging. Esta rama corrige el orden: la evidencia de latencia se requiere al promover a `main`; al promover a `staging` siguen ejecutándose las pruebas de seguridad y el escaneo de secretos. El candidato no queda aprobado por este cambio: después del despliegue en staging todavía se deben ejecutar HU-STG-01, registrar resultados reales y completar los checks antes de la promoción a `main`.
 
 La protección de `main` requiere configuración administrativa en GitHub. `main-branch-protection.md` documenta esos pasos; este código no afirma que la regla ya esté activada.
