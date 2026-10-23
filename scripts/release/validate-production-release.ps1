@@ -77,8 +77,8 @@ function Assert-RequiredCommitChecks([string]$Sha) {
 
 $head = (& git -C $RepositoryPath rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $head -ne $ExpectedHeadSha) { Stop-Gate 'el checkout no corresponde al HEAD del pull request.' }
-if ($ExpectedHeadRef -cne 'release/HU-MAIN-01-promocion-produccion') {
-    Stop-Gate 'la PR a main debe provenir de release/HU-MAIN-01-promocion-produccion, creada desde el candidato aprobado de staging.'
+if ($ExpectedHeadRef -cnotin @('staging', 'release/HU-MAIN-01-promocion-produccion')) {
+    Stop-Gate 'la PR a main debe provenir de staging o de release/HU-MAIN-01-promocion-produccion, con evidencia del candidato aprobado de staging.'
 }
 
 $resolvedEvidence = Join-Path $RepositoryPath $EvidencePath
