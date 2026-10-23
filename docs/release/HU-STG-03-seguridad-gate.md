@@ -61,7 +61,7 @@ Formato requerido:
   },
   "candidate": {
     "capturedAtUtc": "<fecha ISO-8601 UTC de la ejecución real>",
-    "commit": "<SHA exacto medido; debe ser ancestro estricto del HEAD, al que solo se añade la evidencia>",
+    "commit": "<SHA exacto medido; debe ser ancestro estricto del HEAD, al que solo se añade evidencia y metadatos de producción>",
     "loadRunId": "<identificador de ejecución y artefacto>",
     "routes": [
       {
@@ -76,7 +76,7 @@ Formato requerido:
 }
 ```
 
-Los valores `null` son marcadores estructurales y **no son una línea base válida ni evidencia**; sustitúyanse por datos reales. No subir un archivo de ejemplo al path que consume el gate. Cada ruta debe aparecer exactamente una vez en ambos conjuntos. El gate compara p95 y tasa 5xx del candidato con los valores medidos del baseline; no fija un SLA inventado. Debe mantenerse el mismo perfil de carga y commit medido como ancestro del commit promocionado. Después de medir, solo puede cambiar el archivo de evidencia.
+Los valores `null` son marcadores estructurales y **no son una línea base válida ni evidencia**; sustitúyanse por datos reales. No subir un archivo de ejemplo al path que consume el gate. Cada ruta debe aparecer exactamente una vez en ambos conjuntos. El gate compara p95 y tasa 5xx del candidato con los valores medidos del baseline; no fija un SLA inventado. Debe mantenerse el mismo perfil de carga y commit medido como ancestro del commit promocionado. Después de medir, se requiere añadir o actualizar el archivo de evidencia de seguridad; también pueden cambiar exclusivamente `docs/release/production-release-candidate.json` y `docs/release/production-release-evidence.json` para preparar la promoción a `main`. Cualquier otro cambio, incluso en scripts o workflows, requiere una nueva medición.
 
 PromQL para consultar la métrica del API existente:
 
