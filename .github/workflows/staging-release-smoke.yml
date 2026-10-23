@@ -1,8 +1,9 @@
 name: Staging release smoke
 
 on:
+  workflow_dispatch:
   push:
-    branches: [release/HU-MAIN-01-promocion-produccion]
+    branches: [staging, release/HU-MAIN-01-promocion-produccion]
     paths: [docs/release/production-release-evidence.json]
 
 permissions:
@@ -11,6 +12,7 @@ permissions:
 jobs:
   smoke:
     name: staging-release-smoke
+    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/release/HU-MAIN-01-promocion-produccion'
     runs-on: windows-latest
     environment: staging
     steps:
