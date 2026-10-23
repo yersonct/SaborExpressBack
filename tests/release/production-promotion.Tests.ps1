@@ -235,3 +235,6 @@ if ($script:failures.Count -gt 0) {
     throw "$($script:failures.Count) gate regression test(s) failed; $script:passed passed."
 }
 Write-Host "$script:passed gate regression tests passed; temporary fixtures removed."
+# Expected rejection cases leave LASTEXITCODE = 1. Report the suite result
+# explicitly so GitHub Actions' PowerShell wrapper does not reuse that value.
+exit 0
