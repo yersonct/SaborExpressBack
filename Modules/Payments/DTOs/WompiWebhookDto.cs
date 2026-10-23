@@ -21,6 +21,9 @@ namespace SaborExpress.Modules.Payments.DTOs
         public string Reference { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
 
+        [JsonPropertyName("currency")]
+        public string Currency { get; set; } = string.Empty;
+
         [JsonPropertyName("amount_in_cents")]
         public int AmountInCents { get; set; }
     }

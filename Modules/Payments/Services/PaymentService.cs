@@ -370,7 +370,7 @@ namespace SaborExpress.Modules.Payments.Services
                 throw new UnauthorizedAccessException("La transacción Wompi no coincide.");
             }
 
-            await ApplyWompiResultAsync(payment, confirmed.Id, confirmed.Status, confirmed.AmountInCents);
+            await ApplyWompiResultAsync(payment, confirmed);
         }
 
         // Respaldo del webhook: el front llama esto mientras hace polling.
@@ -395,7 +395,7 @@ namespace SaborExpress.Modules.Payments.Services
                 var tx = await _wompiClient.GetTransactionByReferenceAsync(payment.WompiReference);
                 if (tx != null && string.Equals(tx.Reference, payment.WompiReference,
                     StringComparison.Ordinal))
-                    await ApplyWompiResultAsync(payment, tx.Id, tx.Status, tx.AmountInCents);
+                    await ApplyWompiResultAsync(payment, tx);
             }
 
             var fresh = await _paymentRepository.GetByIdAsync(paymentId);
@@ -412,7 +412,7 @@ namespace SaborExpress.Modules.Payments.Services
                     var tx = await _wompiClient.GetTransactionByReferenceAsync(payment.WompiReference!);
                     if (tx != null && string.Equals(tx.Reference, payment.WompiReference,
                         StringComparison.Ordinal))
-                        await ApplyWompiResultAsync(payment, tx.Id, tx.Status, tx.AmountInCents);
+                        await ApplyWompiResultAsync(payment, tx);
                 }
                 catch (Exception ex)
                 {
@@ -436,11 +436,29 @@ namespace SaborExpress.Modules.Payments.Services
             }
         }
         // Lógica única para aplicar el resultado de Wompi (webhook o sincronización)
-        private async Task ApplyWompiResultAsync(Payment payment, string txId, string status, int amountInCents)
+        private async Task ApplyWompiResultAsync(Payment payment, WompiTransactionDto transaction)
         {
+            // Webhooks, user polling and background reconciliation must enforce the
+            // same authoritative payment identity and COP currency before transitions.
+            if (string.IsNullOrWhiteSpace(transaction.Id) ||
+                !string.Equals(transaction.Reference, payment.WompiReference, StringComparison.Ordinal) ||
+                !string.Equals(transaction.Currency, "COP", StringComparison.Ordinal) ||
+                string.IsNullOrWhiteSpace(transaction.Status))
+            {
+                _logger.LogWarning("Se recibió un resultado Wompi que no pudo conciliarse.");
+                return;
+            }
+
+            var expectedAmountInCents = (int)Math.Round(payment.Amount * 100m, MidpointRounding.AwayFromZero);
+            if (transaction.AmountInCents != expectedAmountInCents)
+            {
+                _logger.LogError("El monto reportado por Wompi no coincide con el esperado.");
+                return;
+            }
+
             if (payment.Status == PaymentStatus.Completed)
             {
-                if (string.Equals(status, "APPROVED", StringComparison.Ordinal))
+                if (string.Equals(transaction.Status, "APPROVED", StringComparison.Ordinal))
                     await ProcessWompiPostProcessingAsync(payment.Id);
                 return;
             }
@@ -448,15 +466,7 @@ namespace SaborExpress.Modules.Payments.Services
             if (payment.Status == PaymentStatus.Failed)
                 return;
 
-            // Seguridad: el monto que Wompi cobró debe ser el monto del pago
-            var expected = (int)Math.Round(payment.Amount * 100m, MidpointRounding.AwayFromZero);
-            if (amountInCents != expected)
-            {
-                _logger.LogError("El monto confirmado por Wompi no coincide con el esperado.");
-                return;
-            }
-
-            var terminalStatus = status switch
+            var terminalStatus = transaction.Status switch
             {
                 "APPROVED" => PaymentStatus.Completed,
                 "DECLINED" or "ERROR" or "VOIDED" => PaymentStatus.Failed,
@@ -469,13 +479,13 @@ namespace SaborExpress.Modules.Payments.Services
             // Compare-and-set SQL. Solamente el proceso ganador dispara efectos
             // posteriores (notificaciones, confirmación del pedido, mesa y SignalR).
             if (!await _paymentRepository.TryTransitionWompiStatusAsync(
-                payment.Id, terminalStatus, txId))
+                payment.Id, terminalStatus, transaction.Id))
             {
                 _logger.LogDebug("Se ignoró un resultado Wompi repetido o ya procesado.");
                 return;
             }
 
-            _logger.LogInformation("Se actualizó el estado de un pago Wompi a {Status}.", status);
+            _logger.LogInformation("Se actualizó el estado de un pago Wompi a {Status}.", transaction.Status);
 
             if (terminalStatus == PaymentStatus.Completed)
             {
@@ -507,10 +517,23 @@ namespace SaborExpress.Modules.Payments.Services
                 var order = payment.Order;
                 if (order.Status == OrderStatus.Pending)
                 {
+                    var previousUpdatedAt = order.UpdatedAt;
                     order.Status = OrderStatus.Confirmed;
                     order.UpdatedAt = DateTime.UtcNow;
-                    await _orderRepository.UpdateAsync(order);
-                    await _orderRepository.SaveChangesAsync();
+                    try
+                    {
+                        await _orderRepository.UpdateAsync(order);
+                        await _orderRepository.SaveChangesAsync();
+                    }
+                    catch
+                    {
+                        // Keep the tracked entity eligible for the durable retry. If
+                        // persistence failed, a later attempt must not mistake this
+                        // in-memory mutation for a committed order confirmation.
+                        order.Status = OrderStatus.Pending;
+                        order.UpdatedAt = previousUpdatedAt;
+                        throw;
+                    }
                 }
 
                 if (order.OrderType == OrderType.Delivery && order.Status != OrderStatus.Cancelled)
