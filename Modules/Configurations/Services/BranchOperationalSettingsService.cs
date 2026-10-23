@@ -88,9 +88,7 @@ namespace SaborExpress.Modules.Configurations.Services
                 var createdByConcurrentRequest = await _repository.GetByBranchIdAsync(branchId);
                 if (createdByConcurrentRequest is null)
                 {
-                    _logger.LogError(ex,
-                        "Falló la creación concurrente de configuración operativa para la sede {BranchId}.",
-                        branchId);
+                    _logger.LogError("Falló la creación concurrente de configuración operativa para la sede ({ErrorType}).", ex.GetType().Name);
                     throw new PersistenceException("No se pudo guardar la configuración. Intenta de nuevo.", ex);
                 }
 
@@ -102,17 +100,13 @@ namespace SaborExpress.Modules.Configurations.Services
                 }
                 catch (DbUpdateException retryException)
                 {
-                    _logger.LogError(retryException,
-                        "Falló el reintento de configuración operativa para la sede {BranchId}.",
-                        branchId);
+                    _logger.LogError("Falló el reintento de configuración operativa para la sede ({ErrorType}).", retryException.GetType().Name);
                     throw new PersistenceException("No se pudo guardar la configuración. Intenta de nuevo.", retryException);
                 }
             }
             catch (DbUpdateException ex)
             {
-                _logger.LogError(ex,
-                    "La base de datos rechazó la configuración operativa de la sede {BranchId}.",
-                    branchId);
+                _logger.LogError("La base de datos rechazó la configuración operativa de la sede ({ErrorType}).", ex.GetType().Name);
                 throw new PersistenceException("No se pudo guardar la configuración. Intenta de nuevo.", ex);
             }
 
@@ -129,9 +123,7 @@ namespace SaborExpress.Modules.Configurations.Services
             }
             catch (DbUpdateException ex)
             {
-                _logger.LogError(ex,
-                    "Se guardó la configuración de la sede {BranchId}, pero falló la actualización del horario de sus turnos.",
-                    branchId);
+                _logger.LogError("Se guardó la configuración, pero falló la actualización del horario de sus turnos ({ErrorType}).", ex.GetType().Name);
                 throw new PersistenceException("La configuración se guardó, pero no se pudieron actualizar los turnos. Intenta de nuevo.", ex);
             }
 
@@ -145,9 +137,7 @@ namespace SaborExpress.Modules.Configurations.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex,
-                    "No se pudieron asignar pedidos pendientes después de actualizar la capacidad de la sede {BranchId}.",
-                    branchId);
+                _logger.LogError("No se pudieron asignar pedidos pendientes después de actualizar la capacidad de la sede ({ErrorType}).", ex.GetType().Name);
             }
             return BranchOperationalSettingsMapper.ToResponse(settings);
 

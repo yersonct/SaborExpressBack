@@ -31,7 +31,7 @@ namespace SaborExpress.Modules.EmployeeSchedules.BackgroundServices
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error al revisar cocineros con turno activo.");
+                    _logger.LogError("Error al revisar cocineros con turno activo ({ErrorType}).", ex.GetType().Name);
                 }
 
                 await Task.Delay(CheckInterval, stoppingToken);

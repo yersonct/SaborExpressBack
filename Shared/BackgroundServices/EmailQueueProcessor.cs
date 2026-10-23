@@ -31,7 +31,9 @@ namespace SaborExpress.Shared.BackgroundServices
                 {
                     // Un correo que falla NO debe tumbar el procesador ni afectar al usuario
                     // que ya recibió su 200 OK hace rato.
-                    _logger.LogError(ex, "Error al procesar un trabajo en background (envio de correo).");
+                    _logger.LogError(
+                        "Error al procesar un trabajo de correo en segundo plano ({ErrorType}).",
+                        ex.GetType().Name);
                 }
             }
         }

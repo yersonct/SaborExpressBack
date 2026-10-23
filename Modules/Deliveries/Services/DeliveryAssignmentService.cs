@@ -53,9 +53,7 @@ namespace SaborExpress.Modules.Deliveries.Services
             var initialOrder = await _orderRepository.GetDeliveryInfoAsync(orderId);
             if (initialOrder == null || initialOrder.OrderType != OrderType.Delivery)
             {
-                _logger.LogInformation(
-                    "Asignación omitida: pedido {OrderId} no existe o no es Delivery.",
-                    orderId);
+                _logger.LogInformation("Asignación omitida: el pedido no existe o no es un domicilio.");
                 return;
             }
 
@@ -149,11 +147,7 @@ namespace SaborExpress.Modules.Deliveries.Services
 
             if (chosen == null)
             {
-                _logger.LogInformation(
-                    "Pedido {OrderId} queda en cola: no hay repartidor disponible con menos de {MaxActive} domicilios activos en la sede {BranchId}.",
-                    orderId,
-                    maxActiveDeliveries,
-                    branchId);
+                _logger.LogInformation("Un pedido queda en cola porque no hay repartidor disponible con capacidad.");
                 return;
             }
 
@@ -176,13 +170,11 @@ namespace SaborExpress.Modules.Deliveries.Services
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Entrega {OrderId} asignada, pero falló el evento en tiempo real.", orderId);
+                _logger.LogWarning("Entrega asignada, pero falló el evento en tiempo real ({ErrorType}).", ex.GetType().Name);
             }
 
             _logger.LogInformation(
-                "Pedido {OrderId} asignado al repartidor {EmployeeId}, que tenía {ActiveCount} domicilios activos.",
-                orderId,
-                chosen.EmployeeId,
+                "Pedido asignado al repartidor, que tenía {ActiveCount} domicilios activos.",
                 chosen.ActiveDeliveryCount);
 
             await NotifyAssignedCourierAsync(delivery, orderId, throwOnNotificationFailure);

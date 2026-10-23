@@ -35,7 +35,7 @@ namespace SaborExpress.Modules.Notifications.Hubs
         public override async Task OnConnectedAsync()
         {
             var userId = GetUserId();
-            _logger.LogDebug("[Hub] CONECTADO userId={UserId} conn={Conn}", userId, Context.ConnectionId);
+            _logger.LogDebug("[Hub] Conexión establecida.");
             if (userId != null)
                 await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(userId.Value));
 
@@ -48,8 +48,7 @@ namespace SaborExpress.Modules.Notifications.Hubs
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
             var userId = GetUserId();
-                _logger.LogDebug("[Hub] DESCONECTADO userId={UserId} conn={Conn} motivo={Motivo}",
-                    userId, Context.ConnectionId, exception?.Message ?? "normal");
+                _logger.LogDebug("[Hub] Conexión cerrada ({ErrorType}).", exception?.GetType().Name ?? "Normal");
             if (userId != null)
                 await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(userId.Value));
 
