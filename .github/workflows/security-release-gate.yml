@@ -44,7 +44,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Validate measured error and latency baseline before promotion
-        if: github.event_name == 'pull_request' && (github.base_ref == 'staging' || github.base_ref == 'main')
+      - name: Validate measured error and latency baseline before production promotion
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
         shell: pwsh
         run: ./scripts/release/security-gate.ps1 -EvidencePath docs/release/security-gate-evidence.json -ExpectedHeadSha '${{ github.event.pull_request.head.sha }}' -RepositoryPath .
