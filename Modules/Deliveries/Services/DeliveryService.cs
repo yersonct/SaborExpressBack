@@ -213,9 +213,7 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex,
-                        "No se pudieron reasignar pedidos pendientes tras entregar el pedido {OrderId}.",
-                        delivery.OrderId);
+                    _logger.LogError("No se pudieron reasignar pedidos pendientes tras entregar el pedido ({ErrorType}).", ex.GetType().Name);
                 }
             }
 
@@ -253,7 +251,7 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "No se pudo notificar al cliente el avance del pedido {OrderId}", delivery.OrderId);
+                _logger.LogError("No se pudo notificar al cliente el avance del pedido ({ErrorType}).", ex.GetType().Name);
             }
         }
 
@@ -323,7 +321,7 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "No se pudo notificar la calificación del pedido {OrderId}", delivery.OrderId);
+                _logger.LogError("No se pudo notificar la calificación del pedido ({ErrorType}).", ex.GetType().Name);
             }
         }
                 // Si al entregar el pedido aún tiene saldo sin pagar, se asume que el

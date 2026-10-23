@@ -432,7 +432,7 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "No se pudieron reasignar pedidos pendientes de la sede {BranchId}", employee.BranchId);
+                    _logger.LogError("No se pudieron reasignar pedidos pendientes de la sede ({ErrorType}).", ex.GetType().Name);
                 }
             }
 
@@ -469,9 +469,7 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex,
-                        "No se pudieron asignar pedidos pendientes después de recibir ubicación del repartidor {EmployeeId}.",
-                        employeeId);
+                    _logger.LogError("No se pudieron asignar pedidos pendientes después de recibir ubicación del repartidor ({ErrorType}).", ex.GetType().Name);
                 }
             }
 
