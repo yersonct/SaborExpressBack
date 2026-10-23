@@ -3,4 +3,5 @@
     <File Path=".env" />
   </Folder>
   <Project Path="SaborExpress.csproj" />
+  <Project Path="tests/SaborExpressBack.Security.Tests/SaborExpressBack.Security.Tests.csproj" />
 </Solution>
