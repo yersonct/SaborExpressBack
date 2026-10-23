@@ -193,7 +193,7 @@ public sealed class CashClosureService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Cierre #{ClosureId} guardado; la notificación de salida falló", closure.Id);
+            _logger.LogError("Cierre guardado; la notificación de salida falló ({ErrorType}).", ex.GetType().Name);
         }
         return ToResponse(closure);
     }
@@ -273,7 +273,7 @@ public sealed class CashClosureService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Reapertura #{Id} guardada; no fue posible emitir todos los eventos", closureId);
+            _logger.LogWarning("Reapertura guardada; no fue posible emitir todos los eventos ({ErrorType}).", ex.GetType().Name);
         }
         return ToResponse(target);
     }

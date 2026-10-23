@@ -64,10 +64,7 @@ public class RealtimeNotifier : IRealtimeNotifier
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex,
-                "No se pudo enviar la ubicación en vivo del pedido {OrderId} al cliente {CustomerUserId}",
-                orderId,
-                customerUserId);
+            _logger.LogWarning("No se pudo enviar la ubicación en vivo ({ErrorType}).", ex.GetType().Name);
         }
     }
 
@@ -75,12 +72,12 @@ public class RealtimeNotifier : IRealtimeNotifier
     {
         try
         {
-            _logger.LogDebug("[Realtime] Emitiendo BranchOperationalSettingsChanged para la sede {BranchId}", branchId);
+            _logger.LogDebug("[Realtime] Emitiendo BranchOperationalSettingsChanged.");
             await _hub.Clients.All.SendAsync("BranchOperationalSettingsChanged", branchId);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo emitir BranchOperationalSettingsChanged para la sede {BranchId}", branchId);
+            _logger.LogWarning("No se pudo emitir BranchOperationalSettingsChanged ({ErrorType}).", ex.GetType().Name);
         }
     }
 
@@ -90,7 +87,7 @@ public class RealtimeNotifier : IRealtimeNotifier
         {
             await _hub.Clients.Group(NotificationHub.GroupName(userId)).SendAsync("ForceLogout", reason);
         }
-        catch (Exception ex) { _logger.LogWarning(ex, "No se pudo emitir ForceLogout al usuario {UserId}", userId); }
+        catch (Exception ex) { _logger.LogWarning("No se pudo emitir ForceLogout ({ErrorType}).", ex.GetType().Name); }
     }
 
     public async Task SessionReplacedAsync(int userId)
@@ -99,7 +96,7 @@ public class RealtimeNotifier : IRealtimeNotifier
         {
             await _hub.Clients.Group(NotificationHub.GroupName(userId)).SendAsync("SessionReplaced");
         }
-        catch (Exception ex) { _logger.LogWarning(ex, "No se pudo cerrar la sesión anterior del usuario {UserId}", userId); }
+        catch (Exception ex) { _logger.LogWarning("No se pudo cerrar la sesión anterior ({ErrorType}).", ex.GetType().Name); }
     }
 
     // Un fallo del socket nunca debe romper la operación de negocio.
@@ -110,7 +107,7 @@ public class RealtimeNotifier : IRealtimeNotifier
             _logger.LogDebug("[Realtime] Emitiendo {Method}", method);
             await _hub.Clients.All.SendAsync(method);
         }
-        catch (Exception ex) { _logger.LogWarning(ex, "No se pudo emitir {Method}", method); }
+        catch (Exception ex) { _logger.LogWarning("No se pudo emitir una actualización en tiempo real ({ErrorType}).", ex.GetType().Name); }
     }
 
     private async Task SendPublicMenuChangedSafe()
@@ -121,7 +118,7 @@ public class RealtimeNotifier : IRealtimeNotifier
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo avisar que cambio el menu publico");
+            _logger.LogWarning("No se pudo avisar que cambió el menú público ({ErrorType}).", ex.GetType().Name);
         }
     }
 
@@ -133,7 +130,7 @@ public class RealtimeNotifier : IRealtimeNotifier
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo avisar que cambiaron las sedes publicas");
+            _logger.LogWarning("No se pudo avisar que cambiaron las sedes públicas ({ErrorType}).", ex.GetType().Name);
         }
     }
 
@@ -145,7 +142,7 @@ public class RealtimeNotifier : IRealtimeNotifier
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo avisar que cambiaron los pedidos de cocina");
+            _logger.LogWarning("No se pudo avisar que cambiaron los pedidos de cocina ({ErrorType}).", ex.GetType().Name);
         }
     }
 
@@ -164,7 +161,7 @@ public class RealtimeNotifier : IRealtimeNotifier
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo avisar que cambiaron datos del módulo {Module}", module);
+            _logger.LogWarning("No se pudo avisar que cambiaron datos administrativos ({ErrorType}).", ex.GetType().Name);
         }
     }
 }

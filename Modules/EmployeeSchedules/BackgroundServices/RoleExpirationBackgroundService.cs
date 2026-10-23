@@ -40,7 +40,7 @@ namespace SaborExpress.Modules.EmployeeSchedules.BackgroundServices
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error al revocar roles vencidos.");
+                    _logger.LogError("Error al revocar roles vencidos ({ErrorType}).", ex.GetType().Name);
                 }
             }
         }
