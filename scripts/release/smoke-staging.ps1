@@ -1,7 +1,9 @@
 ﻿[CmdletBinding()]
 param(
     [switch]$StartWompiSandbox,
-    [int]$VerifyWompiPaymentId = 0
+    [int]$VerifyWompiPaymentId = 0,
+    [ValidateSet('Staging', 'Production')]
+    [string]$Environment = 'Staging'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -166,4 +168,8 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Smoke API completado. Revise el runbook para completar el pago sandbox en navegador y archivar evidencia sin credenciales.' -ForegroundColor Green
+if ($Environment -eq 'Production') {
+    Write-Host 'Smoke de producción completado. No se iniciaron pagos ni se crearon pedidos.' -ForegroundColor Green
+} else {
+    Write-Host 'Smoke API completado. Revise el runbook para completar el pago sandbox en navegador y archivar evidencia sin credenciales.' -ForegroundColor Green
+}

@@ -4,7 +4,7 @@
 
 El workflow `Security release gate` corre pruebas negativas y escaneo de secretos en PR hacia `develop`, `qa`, `staging` y `main`. El job se llama `security-gate`. Para que bloquee una promoción, ese check debe quedar como requerido en las reglas de protección de `staging` y `main`; el repositorio debe conservar también GitGuardian como check requerido si esa integración está activa.
 
-Al promover a `staging` o `main`, el workflow exige evidencia de carga en `docs/release/security-gate-evidence.json`. El archivo no se incluye con números de ejemplo: la rama aún no tiene una ejecución de HU-STG-01 en un entorno staging. Sin evidencia medible, la promoción falla de forma cerrada.
+Al abrir PR hacia `staging`, el workflow ejecuta las pruebas de seguridad, pero no exige todavía el reporte de carga: la medición HU-STG-01 debe realizarse después de desplegar el candidato en staging. En una PR hacia `main`, sí exige `docs/release/security-gate-evidence.json` con mediciones reales. Así no se bloquea la instalación que se necesita para medir, y tampoco se promueve a producción sin la evidencia.
 
 ## Pruebas negativas
 
@@ -92,4 +92,4 @@ sum by (method, route) (rate(sabor_express_http_server_requests_total[5m]))
 
 ## Nota de publicación
 
-Esta HU añade el workflow y el validador, pero no puede certificar ni producir evidencia real de staging desde el entorno local. El responsable de publicación debe ejecutar HU-STG-01 y adjuntar el reporte antes de promover a `staging` o `main`.
+Esta HU añade el workflow y el validador, pero no puede certificar ni producir evidencia real de staging desde el entorno local. Primero debe integrarse el código a través de `develop` y `qa`, y desplegarse en `staging`; allí el responsable ejecuta HU-STG-01 y registra el reporte. La evidencia se adjunta en la promoción posterior de `staging` a `main`.

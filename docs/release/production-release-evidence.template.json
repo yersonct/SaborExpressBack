@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "version": "<semver>",
+  "sourceCommit": "<full-40-character-sha>",
+  "releaseNotes": [
+    "<user-visible or operational change included in this release>"
+  ],
+  "migrationPlan": "<migration steps, or state explicitly that no migration is included>",
+  "rollbackPlan": "<previous image digest, verification steps, and data recovery decision owner>",
+  "artifact": {
+    "image": "ghcr.io/yersonct/saborexpressback@sha256:<64-character-digest>",
+    "digest": "sha256:<64-character-digest>",
+    "buildRunId": 0
+  },
+  "qa": {
+    "runId": 0,
+    "testedCommit": "<full-40-character-sha-with-same-source-tree>"
+  },
+  "staging": {
+    "runId": 0,
+    "testedCommit": "<full-40-character-sha-with-same-source-tree>",
+    "imageDigest": "sha256:<same-64-character-digest-as-artifact>"
+  },
+  "approval": {
+    "approvedBy": "<release-approver>",
+    "approvedAtUtc": "<ISO-8601-UTC-timestamp>"
+  }
+}

@@ -1,0 +1,43 @@
+name: Production post-deployment smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_image_digest:
+        description: Digest approved in the production release evidence
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: production-postdeploy-smoke
+    runs-on: windows-latest
+    environment: production
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+
+      - name: Confirm deployed image digest
+        shell: pwsh
+        env:
+          EXPECTED_IMAGE_DIGEST: ${{ inputs.expected_image_digest }}
+          PRODUCTION_DEPLOYED_IMAGE_DIGEST: ${{ vars.PRODUCTION_DEPLOYED_IMAGE_DIGEST }}
+        run: ./scripts/release/verify-production-digest.ps1
+
+      - name: Run read-only production health and smoke checks
+        shell: pwsh
+        env:
+          RELEASE_SMOKE_API_URL: ${{ secrets.RELEASE_SMOKE_API_URL }}
+          EXPECTED_IMAGE_DIGEST: ${{ inputs.expected_image_digest }}
+          PRODUCTION_DEPLOYED_IMAGE_DIGEST: ${{ vars.PRODUCTION_DEPLOYED_IMAGE_DIGEST }}
+          RELEASE_SMOKE_IDENTIFIER: ${{ secrets.RELEASE_SMOKE_IDENTIFIER }}
+          RELEASE_SMOKE_PASSWORD: ${{ secrets.RELEASE_SMOKE_PASSWORD }}
+          RELEASE_SMOKE_BRANCH_ID: ${{ vars.RELEASE_SMOKE_BRANCH_ID }}
+          RELEASE_SMOKE_ORDER_ID: ${{ vars.RELEASE_SMOKE_ORDER_ID }}
+          RELEASE_SMOKE_PAID_ORDER_ID: ${{ vars.RELEASE_SMOKE_PAID_ORDER_ID }}
+          RELEASE_SMOKE_DELIVERY_ORDER_ID: ${{ vars.RELEASE_SMOKE_DELIVERY_ORDER_ID }}
+          RELEASE_SMOKE_INVOICE_ID: ${{ vars.RELEASE_SMOKE_INVOICE_ID }}
+        run: ./scripts/release/smoke-production.ps1
