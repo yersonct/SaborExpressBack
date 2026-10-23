@@ -1,25 +1,22 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "deploymentProvider": "render-git",
   "version": "<semver>",
-  "sourceCommit": "<full-40-character-sha>",
+  "sourceCommit": "<full-40-character-sha-including-committed-security-evidence>",
   "releaseNotes": [
     "<user-visible or operational change included in this release>"
   ],
-  "migrationPlan": "<migration steps, or state explicitly that no migration is included>",
-  "rollbackPlan": "<previous image digest, verification steps, and data recovery decision owner>",
-  "artifact": {
-    "image": "ghcr.io/yersonct/saborexpressback@sha256:<64-character-digest>",
-    "digest": "sha256:<64-character-digest>",
-    "buildRunId": 0
-  },
+  "migrationPlan": "<migration and verified backup steps, or state explicitly that no migration is included>",
+  "rollbackPlan": "<previous Render deploy ID and commit, verification steps, and data recovery decision owner>",
   "qa": {
     "runId": 0,
-    "testedCommit": "<full-40-character-sha-with-same-source-tree>"
+    "testedCommit": "<full-40-character-sha-tested-by-the-successful-QA-run>"
   },
   "staging": {
     "runId": 0,
-    "testedCommit": "<full-40-character-sha-with-same-source-tree>",
-    "imageDigest": "sha256:<same-64-character-digest-as-artifact>"
+    "testedCommit": "<full-40-character-sha-verified-live-during-staging-smoke>",
+    "serviceId": "<srv-render-staging-service-id>",
+    "deployId": "<dep-render-staging-deploy-id>"
   },
   "approval": {
     "approvedBy": "<release-approver>",

@@ -11,7 +11,9 @@ En **Settings → Rules → Rulesets** (o **Settings → Branches → Branch pro
 - Bloquear force-push y eliminación de `main`.
 - Aplicar la regla también a administradores o definir explícitamente quién puede omitirla.
 
-El check `production-release-gate` valida la evidencia y el digest; no reemplaza la revisión humana ni los checks de seguridad.
+El check `production-release-gate` valida la evidencia de QA y smoke, el código aprobado y los despliegues reales de Render mediante sus IDs y commits. Requiere `RENDER_API_KEY` y los IDs de servicio configurados en GitHub. No reemplaza la revisión humana ni los checks de seguridad. El contrato Render Git no exige un digest de imagen GHCR.
+
+La aprobación registrada en el JSON no sustituye la aprobación de la PR. Configure también el entorno GitHub `production` con revisores autorizados. Si Render despliega automáticamente desde `main`, la protección de la PR debe estar activa antes del merge; el smoke posterior verifica un despliegue ya realizado.
 
 ## Comprobación
 

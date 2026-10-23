@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$EvidencePath,
@@ -44,6 +44,23 @@ function Assert-Ancestor([string]$Sha, [string]$Ref, [string]$Context) {
     if ($LASTEXITCODE -ne 0) { Stop-Gate "$Context no pertenece a $Ref." }
 }
 
+function Assert-SameCode([string]$From, [string]$To, [string[]]$AllowedPaths, [string]$Message) {
+    [void](Get-CommitTree $From 'commit comparado')
+    [void](Get-CommitTree $To 'commit comparado')
+    $changes = @(& git -C $RepositoryPath diff --name-only --no-renames $From $To)
+    if ($LASTEXITCODE -ne 0) { Stop-Gate 'no se pudo comparar el contenido de los commits.' }
+    if (@($changes | Where-Object { $_ -cnotin $AllowedPaths }).Count -gt 0) { Stop-Gate $Message }
+}
+
+function Get-UtcDate([string]$Value, [string]$Context) {
+    $parsed = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse($Value, [ref]$parsed) -or $parsed.Offset -ne [TimeSpan]::Zero -or
+        $parsed -gt [DateTimeOffset]::UtcNow) {
+        Stop-Gate "$Context debe ser una fecha ISO-8601 UTC real y no futura."
+    }
+    return $parsed
+}
+
 function Invoke-GitHubGet([string]$Path) {
     $token = $env:GITHUB_TOKEN
     if ([string]::IsNullOrWhiteSpace($token)) { Stop-Gate 'GITHUB_TOKEN no está disponible para validar la evidencia.' }
@@ -56,13 +73,41 @@ function Invoke-GitHubGet([string]$Path) {
     return Invoke-RestMethod -Method Get -Uri "$apiBase/$Path" -Headers $headers -TimeoutSec 30
 }
 
-function Get-SuccessfulRun([long]$RunId, [string]$ExpectedName, [string]$Context) {
+function Get-SuccessfulRun([long]$RunId, [string]$ExpectedName, [string]$ExpectedPath, [string]$Context) {
     if ($RunId -le 0) { Stop-Gate "runId de $Context no es válido." }
     $run = Invoke-GitHubGet "repos/$env:GITHUB_REPOSITORY/actions/runs/$RunId"
-    if ($run.status -ne 'completed' -or $run.conclusion -ne 'success' -or $run.name -ne $ExpectedName) {
+    if ($run.status -ne 'completed' -or $run.conclusion -ne 'success' -or $run.name -ne $ExpectedName -or
+        $run.path -cne $ExpectedPath) {
         Stop-Gate "la ejecución de $Context debe llamarse '$ExpectedName' y terminar exitosamente."
     }
     return $run
+}
+
+function Get-StagingVerification([long]$RunId) {
+    $artifacts = Invoke-GitHubGet "repos/$env:GITHUB_REPOSITORY/actions/runs/$RunId/artifacts"
+    $reports = @($artifacts.artifacts | Where-Object { $_.name -ceq 'staging-render-verification' -and -not $_.expired })
+    if ($reports.Count -ne 1 -or [long]$reports[0].id -le 0) {
+        Stop-Gate 'falta el reporte staging-render-verification vigente del smoke de staging.'
+    }
+    $apiBase = if ([string]::IsNullOrWhiteSpace($env:GITHUB_API_URL)) { 'https://api.github.com' } else { $env:GITHUB_API_URL.TrimEnd('/') }
+    $zipPath = Join-Path ([IO.Path]::GetTempPath()) ('render-smoke-' + [guid]::NewGuid().ToString('N') + '.zip')
+    $archive = $null
+    $reader = $null
+    try {
+        Invoke-WebRequest -Uri "$apiBase/repos/$env:GITHUB_REPOSITORY/actions/artifacts/$($reports[0].id)/zip" `
+            -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github+json' } `
+            -OutFile $zipPath -TimeoutSec 45 | Out-Null
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $archive = [IO.Compression.ZipFile]::OpenRead($zipPath)
+        $entries = @($archive.Entries | Where-Object { $_.FullName -ceq 'render-staging-verification.json' })
+        if ($entries.Count -ne 1 -or $entries[0].Length -gt 65536) { Stop-Gate 'el artifact de smoke no contiene un reporte válido.' }
+        $reader = New-Object IO.StreamReader($entries[0].Open())
+        return ($reader.ReadToEnd() | ConvertFrom-Json)
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
+        if ($null -ne $archive) { $archive.Dispose() }
+        Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Assert-RequiredCommitChecks([string]$Sha) {
@@ -83,28 +128,27 @@ if ($ExpectedHeadRef -cnotin @('staging', 'release/HU-MAIN-01-promocion-producci
 
 $resolvedEvidence = Join-Path $RepositoryPath $EvidencePath
 if (-not (Test-Path -LiteralPath $resolvedEvidence -PathType Leaf)) {
-    Stop-Gate "no existe $EvidencePath. Complete la evidencia real de QA, staging y el artefacto antes de promover."
+    Stop-Gate "no existe $EvidencePath. Complete la evidencia real de QA y del despliegue Render de staging antes de promover."
 }
 
 try { $evidence = Get-Content -LiteralPath $resolvedEvidence -Raw | ConvertFrom-Json }
 catch { Stop-Gate 'la evidencia de producción no contiene JSON válido.' }
 
-if ([int](Get-Required $evidence 'schemaVersion' 'raíz') -ne 1) { Stop-Gate 'schemaVersion debe ser 1.' }
+if ([int](Get-Required $evidence 'schemaVersion' 'raíz') -ne 2) { Stop-Gate 'schemaVersion debe ser 2 para el despliegue Render desde Git.' }
+if ([string](Get-Required $evidence 'deploymentProvider' 'raíz') -cne 'render-git') { Stop-Gate 'deploymentProvider debe ser render-git.' }
 $version = [string](Get-Required $evidence 'version' 'raíz')
 if ($version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$') {
     Stop-Gate 'version debe usar SemVer.'
 }
 
 $sourceSha = [string](Get-Required $evidence 'sourceCommit' 'raíz')
-$sourceTree = Get-CommitTree $sourceSha 'sourceCommit'
+[void](Get-CommitTree $sourceSha 'sourceCommit')
 Assert-Ancestor $sourceSha 'origin/staging' 'sourceCommit'
 Assert-Ancestor $sourceSha $head 'sourceCommit del PR'
-& git -C $RepositoryPath diff --quiet $sourceSha $head -- . `
-    ':(exclude)docs/release/production-release-candidate.json' `
-    ':(exclude)docs/release/production-release-evidence.json' 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Stop-Gate 'la rama final contiene cambios adicionales al código ya aprobado en staging; desarrolle y promueva esos cambios por develop, qa y staging primero.'
-}
+& git -C $RepositoryPath cat-file -e "${sourceSha}:docs/release/security-gate-evidence.json" 2>$null
+if ($LASTEXITCODE -ne 0) { Stop-Gate 'sourceCommit debe incluir la evidencia de seguridad guardada en Git.' }
+$productionMetadata = @('docs/release/production-release-candidate.json', 'docs/release/production-release-evidence.json')
+Assert-SameCode $sourceSha $head $productionMetadata 'la rama final contiene cambios adicionales al código ya aprobado en staging; desarrolle y promueva esos cambios por develop, qa y staging primero.'
 Assert-RequiredCommitChecks $sourceSha
 
 $releaseNotes = @(Get-Required $evidence 'releaseNotes' 'raíz')
@@ -122,65 +166,62 @@ foreach ($name in @('migrationPlan', 'rollbackPlan')) {
 $approval = Get-Required $evidence 'approval' 'raíz'
 $approver = [string](Get-Required $approval 'approvedBy' 'approval')
 if ($approver -match '^(<|TODO|TBD|PENDIENTE)') { Stop-Gate 'approval.approvedBy contiene un marcador sin completar.' }
-$approvedAt = [DateTimeOffset]::MinValue
-$approvedText = [string](Get-Required $approval 'approvedAtUtc' 'approval')
-if (-not [DateTimeOffset]::TryParse($approvedText, [ref]$approvedAt) -or $approvedAt.Offset -ne [TimeSpan]::Zero) {
-    Stop-Gate 'approval.approvedAtUtc debe ser una fecha ISO-8601 UTC.'
-}
-
-$artifact = Get-Required $evidence 'artifact' 'raíz'
-$digest = [string](Get-Required $artifact 'digest' 'artifact')
-if ($digest -notmatch '^sha256:[0-9a-f]{64}$') { Stop-Gate 'artifact.digest debe ser un digest OCI sha256.' }
-$image = [string](Get-Required $artifact 'image' 'artifact')
-$expectedImagePrefix = "ghcr.io/$($env:GITHUB_REPOSITORY.ToLowerInvariant())@"
-if (-not $image.StartsWith($expectedImagePrefix, [StringComparison]::Ordinal) -or -not $image.EndsWith("@$digest", [StringComparison]::Ordinal)) {
-    Stop-Gate 'artifact.image debe apuntar al repositorio GHCR y al mismo digest registrado.'
-}
-$buildRunId = [long](Get-Required $artifact 'buildRunId' 'artifact')
-$buildRun = Get-SuccessfulRun $buildRunId 'Build production candidate artifact' 'artifact'
-$artifactList = Invoke-GitHubGet "repos/$env:GITHUB_REPOSITORY/actions/runs/$buildRunId/artifacts"
-$manifestArtifact = @($artifactList.artifacts | Where-Object { $_.name -eq "release-manifest-$sourceSha" -and -not $_.expired } | Select-Object -First 1)
-if ($manifestArtifact.Count -eq 0) { Stop-Gate 'no se encontró el manifiesto inmutable del artefacto.' }
-
-$apiBase = if ([string]::IsNullOrWhiteSpace($env:GITHUB_API_URL)) { 'https://api.github.com' } else { $env:GITHUB_API_URL.TrimEnd('/') }
-$zipPath = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N') + '.zip')
-$extractPath = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N'))
-try {
-    Invoke-WebRequest -Uri "$apiBase/repos/$env:GITHUB_REPOSITORY/actions/artifacts/$($manifestArtifact[0].id)/zip" `
-        -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github+json' } `
-        -OutFile $zipPath -TimeoutSec 45
-    Expand-Archive -LiteralPath $zipPath -DestinationPath $extractPath -Force
-    $manifestPath = Get-ChildItem -LiteralPath $extractPath -Filter manifest.json -Recurse -File | Select-Object -First 1
-    if ($null -eq $manifestPath) { Stop-Gate 'el artefacto no contiene manifest.json.' }
-    $manifest = Get-Content -LiteralPath $manifestPath.FullName -Raw | ConvertFrom-Json
-} finally {
-    Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $extractPath -Recurse -Force -ErrorAction SilentlyContinue
-}
-if ($manifest.commit -ne $sourceSha -or $manifest.digest -ne $digest -or $manifest.image -ne $image) {
-    Stop-Gate 'el manifiesto descargado no coincide con el SHA y digest de liberación.'
-}
+$approvedAt = Get-UtcDate ([string](Get-Required $approval 'approvedAtUtc' 'approval')) 'approval.approvedAtUtc'
 
 $qa = Get-Required $evidence 'qa' 'raíz'
 $qaRunId = [long](Get-Required $qa 'runId' 'qa')
-$qaRun = Get-SuccessfulRun $qaRunId 'QA operational regression' 'qa'
+$qaRun = Get-SuccessfulRun $qaRunId 'QA operational regression' '.github/workflows/qa-operational-regression.yml' 'qa'
 $qaSha = [string]$qaRun.head_sha
 Assert-Sha $qaSha 'head_sha del run de QA'
-if ((Get-CommitTree $qaSha 'head_sha del run de QA') -ne $sourceTree) {
-    Stop-Gate 'el árbol de código probado por QA no coincide exactamente con el artefacto candidato.'
-}
 $qaTestedCommit = [string](Get-Required $qa 'testedCommit' 'qa')
-if ((Get-CommitTree $qaTestedCommit 'qa.testedCommit') -ne $sourceTree) {
-    Stop-Gate 'qa.testedCommit no tiene el mismo árbol que sourceCommit.'
-}
+if ($qaTestedCommit -ne $qaSha) { Stop-Gate 'qa.testedCommit debe identificar el commit de la ejecución de QA.' }
+# QA can run before measured reports are committed. Only the three exact
+# evidence filenames may differ; all application, scripts and workflows match.
+$qaMetadata = @('docs/release/security-gate-evidence.json') + $productionMetadata
+Assert-SameCode $qaSha $sourceSha $qaMetadata 'el código probado por QA no coincide con sourceCommit.'
 
 $staging = Get-Required $evidence 'staging' 'raíz'
 $stagingRunId = [long](Get-Required $staging 'runId' 'staging')
-$stagingRun = Get-SuccessfulRun $stagingRunId 'Staging release smoke' 'staging'
-$stagingTestedCommit = [string](Get-Required $staging 'testedCommit' 'staging')
-if ((Get-CommitTree $stagingTestedCommit 'staging.testedCommit') -ne $sourceTree) {
-    Stop-Gate 'staging.testedCommit no tiene el mismo árbol que sourceCommit.'
+$stagingRun = Get-SuccessfulRun $stagingRunId 'Staging release smoke' '.github/workflows/staging-release-smoke.yml' 'staging'
+if ($stagingRun.head_branch -cnotin @('staging', 'release/HU-MAIN-01-promocion-produccion')) {
+    Stop-Gate 'el smoke debe ejecutarse desde la rama staging aprobada.'
 }
-if ([string]$staging.imageDigest -cne $digest) { Stop-Gate 'staging no probó el mismo digest OCI que se propone promover.' }
+$stagingTestedCommit = [string](Get-Required $staging 'testedCommit' 'staging')
+Assert-Sha $stagingTestedCommit 'staging.testedCommit'
+Assert-Sha ([string]$stagingRun.head_sha) 'head_sha de la ejecución del smoke'
+Assert-Ancestor $sourceSha $stagingTestedCommit 'sourceCommit del smoke'
+Assert-Ancestor $stagingTestedCommit $head 'staging.testedCommit'
+Assert-SameCode $sourceSha $stagingTestedCommit $productionMetadata 'staging.testedCommit contiene cambios adicionales al candidato.'
+Assert-Ancestor $sourceSha ([string]$stagingRun.head_sha) 'sourceCommit de la ejecución del smoke'
+Assert-SameCode $sourceSha ([string]$stagingRun.head_sha) $productionMetadata 'el workflow del smoke contiene cambios adicionales al candidato.'
 
-Write-Host "Production release gate aprobado: versión $version; código, artefacto, QA y staging coinciden."
+$serviceId = [string](Get-Required $staging 'serviceId' 'staging')
+$deployId = [string](Get-Required $staging 'deployId' 'staging')
+if ([string]::IsNullOrWhiteSpace($env:RENDER_STAGING_SERVICE_ID) -or $serviceId -cne $env:RENDER_STAGING_SERVICE_ID) {
+    Stop-Gate 'staging.serviceId debe coincidir con RENDER_STAGING_SERVICE_ID configurado en GitHub.'
+}
+if (-not [string]::IsNullOrWhiteSpace($env:RENDER_PRODUCTION_SERVICE_ID) -and $serviceId -ceq $env:RENDER_PRODUCTION_SERVICE_ID) {
+    Stop-Gate 'los servicios Render de staging y producción deben ser distintos.'
+}
+
+$report = Get-StagingVerification $stagingRunId
+if ([int]$report.schemaVersion -ne 1 -or [string]$report.provider -cne 'render-git' -or
+    [string]$report.serviceId -cne $serviceId -or [string]$report.deployId -cne $deployId -or
+    [string]$report.testedCommit -ne $stagingTestedCommit) {
+    Stop-Gate 'el reporte del smoke no coincide con el servicio, despliegue y commit de staging.'
+}
+$verifiedAt = Get-UtcDate ([string](Get-Required $report 'verifiedAtUtc' 'reporte del smoke')) 'verifiedAtUtc del smoke'
+if ($approvedAt -lt $verifiedAt) { Stop-Gate 'la aprobación debe ser posterior al smoke de staging.' }
+
+. (Join-Path $PSScriptRoot 'render-deployment.ps1')
+# Recording the smoke run creates a new metadata commit and Render deployment.
+# Validate the tested historical deployment, then validate the current live one.
+$testedDeploy = Assert-RenderGitDeployment -ServiceId $serviceId -DeployId $deployId -ExpectedCommit $stagingTestedCommit -ExpectedBranch staging -AllowHistorical
+if ([string]$report.apiUrl -cne $testedDeploy.Url) { Stop-Gate 'el smoke no consultó la URL del servicio Render validado.' }
+if ($verifiedAt -lt [DateTimeOffset]::Parse($testedDeploy.FinishedAt)) { Stop-Gate 'el smoke debe ser posterior al despliegue de staging.' }
+$currentDeploy = Get-CurrentRenderGitDeployment -ServiceId $serviceId -ExpectedBranch staging
+Assert-Ancestor $sourceSha $currentDeploy.Commit 'commit actualmente desplegado en Render'
+Assert-Ancestor $currentDeploy.Commit $head 'commit actualmente desplegado en Render'
+Assert-SameCode $sourceSha $currentDeploy.Commit $productionMetadata 'Render live contiene cambios adicionales al candidato aprobado.'
+
+Write-Host "Production release gate aprobado: versión $version; código, QA y despliegue Render de staging verificados."
