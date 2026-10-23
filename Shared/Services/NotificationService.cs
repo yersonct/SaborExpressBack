@@ -58,11 +58,11 @@ namespace SaborExpress.Shared.Services
                         $"Brevo respondió {(int)response.StatusCode}: {detail}");
                 }
 
-                _logger.LogInformation("Correo enviado exitosamente a {Email}", toEmail);
+                _logger.LogInformation("Correo enviado exitosamente.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al enviar correo a {Email}: {Message}", toEmail, ex.Message);
+                _logger.LogError("Error al enviar correo ({ErrorType}).", ex.GetType().Name);
                 throw;
             }
         }

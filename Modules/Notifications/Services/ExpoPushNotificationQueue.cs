@@ -64,7 +64,7 @@ namespace SaborExpress.Modules.Notifications.Services
                 }
                 catch (Exception exception)
                 {
-                    _logger.LogWarning(exception, "No se pudo procesar el push del usuario {UserId}.", message.UserId);
+                    _logger.LogWarning("No se pudo procesar una notificación push ({ErrorType}).", exception.GetType().Name);
                 }
             }
         }
@@ -174,7 +174,7 @@ namespace SaborExpress.Modules.Notifications.Services
                 catch (Exception exception)
                 {
                     if (attempt == 2)
-                        _logger.LogWarning(exception, "No se pudo enviar una notificación push a Expo.");
+                        _logger.LogWarning("No se pudo enviar una notificación push a Expo ({ErrorType}).", exception.GetType().Name);
                 }
 
                 if (attempt < 2)

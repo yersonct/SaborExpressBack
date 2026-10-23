@@ -40,7 +40,7 @@ public sealed class WebRequestRealtimeMiddleware
             if (module == "EmployeeSchedules")
             {
                 try { await hub.Clients.All.SendAsync("EmployeeSchedulesChanged"); }
-                catch (Exception ex) { logger.LogWarning(ex, "Error notificando turnos por SignalR"); }
+                catch (Exception ex) { logger.LogWarning("Error notificando turnos por SignalR ({ErrorType}).", ex.GetType().Name); }
             }
         }
     }
@@ -127,7 +127,7 @@ public sealed class WebRequestRealtimeMiddleware
         }
         catch (Exception exception)
         {
-            logger.LogWarning(exception, "No se pudo emitir el evento en tiempo real {EventName}.", eventName);
+            logger.LogWarning("No se pudo emitir el evento en tiempo real ({ErrorType}).", exception.GetType().Name);
         }
     }
 }
