@@ -125,7 +125,9 @@ function Assert-RenderGitDeployment {
     # successful smoke artifact. The default always confirms a currently live
     # deployment immediately before a smoke test can exercise it.
     if (-not $AllowHistorical) {
-        $liveEntries = @(Invoke-RenderGet "services/$ServiceId/deploys?status=live&limit=100")
+        # Capture first so the cmdlet's single JSON-array object is enumerated.
+        $liveResponse = Invoke-RenderGet "services/$ServiceId/deploys?status=live&limit=100"
+        $liveEntries = @($liveResponse)
         $matchingLiveDeploys = @($liveEntries | ForEach-Object {
             $listedDeploy = Get-RenderProperty $_ 'deploy'
             if ([string](Get-RenderProperty $listedDeploy 'id') -ceq $DeployId -and

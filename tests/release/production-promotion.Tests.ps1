@@ -20,6 +20,12 @@ if ($RunCasePath) {
             $property = $case.responses.PSObject.Properties[$Uri]
             if ($null -eq $property) { throw "Unexpected API request in fixture: $Uri" }
             if ($property.Value.PSObject.Properties['fixtureError']) { throw [string]$property.Value.fixtureError }
+            # Invoke-RestMethod emits JSON arrays as a single pipeline object.
+            # Returning the array normally here would hide nested-array bugs.
+            if ($property.Value -is [Array]) {
+                Write-Output -NoEnumerate $property.Value
+                return
+            }
             return $property.Value
         }
 
@@ -243,8 +249,22 @@ try {
     $responses[$renderDeployApi] = $historicalDeploy
     $responses[$renderLiveApi] = @(@{ deploy = $historicalDeploy; cursor = 'synthetic-cursor' })
 
-    Assert-Gate -Name 'complete staging promotion passes with synthetic GitHub and Render APIs' -Gate production -HeadSha $metadataSha -Responses $responses -ExpectedOutput 'Production release gate aprobado'
+    Assert-Gate -Name 'complete staging promotion accepts a non-enumerated Render live array' -Gate production -HeadSha $metadataSha -Responses $responses -ExpectedOutput 'Production release gate aprobado'
     Assert-Gate -Name 'complete legacy release promotion remains compatible' -Gate production -HeadSha $metadataSha -HeadRef 'release/HU-MAIN-01-promocion-produccion' -Responses $responses -ExpectedOutput 'Production release gate aprobado'
+
+    $responses[$renderLiveApi] = @()
+    Assert-Gate -Name 'empty Render live array blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput 'exactly one current live deployment'
+    $responses[$renderLiveApi] = @(
+        @{ deploy = $historicalDeploy; cursor = 'synthetic-cursor' },
+        @{ deploy = @{ id = $script:currentDeployId; status = 'live'; commit = @{ id = $approvedSha } }; cursor = 'synthetic-other-cursor' }
+    )
+    Assert-Gate -Name 'multiple current Render deployments block production' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput 'exactly one current live deployment'
+    $responses[$renderLiveApi] = @(@{ deploy = @{
+        id = $script:deployId; status = 'live'; commit = @{ id = $approvedSha }
+        image = @{ ref = 'ghcr.io/example/release-fixture:synthetic' }
+    }; cursor = 'synthetic-cursor' })
+    Assert-Gate -Name 'image-backed current Render deployment blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput 'invalid Git-backed deployment'
+    $responses[$renderLiveApi] = @(@{ deploy = $historicalDeploy; cursor = 'synthetic-cursor' })
 
     $responses["$api/commits/$approvedSha/check-runs"].check_runs[0].conclusion = 'failure'
     Assert-Gate -Name 'failed candidate security check still blocks production' -Gate production -HeadSha $metadataSha -Responses $responses -ShouldPass $false -ExpectedOutput "el check 'security-gate'"
