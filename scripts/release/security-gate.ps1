@@ -107,8 +107,15 @@ if ($LASTEXITCODE -ne 0) { Stop-Gate 'el commit medido no es ancestro del commit
 $changedAfterMeasurement = @(& git -C $RepositoryPath diff --name-only "$candidateSha..$head")
 if ($LASTEXITCODE -ne 0) { Stop-Gate 'no se pudo verificar el contenido posterior a las mediciones.' }
 $allowedChange = $EvidencePath.Replace('\', '/')
-if ($changedAfterMeasurement.Count -ne 1 -or $changedAfterMeasurement[0].Replace('\', '/') -ne $allowedChange) {
-    Stop-Gate 'después de medir solo se permite añadir o actualizar el archivo de evidencia.'
+$allowedChanges = @(
+    $allowedChange
+    'docs/release/production-release-candidate.json'
+    'docs/release/production-release-evidence.json'
+)
+$normalizedChanges = @($changedAfterMeasurement | ForEach-Object { $_.Replace('\', '/') })
+if ($allowedChange -cnotin $normalizedChanges -or
+    @($normalizedChanges | Where-Object { $_ -cnotin $allowedChanges }).Count -gt 0) {
+    Stop-Gate 'después de medir se requiere actualizar la evidencia de seguridad; solo se permiten además los metadatos production-release-candidate.json y production-release-evidence.json, sin cambios de código.'
 }
 
 $baselineRows = @((Get-RequiredProperty $baseline 'routes' 'baseline') | ForEach-Object { Assert-ValidMeasurement $_ 'baseline.routes' })
