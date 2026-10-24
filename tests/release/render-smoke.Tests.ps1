@@ -23,9 +23,16 @@ if ($RunCasePath) {
             if ($null -eq $property) { throw "Unexpected API request in smoke fixture: $Uri" }
             if ($case.driftAfterSmoke -and (Test-Path -LiteralPath $case.markerPath) -and
                 $Uri -like '*deploys?status=live&limit=100') {
-                return @([pscustomobject]@{ deploy = [pscustomobject]@{
+                $driftedDeployments = @([pscustomobject]@{ deploy = [pscustomobject]@{
                     id = 'dep-' + ('d' * 20); status = 'live'; commit = [pscustomobject]@{ id = $case.expectedCommit }
                 }; cursor = 'synthetic-cursor' })
+                Write-Output -NoEnumerate $driftedDeployments
+                return
+            }
+            # Preserve the real cmdlet's single pipeline object for JSON arrays.
+            if ($property.Value -is [Array]) {
+                Write-Output -NoEnumerate $property.Value
+                return
             }
             return $property.Value
         }
@@ -178,7 +185,7 @@ switch ($env:FIXTURE_SMOKE_MODE) {
     Invoke-FixtureGit merge --quiet --no-ff $metadataSha -m 'Synthetic production merge' | Out-Null
     $script:mainSha = (Invoke-FixtureGit rev-parse HEAD).Trim()
 
-    Assert-SmokeCase -Name 'staging smoke writes a receipt after a stable live deployment' -Kind staging -HeadSha $approvedSha
+    Assert-SmokeCase -Name 'staging smoke accepts a non-enumerated Render live array and writes its receipt' -Kind staging -HeadSha $approvedSha
     Assert-SmokeCase -Name 'staging smoke accepts metadata-only checkout changes' -Kind staging -HeadSha $metadataSha -ExpectedCommit $approvedSha
     Assert-SmokeCase -Name 'staging nonzero smoke result produces no receipt' -Kind staging -HeadSha $approvedSha -SmokeMode exit-code -ShouldPass $false -ExpectedOutput 'smoke checks failed'
     Assert-SmokeCase -Name 'staging smoke exit 1 produces no receipt' -Kind staging -HeadSha $approvedSha -SmokeMode exit -ShouldPass $false -ExpectedOutput 'smoke checks failed'
