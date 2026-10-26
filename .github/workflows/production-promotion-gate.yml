@@ -1,0 +1,48 @@
+name: Production promotion gate
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  checks: read
+  actions: read
+
+jobs:
+  production-release-gate:
+    name: production-release-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require an internal staging promotion before using Render credentials
+        shell: pwsh
+        env:
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if ($env:HEAD_REPOSITORY -cne $env:GITHUB_REPOSITORY -or
+              $env:HEAD_REF -cnotin @('staging', 'release/HU-MAIN-01-promocion-produccion')) {
+            throw 'Production promotion must come from staging in this repository.'
+          }
+
+      - name: Check out the proposed promotion and history
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Fetch QA and staging references
+        run: git fetch origin refs/heads/qa:refs/remotes/origin/qa refs/heads/staging:refs/remotes/origin/staging
+
+      - name: Validate release evidence and the real Render Git deployment
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_STAGING_SERVICE_ID: ${{ vars.RENDER_STAGING_SERVICE_ID }}
+          RENDER_PRODUCTION_SERVICE_ID: ${{ vars.RENDER_PRODUCTION_SERVICE_ID }}
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_HEAD_REF: ${{ github.head_ref }}
+        run: ./scripts/release/validate-production-release.ps1 -EvidencePath docs/release/production-release-evidence.json -ExpectedHeadSha $env:EXPECTED_HEAD_SHA -ExpectedHeadRef $env:EXPECTED_HEAD_REF -RepositoryPath .

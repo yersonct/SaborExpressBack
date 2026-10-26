@@ -1,0 +1,54 @@
+name: Production post-deployment smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_id:
+        description: Render main deployment ID (dep-...) to verify
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: production-postdeploy-smoke
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    environment: production
+    steps:
+      - name: Check out the selected main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Fetch the current main reference
+        run: git fetch origin refs/heads/main:refs/remotes/origin/main
+
+      - name: Verify the main deployment before and after read-only smoke checks
+        shell: pwsh
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+          RENDER_DEPLOY_ID: ${{ inputs.deploy_id }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_PRODUCTION_SERVICE_ID: ${{ vars.RENDER_PRODUCTION_SERVICE_ID }}
+          RENDER_STAGING_SERVICE_ID: ${{ vars.RENDER_STAGING_SERVICE_ID }}
+          RELEASE_SMOKE_API_URL: ${{ secrets.RELEASE_SMOKE_API_URL }}
+          RELEASE_SMOKE_IDENTIFIER: ${{ secrets.RELEASE_SMOKE_IDENTIFIER }}
+          RELEASE_SMOKE_PASSWORD: ${{ secrets.RELEASE_SMOKE_PASSWORD }}
+          RELEASE_SMOKE_BRANCH_ID: ${{ vars.RELEASE_SMOKE_BRANCH_ID }}
+          RELEASE_SMOKE_ORDER_ID: ${{ vars.RELEASE_SMOKE_ORDER_ID }}
+          RELEASE_SMOKE_PAID_ORDER_ID: ${{ vars.RELEASE_SMOKE_PAID_ORDER_ID }}
+          RELEASE_SMOKE_DELIVERY_ORDER_ID: ${{ vars.RELEASE_SMOKE_DELIVERY_ORDER_ID }}
+          RELEASE_SMOKE_INVOICE_ID: ${{ vars.RELEASE_SMOKE_INVOICE_ID }}
+        run: ./scripts/release/smoke-production.ps1 -ExpectedCommit $env:EXPECTED_COMMIT -DeployId $env:RENDER_DEPLOY_ID
+
+      - name: Preserve the production Render deployment receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-render-verification
+          path: release-results/render-production-verification.json
+          if-no-files-found: error
+          retention-days: 90

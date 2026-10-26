@@ -1,19 +1,27 @@
 # Evidencia de liberación HU-STG-02
 
+Plantilla de registro humano. Completar con resultados reales; no incluir credenciales ni datos personales. El artifact automático del smoke se conserva en GitHub Actions.
+
 ## Identificación
 
 - Ambiente y región:
 - Fecha/hora UTC:
-- Commit probado:
-- Imagen desplegada por digest:
+- Repositorio y rama Git:
+- Commit probado (SHA completo):
+- Servicio Render (ID `srv-…`):
+- Despliegue Render probado (ID `dep-…`):
+- URL primaria Render verificada:
+- Ejecución Actions del smoke (runId/enlace):
+- Artifact `staging-render-verification`:
 - Responsable de operaciones:
 - Responsable de base de datos y recuperación:
 - Ventana de cambio:
 
-## Configuración segura
+## Configuración
 
 - Preflight: aprobado / fallido (adjuntar salida sin valores de secretos)
-- Secretos cargados en almacén de staging: sí / no
+- Secretos cargados en Render y GitHub: sí / no
+- Servicios y bases separados para staging/producción: sí / no
 - CORS exacto de staging verificado: sí / no
 - Wompi sandbox confirmado: sí / no
 
@@ -33,19 +41,34 @@
 
 | Flujo | Resultado | Evidencia o defecto |
 | --- | --- | --- |
+| Render: servicio, rama, SHA, URL y despliegue live antes/después | Pendiente | |
 | Health y readiness | Pendiente | |
 | Login de prueba | Pendiente | |
 | Configuración | Pendiente | |
 | Pedido | Pendiente | |
-| Pago sandbox y webhook/conciliación | Pendiente | |
+| Consulta de pago existente | Pendiente | |
 | Entrega | Pendiente | |
 | Consulta de factura | Pendiente | |
+| Checkout sandbox y webhook/conciliación (verificación adicional) | Pendiente | |
 
-## Resultado y promoción
+## Mediciones y aprobación
 
+- Baseline HU-STG-01 (commit, perfil y reporte real):
+- Candidato HU-STG-01 (commit, perfil y reporte real):
+- Evidencia de p95 servidor y tasa 5xx:
 - Defectos abiertos:
 - Decisión: aprobado / rechazado / bloqueado
-- Responsable que aprueba:
-- Digest promovido a producción (debe coincidir con staging):
+- Responsable que aprueba y fecha UTC:
+- Evidencia `production-release-evidence.json` y `sourceCommit` aprobado:
+
+## Producción y recuperación
+
+- Commit resultante en `main`:
+- Servicio Render de producción (distinto de staging):
+- Despliegue Render productivo:
+- Ejecución **Production post-deployment smoke** y resultado:
 - Fecha/hora de promoción:
+- Despliegue y commit anteriores para recuperación:
 - Acciones de rollback ejecutadas, si aplica:
+
+El despliegue productivo se comprueba contra el SHA exacto de `main`. Render construye desde Git; esta evidencia no afirma que el build productivo y el de staging tengan el mismo digest OCI.

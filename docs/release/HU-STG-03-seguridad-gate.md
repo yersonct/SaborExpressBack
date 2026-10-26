@@ -4,7 +4,7 @@
 
 El workflow `Security release gate` corre pruebas negativas y escaneo de secretos en PR hacia `develop`, `qa`, `staging` y `main`. El job se llama `security-gate`. Para que bloquee una promoción, ese check debe quedar como requerido en las reglas de protección de `staging` y `main`; el repositorio debe conservar también GitGuardian como check requerido si esa integración está activa.
 
-Al promover a `staging` o `main`, el workflow exige evidencia de carga en `docs/release/security-gate-evidence.json`. El archivo no se incluye con números de ejemplo: la rama aún no tiene una ejecución de HU-STG-01 en un entorno staging. Sin evidencia medible, la promoción falla de forma cerrada.
+Al abrir PR hacia `staging`, el workflow ejecuta las pruebas de seguridad, pero no exige todavía el reporte de carga: la medición HU-STG-01 debe realizarse después de desplegar el candidato en staging. En una PR hacia `main`, sí exige `docs/release/security-gate-evidence.json` con mediciones reales. Así no se bloquea la instalación que se necesita para medir, y tampoco se promueve a producción sin la evidencia.
 
 ## Pruebas negativas
 
@@ -61,7 +61,7 @@ Formato requerido:
   },
   "candidate": {
     "capturedAtUtc": "<fecha ISO-8601 UTC de la ejecución real>",
-    "commit": "<SHA exacto medido; debe ser ancestro estricto del HEAD, al que solo se añade la evidencia>",
+    "commit": "<SHA exacto medido; debe ser ancestro estricto del HEAD, al que solo se añade evidencia y metadatos de producción>",
     "loadRunId": "<identificador de ejecución y artefacto>",
     "routes": [
       {
@@ -76,7 +76,7 @@ Formato requerido:
 }
 ```
 
-Los valores `null` son marcadores estructurales y **no son una línea base válida ni evidencia**; sustitúyanse por datos reales. No subir un archivo de ejemplo al path que consume el gate. Cada ruta debe aparecer exactamente una vez en ambos conjuntos. El gate compara p95 y tasa 5xx del candidato con los valores medidos del baseline; no fija un SLA inventado. Debe mantenerse el mismo perfil de carga y commit medido como ancestro del commit promocionado. Después de medir, solo puede cambiar el archivo de evidencia.
+Los valores `null` son marcadores estructurales y **no son una línea base válida ni evidencia**; sustitúyanse por datos reales. No subir un archivo de ejemplo al path que consume el gate. Cada ruta debe aparecer exactamente una vez en ambos conjuntos. El gate compara p95 y tasa 5xx del candidato con los valores medidos del baseline; no fija un SLA inventado. Debe mantenerse el mismo perfil de carga y commit medido como ancestro del commit promocionado. Después de medir, se requiere añadir o actualizar el archivo de evidencia de seguridad; también pueden cambiar exclusivamente `docs/release/production-release-candidate.json` y `docs/release/production-release-evidence.json` para preparar la promoción a `main`. Cualquier otro cambio, incluso en scripts o workflows, requiere una nueva medición.
 
 PromQL para consultar la métrica del API existente:
 
@@ -92,4 +92,4 @@ sum by (method, route) (rate(sabor_express_http_server_requests_total[5m]))
 
 ## Nota de publicación
 
-Esta HU añade el workflow y el validador, pero no puede certificar ni producir evidencia real de staging desde el entorno local. El responsable de publicación debe ejecutar HU-STG-01 y adjuntar el reporte antes de promover a `staging` o `main`.
+Esta HU añade el workflow y el validador, pero no puede certificar ni producir evidencia real de staging desde el entorno local. Primero debe integrarse el código a través de `develop` y `qa`, y desplegarse en `staging`; allí el responsable ejecuta HU-STG-01 y registra el reporte. La evidencia se adjunta en la promoción posterior de `staging` a `main`.
