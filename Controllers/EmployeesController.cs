@@ -70,7 +70,7 @@ namespace SaborExpress.Controllers
         [HttpGet("{id}/cv")]
         public async Task<IActionResult> DownloadCv(int id)
         {
-            var cv = await _employeeService.GetCvAsync(id);
+            var cv = await _employeeService.GetCvAsync(id, ObtenerUsuarioActualId());
             if (cv is null)
                 return NotFound(new { error = "Este empleado no tiene CV cargado" });
 
