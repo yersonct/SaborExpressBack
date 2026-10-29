@@ -7,6 +7,7 @@ using System.Security.Claims;
 
 namespace SaborExpress.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class CustomersController : ControllerBase
@@ -15,18 +16,21 @@ namespace SaborExpress.Controllers
 
         public CustomersController(ICustomerService customerService)
             => _customerService = customerService;
-
+            
+        [AllowAnonymous]
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterCustomerDto dto) =>
             Ok(await _customerService.RegisterAsync(dto));
 
+        [Authorize(Roles = RoleNames.Cliente)]
         [HttpGet("me")]
         public async Task<IActionResult> GetMe()
         {
             var userId = GetCurrentUserId();
             return Ok(await _customerService.GetMeAsync(userId));
         }
-
+        
+        [Authorize(Roles = RoleNames.Cliente)]
         [HttpPut("me")]
         public async Task<IActionResult> UpdateMe([FromBody] UpdateCustomerDto dto)
         {
