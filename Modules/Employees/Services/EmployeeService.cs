@@ -9,6 +9,7 @@ using SaborExpress.Modules.UsersRoles.Models;
 using SaborExpress.Shared.Constants;
 using SaborExpress.Shared.Helpers;
 using SaborExpress.Shared.Interfaces;
+using SaborExpress.Shared.Exceptions;
 using SaborExpress.Data; 
 using Microsoft.EntityFrameworkCore;
 using SaborExpress.Modules.Orders.Enum; 
@@ -29,7 +30,7 @@ namespace SaborExpress.Modules.Employees.Services
         private readonly AppDbContext _context;
         private readonly IDeliveryAssignmentService _deliveryAssignmentService;
         private readonly ILogger<EmployeeService> _logger;
-private readonly IRealtimeNotifier _realtime;
+        private readonly IRealtimeNotifier _realtime;
         public EmployeeService(
             IEmployeeRepository employeeRepository,
             EmployeeValidator employeeValidator,
@@ -62,11 +63,19 @@ _realtime = realtime;
             var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
                 ?? throw new KeyNotFoundException("Usuario no encontrado.");
 
-            var esGerente = EsGerente(currentUser);
+            List<EmployeeListItem> employees;
 
-            List<EmployeeListItem> employees = (esGerente || currentUser.Employee?.BranchId == null)
-                ? await _employeeRepository.GetAllLightAsync(estado)
-                : await _employeeRepository.GetAllByBranchLightAsync(currentUser.Employee.BranchId.Value, estado);
+            if (EsGerente(currentUser))
+            {
+                employees = await _employeeRepository.GetAllLightAsync(estado);
+            }
+            else
+            {
+                var branchId = currentUser.Employee?.BranchId
+                    ?? throw new ForbiddenException("El administrador debe tener una sede asignada.");
+
+                employees = await _employeeRepository.GetAllByBranchLightAsync(branchId, estado);
+            }
 
             return employees.Select(EmployeeMapper.ToResponse).ToList();
         }
@@ -84,51 +93,57 @@ _realtime = realtime;
             return EmployeeMapper.ToResponse(employee);
         }
 
-public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int currentUserId)
-{
-    var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
-        ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
-
-    var currentEmployeeId = currentUser.Employee?.Id
-        ?? throw new InvalidOperationException("El usuario actual no tiene un perfil de empleado asociado.");
-
-    if (!await _authorizationService.CanPerformActionAsync(currentEmployeeId, PermissionNames.CrearEmpleado))
-        throw new InvalidOperationException("No tienes permiso para crear empleados ahora mismo.");
-
-    await _employeeValidator.ValidateCreateAsync(dto);
-
-    var employee = new Employee
-    {
-        Name = dto.Name,
-        LastName = dto.LastName,
-        Document = dto.Document,
-        Phone = dto.Phone,
-        Address = dto.Address,
-        BranchId = dto.BranchId,
-        Status = "Activo",
-        BasePay = dto.BasePay,
-        User = new User
+        public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int currentUserId)
         {
-            Email = dto.Email,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString("N")),
-            Status = false,
-            EmailConfirmed = false,
-            MustChangePassword = false
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            if (!EsGerente(currentUser) &&
+                (currentUser.Employee?.BranchId is not int branchId || dto.BranchId != branchId))
+            {
+                throw new ForbiddenException("Solo puedes crear empleados de tu propia sede.");
+            }
+
+            var currentEmployeeId = currentUser.Employee?.Id
+                ?? throw new InvalidOperationException("El usuario actual no tiene un perfil de empleado asociado.");
+
+            if (!await _authorizationService.CanPerformActionAsync(currentEmployeeId, PermissionNames.CrearEmpleado))
+                throw new InvalidOperationException("No tienes permiso para crear empleados ahora mismo.");
+
+            await _employeeValidator.ValidateCreateAsync(dto);
+
+            var employee = new Employee
+            {
+                Name = dto.Name,
+                LastName = dto.LastName,
+                Document = dto.Document,
+                Phone = dto.Phone,
+                Address = dto.Address,
+                BranchId = dto.BranchId,
+                Status = "Activo",
+                BasePay = dto.BasePay,
+                User = new User
+                {
+                    Email = dto.Email,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString("N")),
+                    Status = false,
+                    EmailConfirmed = false,
+                    MustChangePassword = false
+                }
+            };
+
+
+
+            if (dto.Cv != null && dto.Cv.Length > 0)
+                await UpdateCvAsync(employee, dto.Cv);
+
+            await _employeeRepository.AddAsync(employee);
+
+            await _employeeActivationService.SendActivationCodeAsync(
+                employee.User.Id, employee.User.Email!, employee.Name);
+
+            return EmployeeMapper.ToResponse(employee);
         }
-    };
-
-
-
-    if (dto.Cv != null && dto.Cv.Length > 0)
-        await UpdateCvAsync(employee, dto.Cv);
-
-    await _employeeRepository.AddAsync(employee);
-
-    await _employeeActivationService.SendActivationCodeAsync(
-        employee.User.Id, employee.User.Email!, employee.Name);
-
-    return EmployeeMapper.ToResponse(employee);
-}
 
         public async Task<EmployeeResponseDto> UpdateAsync(int id, UpdateEmployeeDto dto, int currentUserId)
         {
@@ -202,6 +217,7 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
             var employee = await _employeeRepository.GetByIdAsync(id)
                 ?? throw new KeyNotFoundException("El empleado no existe");
 
+            EnsureSameBranch(currentUser, employee);
             employee.Status = "Retirado";
 
             // Le quita los roles operativos (Mesero, Cocinero, etc.), deja solo Cliente si lo tiene
@@ -298,13 +314,24 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
             await _realtime.ForceLogoutAsync(employee.UserId, "employee-deleted");
         }
 
-        public async Task<(byte[] Archivo, string NombreArchivo, string ContentType)?> GetCvAsync(int id)
+        public async Task<(byte[] Archivo, string NombreArchivo, string ContentType)?> GetCvAsync(
+            int id, int currentUserId)
         {
-            var employee = await _employeeRepository.GetByIdAsync(id);
-            if (employee?.CvFile == null)
+            var currentUser = await _authRepository.GetByIdWithRelationsAsync(currentUserId)
+                ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
+
+            var employee = await _employeeRepository.GetByIdAsync(id)
+                ?? throw new KeyNotFoundException("El empleado no existe.");
+
+            EnsureSameBranch(currentUser, employee);
+
+            if (employee.CvFile == null || employee.CvFile.Length == 0)
                 return null;
 
-            return (employee.CvFile, employee.CvFilename ?? "cv.pdf", employee.CvContentType ?? "application/pdf");
+            return (
+                employee.CvFile,
+                employee.CvFilename ?? "cv.pdf",
+                employee.CvContentType ?? "application/pdf");
         }
         public async Task<EmployeeMeResponseDto> GetMeAsync(int employeeId)
         {
@@ -510,8 +537,8 @@ public async Task<EmployeeResponseDto> CreateAsync(CreateEmployeeDto dto, int cu
             if (EsGerente(currentUser))
                 return;
 
-            if (currentUser.Employee?.BranchId != target.BranchId)
-                throw new InvalidOperationException("Solo puedes gestionar empleados de tu propia sede.");
+            if (currentUser.Employee?.BranchId is not int branchId || target.BranchId != branchId)
+                throw new ForbiddenException("Solo puedes gestionar empleados de tu propia sede.");
         }
 
         private static bool EsGerente(User user) =>
