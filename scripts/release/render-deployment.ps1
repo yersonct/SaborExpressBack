@@ -114,10 +114,34 @@ function Assert-RenderGitDeployment {
         -not [string]::Equals($commit, $ExpectedCommit, [StringComparison]::OrdinalIgnoreCase)) {
         Stop-RenderDeployment 'The Render deployment does not contain ExpectedCommit.'
     }
+    $finishedValue = Get-RenderProperty $deploy 'finishedAt'
     $finishedAt = [DateTimeOffset]::MinValue
-    $finishedText = [string](Get-RenderProperty $deploy 'finishedAt')
-    if ([string]::IsNullOrWhiteSpace($finishedText) -or
-        -not [DateTimeOffset]::TryParse($finishedText, [ref]$finishedAt)) {
+
+    if ($finishedValue -is [DateTimeOffset]) {
+        # Preservar el instante y el offset originales.
+        $finishedAt = $finishedValue
+    }
+    elseif ($finishedValue -is [DateTime]) {
+        # ConvertFrom-Json puede interpretar un ISO-8601 con Z como DateTime UTC.
+        # Rechazar valores sin zona, que serían ambiguos.
+        if ($finishedValue.Kind -eq [DateTimeKind]::Unspecified) {
+            Stop-RenderDeployment 'The live deployment finishedAt must include an explicit timezone.'
+        }
+        $finishedAt = [DateTimeOffset]::new([DateTime]$finishedValue)
+    }
+    elseif ($finishedValue -is [string]) {
+        # No interpretar una hora sin zona como hora local del agente CI.
+        if ($finishedValue -notmatch '(?i)(?:Z|[+-][0-9]{2}:[0-9]{2})$' -or
+            -not [DateTimeOffset]::TryParse(
+                $finishedValue,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::None,
+                [ref]$finishedAt
+            )) {
+            Stop-RenderDeployment 'The live deployment must have a valid finishedAt timestamp with timezone.'
+        }
+    }
+    else {
         Stop-RenderDeployment 'The live deployment must have a valid finishedAt timestamp.'
     }
 
