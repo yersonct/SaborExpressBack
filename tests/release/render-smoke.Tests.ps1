@@ -79,6 +79,28 @@ function Commit-Fixture([string]$Message) {
     return (Invoke-FixtureGit rev-parse HEAD).Trim()
 }
 
+function Test-ExplicitUtcTimestamp($Value) {
+    if ($Value -is [DateTime]) {
+        return ($Value.Kind -eq [DateTimeKind]::Utc)
+    }
+    if ($Value -is [DateTimeOffset]) {
+        return ($Value.Offset -eq [TimeSpan]::Zero)
+    }
+
+    $text = [string]$Value
+    $parsed = [DateTimeOffset]::MinValue
+    return (
+        $text -match '(?:Z|\+00:00)$' -and
+        [DateTimeOffset]::TryParse(
+            $text,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::None,
+            [ref]$parsed
+        ) -and
+        $parsed.Offset -eq [TimeSpan]::Zero
+    )
+}
+
 function Assert-SmokeCase {
     param(
         [string]$Name,
@@ -125,12 +147,10 @@ function Assert-SmokeCase {
     $correctReceipt = $receiptExists -eq $ShouldPass
     if ($ShouldPass -and $receiptExists) {
         $receipt = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
-        $verifiedAt = [DateTimeOffset]::MinValue
         $correctReceipt = $receipt.schemaVersion -eq 1 -and $receipt.provider -ceq 'render-git' -and
             $receipt.serviceId -ceq $serviceId -and $receipt.deployId -ceq $deployId -and
             $receipt.testedCommit -ceq $ExpectedCommit -and $receipt.apiUrl -ceq $serviceUrl -and
-            [DateTimeOffset]::TryParse([string]$receipt.verifiedAtUtc, [ref]$verifiedAt) -and
-            $verifiedAt.Offset -eq [TimeSpan]::Zero
+            (Test-ExplicitUtcTimestamp $receipt.verifiedAtUtc)
     }
     $smokeInvoked = Test-Path -LiteralPath $markerPath
     $correctSmoke = $smokeInvoked -eq $ExpectSmoke
