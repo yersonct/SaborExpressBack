@@ -24,6 +24,40 @@ function Get-RequiredProperty($Object, [string] $Name, [string] $Context) {
     return $property.Value
 }
 
+function ConvertTo-RequiredUtcDate($Value, [string]$Context) {
+    $parsed = [DateTimeOffset]::MinValue
+
+    if ($Value -is [DateTime]) {
+        # ConvertFrom-Json convirtió la cadena con Z a DateTime UTC.
+        if ($Value.Kind -ne [DateTimeKind]::Utc) {
+            Stop-Gate "$Context debe incluir zona UTC."
+        }
+        $parsed = [DateTimeOffset]::new($Value)
+    }
+    elseif ($Value -is [DateTimeOffset]) {
+        $parsed = $Value
+    }
+    else {
+        $raw = [string]$Value
+        # No aceptar fechas sin zona, ni offsets que no sean UTC.
+        if ($raw -notmatch '(?:Z|\+00:00)$' -or
+            -not [DateTimeOffset]::TryParse(
+                $raw,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::None,
+                [ref]$parsed
+            )) {
+            Stop-Gate "$Context debe incluir zona UTC."
+        }
+    }
+
+    if ($parsed.Offset -ne [TimeSpan]::Zero) {
+        Stop-Gate "$Context debe incluir zona UTC."
+    }
+
+    return $parsed
+}
+
 function Assert-ValidSha([string] $Sha, [string] $Context) {
     if ($Sha -notmatch '^[0-9a-fA-F]{40}$') {
         Stop-Gate "el commit de $Context no es un SHA de 40 caracteres."
@@ -84,19 +118,19 @@ if (([string](Get-RequiredProperty $evidence 'environment' 'raíz')) -ne 'stagin
 
 $baseline = Get-RequiredProperty $evidence 'baseline' 'raíz'
 $candidate = Get-RequiredProperty $evidence 'candidate' 'raíz'
+$dates = @{}
+
 foreach ($section in @(@{ Name = 'baseline'; Value = $baseline }, @{ Name = 'candidate'; Value = $candidate })) {
-    $captured = [string](Get-RequiredProperty $section.Value 'capturedAtUtc' $section.Name)
-    $parsedDate = [DateTimeOffset]::MinValue
-    if (-not [DateTimeOffset]::TryParse($captured, [ref]$parsedDate) -or $parsedDate.Offset -ne [TimeSpan]::Zero) {
-        Stop-Gate "capturedAtUtc de $($section.Name) debe incluir zona UTC."
-    }
+    $captured = Get-RequiredProperty $section.Value 'capturedAtUtc' $section.Name
+    $dates[$section.Name] = ConvertTo-RequiredUtcDate $captured "capturedAtUtc de $($section.Name)"
+
     $commit = [string](Get-RequiredProperty $section.Value 'commit' $section.Name)
     Assert-ValidSha $commit $section.Name
     [void](Get-RequiredProperty $section.Value 'loadRunId' $section.Name)
 }
 
-$baselineDate = [DateTimeOffset]::Parse([string]$baseline.capturedAtUtc)
-$candidateDate = [DateTimeOffset]::Parse([string]$candidate.capturedAtUtc)
+$baselineDate = $dates['baseline']
+$candidateDate = $dates['candidate']
 if ($candidateDate -le $baselineDate) { Stop-Gate 'la medición candidata debe ser posterior a la línea base.' }
 
 $candidateSha = [string]$candidate.commit

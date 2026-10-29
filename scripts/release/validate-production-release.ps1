@@ -52,12 +52,36 @@ function Assert-SameCode([string]$From, [string]$To, [string[]]$AllowedPaths, [s
     if (@($changes | Where-Object { $_ -cnotin $AllowedPaths }).Count -gt 0) { Stop-Gate $Message }
 }
 
-function Get-UtcDate([string]$Value, [string]$Context) {
+function Get-UtcDate($Value, [string]$Context) {
     $parsed = [DateTimeOffset]::MinValue
-    if (-not [DateTimeOffset]::TryParse($Value, [ref]$parsed) -or $parsed.Offset -ne [TimeSpan]::Zero -or
+
+    if ($Value -is [DateTime]) {
+        if ($Value.Kind -ne [DateTimeKind]::Utc) {
+            Stop-Gate "$Context debe ser una fecha ISO-8601 UTC real y no futura."
+        }
+        $parsed = [DateTimeOffset]::new($Value)
+    }
+    elseif ($Value -is [DateTimeOffset]) {
+        $parsed = $Value
+    }
+    else {
+        $raw = [string]$Value
+        if ($raw -notmatch '(?:Z|\+00:00)$' -or
+            -not [DateTimeOffset]::TryParse(
+                $raw,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::None,
+                [ref]$parsed
+            )) {
+            Stop-Gate "$Context debe ser una fecha ISO-8601 UTC real y no futura."
+        }
+    }
+
+    if ($parsed.Offset -ne [TimeSpan]::Zero -or
         $parsed -gt [DateTimeOffset]::UtcNow) {
         Stop-Gate "$Context debe ser una fecha ISO-8601 UTC real y no futura."
     }
+
     return $parsed
 }
 
@@ -166,7 +190,7 @@ foreach ($name in @('migrationPlan', 'rollbackPlan')) {
 $approval = Get-Required $evidence 'approval' 'raíz'
 $approver = [string](Get-Required $approval 'approvedBy' 'approval')
 if ($approver -match '^(<|TODO|TBD|PENDIENTE)') { Stop-Gate 'approval.approvedBy contiene un marcador sin completar.' }
-$approvedAt = Get-UtcDate ([string](Get-Required $approval 'approvedAtUtc' 'approval')) 'approval.approvedAtUtc'
+$approvedAt = Get-UtcDate (Get-Required $approval 'approvedAtUtc' 'approval') 'approval.approvedAtUtc'
 
 $qa = Get-Required $evidence 'qa' 'raíz'
 $qaRunId = [long](Get-Required $qa 'runId' 'qa')
@@ -210,7 +234,7 @@ if ([int]$report.schemaVersion -ne 1 -or [string]$report.provider -cne 'render-g
     [string]$report.testedCommit -ne $stagingTestedCommit) {
     Stop-Gate 'el reporte del smoke no coincide con el servicio, despliegue y commit de staging.'
 }
-$verifiedAt = Get-UtcDate ([string](Get-Required $report 'verifiedAtUtc' 'reporte del smoke')) 'verifiedAtUtc del smoke'
+$verifiedAt = Get-UtcDate (Get-Required $report 'verifiedAtUtc' 'reporte del smoke') 'verifiedAtUtc del smoke'
 if ($approvedAt -lt $verifiedAt) { Stop-Gate 'la aprobación debe ser posterior al smoke de staging.' }
 
 . (Join-Path $PSScriptRoot 'render-deployment.ps1')
