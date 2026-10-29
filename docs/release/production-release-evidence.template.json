@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "deploymentProvider": "render-git",
+  "version": "<semver>",
+  "sourceCommit": "<full-40-character-sha-including-committed-security-evidence>",
+  "releaseNotes": [
+    "<user-visible or operational change included in this release>"
+  ],
+  "migrationPlan": "<migration and verified backup steps, or state explicitly that no migration is included>",
+  "rollbackPlan": "<previous Render deploy ID and commit, verification steps, and data recovery decision owner>",
+  "qa": {
+    "runId": 0,
+    "testedCommit": "<full-40-character-sha-tested-by-the-successful-QA-run>"
+  },
+  "staging": {
+    "runId": 0,
+    "testedCommit": "<full-40-character-sha-verified-live-during-staging-smoke>",
+    "serviceId": "<srv-render-staging-service-id>",
+    "deployId": "<dep-render-staging-deploy-id>"
+  },
+  "approval": {
+    "approvedBy": "<release-approver>",
+    "approvedAtUtc": "<ISO-8601-UTC-timestamp>"
+  }
+}
