@@ -18,9 +18,9 @@ jobs:
     env:
       WOMPI_TEST_EVIDENCE_ENVIRONMENT: SANDBOX_SIMULATED
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
 
@@ -33,7 +33,7 @@ jobs:
 
       - name: Preserve sandbox-labelled execution evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: HU-QA-02-WOMPI-SANDBOX-SIMULATED-${{ github.run_number }}
           path: TestResults/**/*.trx

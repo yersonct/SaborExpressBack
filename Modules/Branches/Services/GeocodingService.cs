@@ -24,7 +24,7 @@ namespace SaborExpress.Modules.Branches.Services
         public async Task<(decimal Latitude, decimal Longitude)> GeocodeAsync(string address)
         {
             if (string.IsNullOrWhiteSpace(address))
-                throw new InvalidOperationException("La dirección no puede estar vacía.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("La dirección no puede estar vacía.");
 
             // Contexto de ciudad/departamento configurable, para no tener que
             // escribirlo en cada dirección (ej: "Calle 7f 12-43" -> se busca
@@ -37,14 +37,14 @@ namespace SaborExpress.Modules.Branches.Services
 
             var response = await _httpClient.GetAsync(url);
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "No se pudo contactar el servicio de geolocalización. Intenta de nuevo.");
 
             var body = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(body);
 
             if (doc.RootElement.GetArrayLength() == 0)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     $"No se pudo ubicar la dirección \"{address}\". Verifica que esté bien escrita " +
                     "(incluye tipo de vía, número y complemento).");
 

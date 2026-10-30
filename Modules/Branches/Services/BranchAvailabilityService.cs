@@ -73,6 +73,6 @@ public sealed class BranchAvailabilityService
     {
         var status = await GetAsync(branchId);
         if (!status.IsOpen)
-            throw new InvalidOperationException(status.UnavailableReason);
+            throw new SaborExpress.Shared.Exceptions.ConflictException(status.UnavailableReason);
     }
 }

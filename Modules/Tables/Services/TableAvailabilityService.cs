@@ -150,14 +150,14 @@ namespace SaborExpress.Modules.Tables.Services
             {
                 // Sin pedidos no hay evidencia para una liberación ordinaria.
                 // La revisión administrativa exige motivo y deja auditoría.
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "La mesa no tiene pedidos asociados. Solicita un cierre administrativo con motivo.");
             }
 
             if (tableOrders.Count > 0 &&
                 !await AreAllOrdersDeliveredAndPaidAsync(tableOrders))
             {
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "No se puede liberar la mesa hasta que todos los productos estén entregados al mesero y los pedidos estén pagados.");
             }
         }

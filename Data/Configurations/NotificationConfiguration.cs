@@ -30,7 +30,7 @@ namespace SaborExpress.Data.Configurations
 
             builder.HasIndex(n => n.IdempotencyKey)
                 .IsUnique()
-                .HasFilter("\"IdempotencyKey\" IS NOT NULL")
+                .HasFilter("idempotency_key IS NOT NULL")
                 .HasDatabaseName("IX_Notifications_IdempotencyKey");
         }
     }

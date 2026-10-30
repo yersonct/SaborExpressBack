@@ -58,7 +58,7 @@ using SaborExpress.Modules.Orders.DTOs;
                 OrderStatus? status,
                 int? employeeId = null,
                 DateTime? fromDate = null,
-                DateTime? toDate = null)
+                DateTime? toDate = null, int? page = null, int? pageSize = null)
             {
                 var query = SummaryQuery();
 
@@ -73,7 +73,10 @@ using SaborExpress.Modules.Orders.DTOs;
                 if (toDate.HasValue)
                     query = query.Where(x => x.CreatedAt <= toDate.Value);
 
-                var orders = await query.OrderByDescending(x => x.CreatedAt).ToListAsync();
+                query = query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id);
+                var pagination = new SaborExpress.Shared.Responses.PageQuery { Page = page, PageSize = pageSize };
+                if (pagination.IsRequested) query = query.Skip(pagination.Offset).Take(pagination.Limit);
+                var orders = await query.ToListAsync();
                 await AttachAssignedDeliveryInfoAsync(orders);
                 return orders;
             }

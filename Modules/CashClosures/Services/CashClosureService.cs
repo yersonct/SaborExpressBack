@@ -46,9 +46,9 @@ public sealed class CashClosureService
             .OrderByDescending(s => s.StartTime)
             .FirstOrDefault();
         if (selected is null)
-            throw new InvalidOperationException("No tienes un turno de Cajero iniciado para cerrar hoy.");
+            throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes un turno de Cajero iniciado para cerrar hoy.");
         if (selected.Employee.Status != "Activo")
-            throw new InvalidOperationException("El empleado no esta activo.");
+            throw new SaborExpress.Shared.Exceptions.ConflictException("El empleado no esta activo.");
         return selected;
     }
 
@@ -85,7 +85,7 @@ public sealed class CashClosureService
             };
         }
         if (shift.Status != ScheduleStatus.Programado)
-            throw new InvalidOperationException("Este turno ya finalizo sin un cierre de caja; consulta al administrador.");
+            throw new SaborExpress.Shared.Exceptions.ConflictException("Este turno ya finalizo sin un cierre de caja; consulta al administrador.");
         var payments = await LoadPaymentsAsync(shift, DateTime.UtcNow);
         return new CashClosurePreviewDto
         {
@@ -113,17 +113,17 @@ public sealed class CashClosureService
         await _db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT pg_advisory_xact_lock({shift.BranchId}, {shift.ShiftDate.DayNumber})");
         if (await _db.CashClosures.AnyAsync(c => c.BranchId == shift.BranchId && c.ShiftDate == shift.ShiftDate && c.ReopenedAtUtc == null))
-            throw new InvalidOperationException("Esta sede ya tiene un cierre de caja para hoy.");
+            throw new SaborExpress.Shared.Exceptions.ConflictException("Esta sede ya tiene un cierre de caja para hoy.");
         // Bloqueo PostgreSQL por turno: dos solicitudes concurrentes no pueden
         // registrar cierres duplicados. La BD refuerza con indice UNIQUE.
         var lockedShift = (await _db.EmployeeSchedules
-            .FromSqlInterpolated($"SELECT * FROM \"EmployeeSchedules\" WHERE \"Id\" = {shift.Id} FOR UPDATE")
+            .FromSqlInterpolated($"SELECT * FROM employee_schedules WHERE id = {shift.Id} FOR UPDATE")
             .AsNoTracking()
             .ToListAsync()).Single();
         if (await _db.CashClosures.AnyAsync(c => c.ScheduleId == shift.Id && c.ReopenedAtUtc == null))
-            throw new InvalidOperationException("Este turno ya tiene un cierre de caja registrado.");
+            throw new SaborExpress.Shared.Exceptions.ConflictException("Este turno ya tiene un cierre de caja registrado.");
         if (lockedShift.Status != ScheduleStatus.Programado)
-            throw new InvalidOperationException("El turno ya fue finalizado; no se puede cerrar de nuevo.");
+            throw new SaborExpress.Shared.Exceptions.ConflictException("El turno ya fue finalizado; no se puede cerrar de nuevo.");
 
         var closedAtUtc = DateTime.UtcNow;
         // Un QR del propio cajero pendiente puede acreditarse DESPUES del cierre.
@@ -134,7 +134,7 @@ public sealed class CashClosureService
             p.PaidAt >= startUtc && p.PaidAt <= closedAtUtc &&
             p.Method == PaymentMethod.Wompi && p.Status == PaymentStatus.Pending);
         if (hasPendingWompi)
-            throw new InvalidOperationException("Hay cobros Wompi por QR pendientes. Confirma o resuelve esos pagos antes de cerrar la caja.");
+            throw new SaborExpress.Shared.Exceptions.ConflictException("Hay cobros Wompi por QR pendientes. Confirma o resuelve esos pagos antes de cerrar la caja.");
         var payments = await LoadPaymentsAsync(shift, closedAtUtc);
         var cashExpected = SumMethod(payments, nameof(PaymentMethod.Cash));
         var closure = new CashClosure
@@ -213,12 +213,12 @@ public sealed class CashClosureService
             var administratorBranch = await _db.Employees.AsNoTracking()
                 .Where(e => e.UserId == actorUserId).Select(e => e.BranchId).FirstOrDefaultAsync();
             if (administratorBranch is null || administratorBranch.Value != target.BranchId)
-                throw new UnauthorizedAccessException("Solo puedes reabrir la caja de tu sede.");
+                throw new SaborExpress.Shared.Exceptions.ForbiddenException("Solo puedes reabrir la caja de tu sede.");
         }
 
         var today = DateOnly.FromDateTime(ColombiaTime.Now);
         if (target.ShiftDate != today)
-            throw new InvalidOperationException("Solamente se puede reabrir un cierre de la jornada actual.");
+            throw new SaborExpress.Shared.Exceptions.ConflictException("Solamente se puede reabrir un cierre de la jornada actual.");
 
         // Mismo candado usado por CloseAsync: impide carreras entre cerrar y reabrir
         // incluso cuando existan varios servidores conectados a PostgreSQL.
@@ -226,13 +226,13 @@ public sealed class CashClosureService
             $"SELECT pg_advisory_xact_lock({target.BranchId}, {target.ShiftDate.DayNumber})");
         await _db.Entry(target).ReloadAsync();
         if (target.ReopenedAtUtc.HasValue)
-            throw new InvalidOperationException("Este cierre ya fue reabierto.");
+            throw new SaborExpress.Shared.Exceptions.ConflictException("Este cierre ya fue reabierto.");
 
         var otherClosure = await _db.CashClosures.AnyAsync(c => c.Id != target.Id
             && c.BranchId == target.BranchId && c.ShiftDate == target.ShiftDate
             && c.ReopenedAtUtc == null);
         if (otherClosure)
-            throw new InvalidOperationException("Existe otro cierre vigente para esta sede y jornada.");
+            throw new SaborExpress.Shared.Exceptions.ConflictException("Existe otro cierre vigente para esta sede y jornada.");
 
         var openedAtUtc = DateTime.UtcNow;
         target.ReopenedAtUtc = openedAtUtc;
@@ -286,7 +286,7 @@ public sealed class CashClosureService
             if (administratorBranchId is null)
                 throw new UnauthorizedAccessException("Administrador sin sede asignada.");
             if (branchId.HasValue && branchId.Value != administratorBranchId.Value)
-                throw new UnauthorizedAccessException("Solo puedes consultar cierres de tu sede.");
+                throw new SaborExpress.Shared.Exceptions.ForbiddenException("Solo puedes consultar cierres de tu sede.");
             branchId = administratorBranchId;
         }
         if (fromDate.HasValue && toDate.HasValue && fromDate > toDate)

@@ -68,7 +68,9 @@ public sealed class WebRequestRealtimeMiddleware
             && context.User.Identity?.IsAuthenticated == true
             && request.Path.StartsWithSegments("/api")
             && !request.Path.StartsWithSegments("/api/auth")
+            && !request.Path.StartsWithSegments("/api/v1/auth")
             && !request.Path.StartsWithSegments("/api/notifications")
+            && !request.Path.StartsWithSegments("/api/v1/notifications")
             && !request.Path.StartsWithSegments("/api/CashClosures");
     }
 
@@ -79,6 +81,8 @@ public sealed class WebRequestRealtimeMiddleware
             segments,
             segment => string.Equals(segment, "api", StringComparison.OrdinalIgnoreCase));
         var moduleIndex = apiIndex + 1;
+        if (moduleIndex < segments.Length && segments[moduleIndex].Equals("v1", StringComparison.OrdinalIgnoreCase))
+            moduleIndex++;
 
         if (moduleIndex < 0 || moduleIndex >= segments.Length)
             return "API";

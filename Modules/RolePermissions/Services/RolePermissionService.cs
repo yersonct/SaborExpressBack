@@ -33,7 +33,7 @@ namespace SaborExpress.Modules.RolePermissions.Services
             await _rolePermissionRepository.AddAsync(rolePermission);
 
             var created = await _rolePermissionRepository.GetAsync(dto.RoleId, dto.PermissionId)
-                ?? throw new InvalidOperationException("Error al crear la asignación de permiso.");
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("Error al crear la asignación de permiso.");
 
             return RolePermissionMapper.ToResponse(created);
         }

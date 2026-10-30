@@ -36,6 +36,8 @@ namespace SaborExpress.Data.Configurations
                 .HasColumnName("address")
                 .HasMaxLength(200);
 
+            builder.Property(x => x.PrivacyAcceptedAtUtc).HasColumnName("privacy_accepted_at_utc");
+            builder.Property(x => x.PrivacyPolicyVersion).HasColumnName("privacy_policy_version").HasMaxLength(30);
             builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
 
             builder.HasOne(x => x.User)

@@ -1,0 +1,43 @@
+name: Backend build and security
+on:
+  push:
+    branches: [main, develop, 'fix/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      DatabaseProvider: PostgreSQL
+      ConnectionStrings__PostgresConnection: Host=localhost;Database=ci_design;Username=ci
+      Database__ApplyMigrationsOnStartup: 'false'
+      Database__SeedOnStartup: 'false'
+      JwtSettings__SecretKey: ci-only-generated-key-not-valid-outside-tests-01234567890123456789
+      JwtSettings__Issuer: tests
+      JwtSettings__Audience: tests
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore SaborExpress.csproj
+      - run: dotnet build SaborExpress.csproj -c Release --no-restore
+      - name: Regression suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          for project in tests/*/*.csproj; do
+            dotnet test "$project" -c Release --logger trx --results-directory TestResults
+          done
+      - name: Export complete OpenAPI contract
+        run: dotnet run --project SaborExpress.csproj -c Release --no-build -- --export-openapi=artifacts/openapi.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: backend-validation
+          path: |
+            TestResults/**/*.trx
+            artifacts/openapi.json

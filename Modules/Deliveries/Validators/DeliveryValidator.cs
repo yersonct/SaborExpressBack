@@ -51,7 +51,7 @@ namespace SaborExpress.Modules.Deliveries.Validators
             // Si el pedido de tipo Delivery no tiene dirección, es un dato
             // corrupto/incompleto — no un error del repartidor.
             if (order.AddressId is null)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "Este pedido no tiene una dirección de entrega asociada. Contacta a soporte.");
         }
 

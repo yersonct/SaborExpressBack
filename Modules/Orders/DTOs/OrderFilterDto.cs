@@ -4,7 +4,7 @@ using SaborExpress.Modules.Orders.Enum;
 namespace SaborExpress.Modules.Orders.DTOs
 {
     // Filtros para GET /api/Orders (Gerente/Admin/Cajero)
-    public class OrderFilterDto
+    public class OrderFilterDto : SaborExpress.Shared.Responses.PageQuery
     {
         public int? BranchId { get; set; }
         public OrderStatus? Status { get; set; }

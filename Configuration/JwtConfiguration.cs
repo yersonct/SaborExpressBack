@@ -72,7 +72,9 @@ namespace SaborExpress.Configuration
                     var accessToken = context.Request.Query["access_token"];
 
                     var path = context.HttpContext.Request.Path;
-                    if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                    if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/notifications") &&
+                        string.IsNullOrEmpty(context.Request.Headers.Authorization) &&
+                        string.IsNullOrEmpty(context.Request.Cookies[AuthCookieNames.AccessToken]))
                     {
                         context.Token = accessToken;
                     }
@@ -133,17 +135,12 @@ namespace SaborExpress.Configuration
 
                     // El token puede venir del header normal (requests HTTP comunes)
                     // o del query string (conexión a SignalR).
-                    var rawToken = context.HttpContext.Request.Headers.Authorization
-                        .ToString()
-                        .Replace("Bearer ", string.Empty, StringComparison.OrdinalIgnoreCase);
-
-                    if (string.IsNullOrEmpty(rawToken))
-                        rawToken = context.HttpContext.Request.Query["access_token"].ToString();
-                    if (string.IsNullOrEmpty(rawToken) &&
-                        (string.Equals(context.HttpContext.Request.Headers[AuthCookieNames.WebClientHeader],
-                            AuthCookieNames.WebClientValue, StringComparison.Ordinal) ||
-                         context.HttpContext.Request.Path.StartsWithSegments("/hubs")))
-                        rawToken = context.HttpContext.Request.Cookies[AuthCookieNames.AccessToken] ?? string.Empty;
+                    var rawToken = context.SecurityToken switch
+                    {
+                        JwtSecurityToken jwt => jwt.RawData,
+                        Microsoft.IdentityModel.JsonWebTokens.JsonWebToken jwt => jwt.EncodedToken,
+                        _ => string.Empty
+                    };
 
                     var config = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
                     var singleSession = config.GetValue("Auth:SingleSession", true);

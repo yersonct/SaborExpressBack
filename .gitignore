@@ -10,3 +10,9 @@ Properties/launchSettings.json
 .vs/
 *.user
 
+
+.env*
+!.env.example
+.tools/
+wwwroot/uploads/
+.idea/

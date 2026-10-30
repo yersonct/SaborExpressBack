@@ -28,7 +28,7 @@ jobs:
     environment: staging
     steps:
       - name: Check out the selected staging workflow and history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -83,7 +83,7 @@ jobs:
         run: ./scripts/release/smoke-render-staging.ps1 -TestedCommit $env:TESTED_COMMIT -DeployId $env:RENDER_DEPLOY_ID
 
       - name: Preserve the tested Render deployment receipt
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: staging-render-verification
           path: release-results/render-staging-verification.json

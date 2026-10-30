@@ -75,7 +75,7 @@ namespace SaborExpress.Modules.Roles.Services
 
             var enUso = await _roleRepository.HasAssignedUsersAsync(id);
             if (enUso)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "No se puede eliminar este rol porque hay empleados asignados a él. " +
                     "Usa la opción de editar para desactivarlo (Status) en su lugar.");
 

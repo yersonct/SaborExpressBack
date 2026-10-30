@@ -8,7 +8,10 @@ namespace SaborExpress.Data.Configurations
     {
         public void Configure(EntityTypeBuilder<Payment> builder)
         {
-            builder.ToTable("payments");
+            builder.ToTable("payments", table =>
+            {
+                table.HasCheckConstraint("ck_payments_amount", "amount >= 0");
+            });
 
             builder.HasKey(x => x.Id);
 
@@ -43,7 +46,7 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.Amount)
                 .HasColumnName("amount")
-                .HasColumnType("decimal(10,2)")
+                .HasColumnType("decimal(14,2)")
                 .IsRequired();
 
             builder.Property(x => x.Status)

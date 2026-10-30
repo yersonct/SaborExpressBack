@@ -3,9 +3,8 @@ using SaborExpress.Modules.Orders.Interfaces;
 
 namespace SaborExpress.Controllers
 {
-    // Sin [Authorize] a propósito: esta ruta es pública, pensada para un monitor
-    // de cocina fijo sin login. La "seguridad" es el código de sede en la URL,
-    // que no es el Id real y solo tú lo conoces/compartes con cada sede.
+    // Enlace revocable por turno; solo expone datos operativos de pedidos activos.
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [ApiController]
     [Route("api/public/kitchen-board")]
     public class PublicKitchenController : ControllerBase

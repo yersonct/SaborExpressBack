@@ -81,7 +81,7 @@ namespace SaborExpress.Modules.Products.Services
 
             var hasOrders = await _repository.HasOrderItemsAsync(id);
             if (hasOrders)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "No se puede eliminar este producto porque tiene pedidos asociados. " +
                     "Usa Actualizar para desactivarlo en su lugar.");
 
@@ -92,7 +92,8 @@ namespace SaborExpress.Modules.Products.Services
 
         private async Task<string> SavePhotoAsync(IFormFile photo)
         {
-            var fileName = $"{Guid.NewGuid()}{Path.GetExtension(photo.FileName)}";
+            var extension = SaborExpress.Shared.Security.UploadFilePolicy.ImageExtension(photo);
+            var fileName = $"{Guid.NewGuid()}{extension}";
             var folderPath = Path.Combine("wwwroot", "uploads", "products");
             Directory.CreateDirectory(folderPath);
             var filePath = Path.Combine(folderPath, fileName);
@@ -121,7 +122,7 @@ namespace SaborExpress.Modules.Products.Services
             {
                 var canToggle = await _authorizationService.CanPerformActionAsync(currentEmployeeId, PermissionNames.ActivarDesactivarProducto);
                 if (!canToggle)
-                    throw new InvalidOperationException("No tienes permiso para activar/desactivar productos ahora mismo.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para activar/desactivar productos ahora mismo.");
             }
 
             product.Status = status;

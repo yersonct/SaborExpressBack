@@ -23,7 +23,7 @@ namespace SaborExpress.Data.Configurations
             builder.Property(x => x.ClosingTime).HasColumnName("closing_time").HasColumnType("time").IsRequired();
 
             builder.Property(x => x.TaxRate).HasColumnName("tax_rate").HasColumnType("decimal(5,2)").IsRequired();
-            builder.Property(x => x.DeliveryFee).HasColumnName("delivery_fee").HasColumnType("decimal(12,2)").IsRequired();
+            builder.Property(x => x.DeliveryFee).HasColumnName("delivery_fee").HasColumnType("decimal(14,2)").IsRequired();
             builder.Property(x => x.DeliveryRadiusKm).HasColumnName("delivery_radius_km").HasColumnType("decimal(5,2)").IsRequired();
             builder.Property(x => x.MaxActiveDeliveriesPerCourier)
                 .HasColumnName("max_active_deliveries_per_courier")

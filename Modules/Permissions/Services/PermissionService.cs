@@ -73,7 +73,7 @@ namespace SaborExpress.Modules.Permissions.Services
 
             var enUso = await _permissionRepository.HasAssignedRolesAsync(id);
             if (enUso)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     $"No se puede eliminar el permiso '{permission.Name}' porque está asignado a uno o más roles.");
 
             try
@@ -82,7 +82,7 @@ namespace SaborExpress.Modules.Permissions.Services
             }
             catch (DbUpdateException)
             {
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     $"No se puede eliminar el permiso '{permission.Name}' porque tiene registros asociados.");
             }
         }

@@ -86,11 +86,7 @@ namespace SaborExpress.Modules.Products.Validators
         {
             if (photo == null) return;
 
-            if (!AllowedPhotoTypes.Contains(photo.ContentType))
-                throw new ArgumentException("La foto debe ser JPG, PNG o WEBP");
-
-            if (photo.Length > MaxPhotoSizeBytes)
-                throw new ArgumentException("La foto no debe superar 5MB");
+            SaborExpress.Shared.Security.UploadFilePolicy.ImageExtension(photo);
         }
     }
 }

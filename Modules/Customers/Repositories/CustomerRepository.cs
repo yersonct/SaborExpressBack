@@ -25,8 +25,13 @@ namespace SaborExpress.Modules.Customers.Repositories
         public async Task<Customer?> GetByIdAsync(int id)
             => await _context.Customers.FirstOrDefaultAsync(c => c.Id == id);
 
-        public async Task<List<Customer>> GetAllAsync()
-            => await _context.Customers.ToListAsync();
+        public async Task<List<Customer>> GetAllAsync(int? page = null, int? pageSize = null)
+        {
+            IQueryable<Customer> query = _context.Customers.AsNoTracking().OrderBy(c => c.Id);
+            var pagination = new SaborExpress.Shared.Responses.PageQuery { Page = page, PageSize = pageSize };
+            if (pagination.IsRequested) query = query.Skip(pagination.Offset).Take(pagination.Limit);
+            return await query.ToListAsync();
+        }
 
         public async Task UpdateAsync(Customer customer)
         {

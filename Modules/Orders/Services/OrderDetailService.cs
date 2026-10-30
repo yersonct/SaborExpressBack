@@ -79,7 +79,7 @@ namespace SaborExpress.Modules.Orders.Services
                 .Sum(p => p.Amount);
 
             if (totalPaid >= order.Total)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "Este pedido ya fue pagado por completo. Crea un pedido nuevo para los productos adicionales.");
         }
 
@@ -134,7 +134,7 @@ namespace SaborExpress.Modules.Orders.Services
                 var ownerOrder = await _orderRepository.GetByIdAsync(orderId)
                     ?? throw new ArgumentException("El pedido no existe");
                 if (ownerOrder.CustomerId != customerId.Value)
-                    throw new InvalidOperationException("Este pedido no te pertenece.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido no te pertenece.");
             }
 
             await EnsureOrderNotFullyPaidAsync(orderId);
@@ -269,14 +269,14 @@ namespace SaborExpress.Modules.Orders.Services
         public async Task<List<OrderDetailResponseDto>> UpdateBatchStatusAsync(int orderId, int batchNumber, UpdateBatchStatusDto dto, int employeeId)
         {
             if (dto.Status == OrderDetailStatus.Delivered)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "La entrega al mesero se debe confirmar desde la acción de entrega del pedido.");
 
             var order = await _orderRepository.GetByIdAsync(orderId)
                 ?? throw new ArgumentException("El pedido no existe.");
 
             if (order.Channel == OrderChannel.App && order.Status == OrderStatus.Pending)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "El pedido del cliente está pendiente de confirmación en caja. Cocina podrá iniciarlo cuando quede confirmado.");
 
             var items = await _orderDetailRepository.GetByOrderAndBatchAsync(orderId, batchNumber);
@@ -528,7 +528,7 @@ namespace SaborExpress.Modules.Orders.Services
                                  detail.Status != OrderDetailStatus.Cancelled)
                 .ToList();
             if (liveDetails.Count == 1 && liveDetails[0].Id == orderDetail.Id)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "Para quitar el último producto debes cancelar el pedido completo.");
 
             var oldStatus = orderDetail.Status;
@@ -564,7 +564,7 @@ namespace SaborExpress.Modules.Orders.Services
 
             EnsureCanBeDelivered(orderDetail);
             if (orderDetail.Status != OrderDetailStatus.Ready)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "Solo puedes marcar como entregado un producto que cocina ya marc\u00f3 como listo.");
 
             var oldStatus = orderDetail.Status;
@@ -629,13 +629,13 @@ namespace SaborExpress.Modules.Orders.Services
         private static void EnsureCanBeDelivered(OrderDetail orderDetail)
         {
             if (orderDetail.Status == OrderDetailStatus.Voided)
-                throw new InvalidOperationException("No puedes entregar una línea que fue anulada.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No puedes entregar una línea que fue anulada.");
 
             if (orderDetail.Status == OrderDetailStatus.Cancelled)
-                throw new InvalidOperationException("No puedes entregar una línea que fue cancelada.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No puedes entregar una línea que fue cancelada.");
 
             if (orderDetail.Status == OrderDetailStatus.Delivered)
-                throw new InvalidOperationException("Esta línea ya fue marcada como entregada.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Esta línea ya fue marcada como entregada.");
         }
     }
 }

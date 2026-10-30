@@ -163,7 +163,7 @@ public async Task RevokeExpiredRolesAsync()
 
                 var hasOverlap = await HasOverlapAsync(dto.EmployeeId, dto.ShiftDate, dto.StartTime, dto.EndTime, excludeScheduleId: null);
                 if (hasOverlap)
-                    throw new InvalidOperationException("El empleado ya tiene un turno asignado que se cruza en ese horario.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("El empleado ya tiene un turno asignado que se cruza en ese horario.");
 
                 var entity = dto.ToModel();
                 var created = await _repository.AddAsync(entity);
@@ -175,7 +175,7 @@ public async Task RevokeExpiredRolesAsync()
                     await ForceRelogInIfTodayAsync(dto.EmployeeId, currentUserId, dto.ShiftDate);
 
                 var full = await _repository.GetByIdAsync(created.Id)
-                    ?? throw new InvalidOperationException("Error al crear el turno.");
+                    ?? throw new SaborExpress.Shared.Exceptions.ConflictException("Error al crear el turno.");
 
                 return ToResponseDto(full, currentUser);
             }
@@ -188,7 +188,7 @@ public async Task RevokeExpiredRolesAsync()
                 // Trasladar entre sedes es una decisión de nivel red, no de una sola sede:
                 // solo el Gerente puede hacerlo.
                 if (!currentUser.HasRole(RoleNames.Gerente))
-                    throw new InvalidOperationException("Solo el Gerente puede trasladar un empleado de sede.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("Solo el Gerente puede trasladar un empleado de sede.");
 
                 var employee = await _employeeRepository.GetByIdAsync(employeeId)
                     ?? throw new KeyNotFoundException("El empleado no existe.");
@@ -242,7 +242,7 @@ public async Task RevokeExpiredRolesAsync()
             var effectiveBranchId = dto.BranchId != 0 ? dto.BranchId : schedule.BranchId;
             if (!currentUser.HasRole(RoleNames.Gerente) &&
                 roleChanged && IsManagementRoleName(schedule.Role?.Name))
-                throw new InvalidOperationException("No tienes permiso para gestionar turnos.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para gestionar turnos.");
 
             await EnsureAdministratorDateIsAvailableAsync(
                 requestedRole.Name, effectiveBranchId, dto.ShiftDate, schedule.EmployeeId, id);
@@ -255,7 +255,7 @@ public async Task RevokeExpiredRolesAsync()
 
             var hasOverlap = await HasOverlapAsync(schedule.EmployeeId, dto.ShiftDate, dto.StartTime, dto.EndTime, excludeScheduleId: id);
             if (hasOverlap)
-                throw new InvalidOperationException("El empleado ya tiene un turno asignado que se cruza en ese horario.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("El empleado ya tiene un turno asignado que se cruza en ese horario.");
 
             // Si el rol cambia con esta edición, el rol ANTERIOR podría quedar
             // huérfano: si ningún otro turno restante lo justifica, hay que
@@ -334,7 +334,7 @@ public async Task RevokeExpiredRolesAsync()
                 EnsureCanModifySchedule(currentUser, schedule);
                 if (!currentUser.HasRole(RoleNames.Gerente) &&
                     IsManagementRoleName(schedule.Role?.Name))
-                    throw new InvalidOperationException("No tienes permiso para gestionar turnos.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para gestionar turnos.");
 
                 var employeeId = schedule.EmployeeId;
                 var roleId = schedule.RoleId;
@@ -459,7 +459,7 @@ var shiftDate = schedule.ShiftDate;
             {
                 var settings = await _settingsRepository.GetByBranchIdAsync(branchId);
                 if (settings is null)
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "La sede no tiene hora de apertura y cierre configuradas. " +
                         "Configúralas en Configuración > Ajustes del Restaurante antes de crear turnos.");
 
@@ -488,10 +488,10 @@ var shiftDate = schedule.ShiftDate;
 
                 var esAdministrador = currentUser.HasRole(RoleNames.Administrador);
                 if (!esAdministrador)
-                    throw new InvalidOperationException("No tienes permiso para gestionar turnos.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para gestionar turnos.");
 
                 if (currentUser.Employee?.BranchId == null || targetBranchId != currentUser.Employee.BranchId)
-                    throw new InvalidOperationException("Solo puedes gestionar turnos de tu misma sede.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("Solo puedes gestionar turnos de tu misma sede.");
             }
 
             private async Task EnsureAdministratorDateIsAvailableAsync(
@@ -500,12 +500,12 @@ var shiftDate = schedule.ShiftDate;
                 if (roleName != RoleNames.Administrador) return;
 
                 if (await _repository.HasAdministratorScheduleConflictAsync(branchId, date, excludeScheduleId))
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "Esta sede ya tiene un Administrador programado para esa fecha.");
 
                 var employee = await _employeeRepository.GetByIdAsync(employeeId);
                 if (await _repository.HasPermanentAdministratorConflictAsync(branchId, employee?.UserId))
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "Esta sede ya tiene un Administrador permanente asignado.");
             }
 
@@ -516,13 +516,13 @@ var shiftDate = schedule.ShiftDate;
                 int branchId)
             {
                 if (employee.User == null)
-                    throw new InvalidOperationException("El empleado no tiene una cuenta de usuario asociada.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("El empleado no tiene una cuenta de usuario asociada.");
 
                 var role = await _roleRepository.GetByIdAsync(roleId)
                     ?? throw new ArgumentException("El rol especificado no existe.");
 
                 if (!currentUser.HasRole(RoleNames.Gerente) && IsManagementRoleName(role.Name))
-                    throw new InvalidOperationException("No tienes permiso para asignar roles.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para asignar roles.");
 
                 var tieneEseRol = employee.User.UserRoles.Any(ur => ur.RoleId == roleId);
                 if (tieneEseRol)
@@ -530,7 +530,7 @@ var shiftDate = schedule.ShiftDate;
 
                 var tieneCv = employee.CvFile != null && employee.CvFile.Length > 0;
                 if (role.RequiresCv && !tieneCv)
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         $"El rol {role.Name} requiere hoja de vida (CV). Sube el CV del empleado antes de asignarle este turno.");
 
                 // Primer turno con este rol: el turno y el rol nacen juntos.
@@ -562,7 +562,7 @@ var shiftDate = schedule.ShiftDate;
             {
                 if (IsOwnShiftLockedForManager(currentUser, schedule))
                 {
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "No puedes editar ni eliminar tus propios turnos como Gerente o Administrador.");
                 }
             }
@@ -604,7 +604,7 @@ var shiftDate = schedule.ShiftDate;
                 }
 
                 var fullSchedule = await _repository.GetByIdAsync(activeSchedule.Id)
-                    ?? throw new InvalidOperationException("Error al obtener el turno activo.");
+                    ?? throw new SaborExpress.Shared.Exceptions.ConflictException("Error al obtener el turno activo.");
 
                 return new CurrentShiftResponseDto
                 {

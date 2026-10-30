@@ -34,7 +34,7 @@ namespace SaborExpress.Modules.Reviews.Validators
         public void ValidateUpdate(Review review, UpdateReviewDto dto, int customerId)
         {
             if (review.CustomerId != customerId)
-                throw new UnauthorizedAccessException("Solo puedes editar tu propia reseña");
+                throw new SaborExpress.Shared.Exceptions.ForbiddenException("Solo puedes editar tu propia reseña");
 
             if (dto.Rating < 1 || dto.Rating > 5)
                 throw new ArgumentException("La calificación debe estar entre 1 y 5");
@@ -59,10 +59,10 @@ namespace SaborExpress.Modules.Reviews.Validators
                 if (adminBranchId.HasValue && adminBranchId.Value == review.Order.BranchId)
                     return;
 
-                throw new UnauthorizedAccessException("Solo puedes borrar reseñas de tu propia sede");
+                throw new SaborExpress.Shared.Exceptions.ForbiddenException("Solo puedes borrar reseñas de tu propia sede");
             }
 
-            throw new UnauthorizedAccessException("No tienes permiso para borrar esta reseña");
+            throw new SaborExpress.Shared.Exceptions.ForbiddenException("No tienes permiso para borrar esta reseña");
         }
     }
 }

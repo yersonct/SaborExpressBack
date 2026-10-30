@@ -88,6 +88,7 @@ namespace SaborExpress.Controllers
                 filter.BranchId = branchId;
             }
 
+            if (User.IsInRole(RoleNames.Mesero)) filter.EmployeeId = actor.Employee?.Id;
             var result = await _orderService.GetAllAsync(filter, actor.Id);
             // No ampliar la visibilidad del MESERO si tiene otros roles historicos asignados.
             if (User.IsInRole(RoleNames.Mesero))

@@ -49,7 +49,7 @@ namespace SaborExpress.Modules.UserPreferences.Services
             }
             catch (DbUpdateException)
             {
-                throw new InvalidOperationException("No se pudo guardar la configuración. Intenta de nuevo.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No se pudo guardar la configuración. Intenta de nuevo.");
             }
 
             return UserSettingsMapper.ToResponse(settings);

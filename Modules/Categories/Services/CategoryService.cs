@@ -80,7 +80,7 @@ namespace SaborExpress.Modules.Categories.Services
             }
             catch (DbUpdateException)
             {
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "No se puede eliminar esta categoría porque tiene productos asociados (incluso inactivos). " +
                     "Usa la opción de editar para desactivarla (Status) en su lugar.");
             }

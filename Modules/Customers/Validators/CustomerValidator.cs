@@ -22,6 +22,9 @@ namespace SaborExpress.Modules.Customers.Validators
 
         public async Task ValidateAsync(RegisterCustomerDto dto)
         {
+            if (!dto.AcceptedPrivacyPolicy || dto.PrivacyPolicyVersion != SaborExpress.Shared.Constants.PrivacyPolicy.CurrentVersion)
+                throw new ArgumentException("Debes aceptar la política de tratamiento de datos vigente.");
+
             if (string.IsNullOrWhiteSpace(dto.Name) || dto.Name.Any(char.IsDigit))
                 throw new ArgumentException("El nombre no puede estar vacío ni contener números.");
 

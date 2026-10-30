@@ -105,10 +105,10 @@ _realtime = realtime;
             }
 
             var currentEmployeeId = currentUser.Employee?.Id
-                ?? throw new InvalidOperationException("El usuario actual no tiene un perfil de empleado asociado.");
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("El usuario actual no tiene un perfil de empleado asociado.");
 
             if (!await _authorizationService.CanPerformActionAsync(currentEmployeeId, PermissionNames.CrearEmpleado))
-                throw new InvalidOperationException("No tienes permiso para crear empleados ahora mismo.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para crear empleados ahora mismo.");
 
             await _employeeValidator.ValidateCreateAsync(dto);
 
@@ -156,7 +156,7 @@ _realtime = realtime;
             EnsureSameBranch(currentUser, employee);
 
             if (!EsGerente(currentUser) && employee.BranchId != dto.BranchId)
-                throw new InvalidOperationException("Solo el Gerente puede cambiar la sede de un empleado.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Solo el Gerente puede cambiar la sede de un empleado.");
 
             var hasExistingCv = employee.CvFile != null && employee.CvFile.Length > 0;   // 👈 nuevo
             await _employeeValidator.ValidateUpdateAsync(dto, employee.UserId, hasExistingCv);   // 👈 se agrega el parámetro
@@ -209,10 +209,10 @@ _realtime = realtime;
                 ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
 
             var currentEmployeeId = currentUser.Employee?.Id
-                ?? throw new InvalidOperationException("El usuario actual no tiene un perfil de empleado asociado.");
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("El usuario actual no tiene un perfil de empleado asociado.");
 
             if (!await _authorizationService.CanPerformActionAsync(currentEmployeeId, PermissionNames.EliminarEmpleado))
-                throw new InvalidOperationException("No tienes permiso para eliminar empleados ahora mismo.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para eliminar empleados ahora mismo.");
 
             var employee = await _employeeRepository.GetByIdAsync(id)
                 ?? throw new KeyNotFoundException("El empleado no existe");
@@ -240,7 +240,7 @@ _realtime = realtime;
             var canDeleteEmployees = EsGerente(currentUser)
                 || currentUser.UserRoles.Any(ur => ur.Role.Name == RoleNames.Administrador);
             if (!canDeleteEmployees)
-                throw new InvalidOperationException("Solo un gerente o administrador puede eliminar empleados.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Solo un gerente o administrador puede eliminar empleados.");
 
             await using var transaction = await _context.Database.BeginTransactionAsync(
                 System.Data.IsolationLevel.Serializable);
@@ -251,24 +251,24 @@ _realtime = realtime;
             EnsureSameBranch(currentUser, employee);
 
             if (employee.UserId == currentUserId)
-                throw new InvalidOperationException("No puedes eliminar tu propia cuenta.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No puedes eliminar tu propia cuenta.");
 
             if (await _context.Customers.AnyAsync(c => c.UserId == employee.UserId))
-                throw new InvalidOperationException("Esta cuenta también está registrada como cliente. Suspéndela para conservar sus datos de cliente.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Esta cuenta también está registrada como cliente. Suspéndela para conservar sus datos de cliente.");
 
             var deliveries = await _context.Deliveries
                 .Where(d => d.DeliveryPersonId == id)
                 .ToListAsync();
             if (deliveries.Any(d =>
                     d.Status == DeliveryStatus.Assigned || d.Status == DeliveryStatus.InTransit))
-                throw new InvalidOperationException("Reasigna o finaliza las entregas activas antes de eliminar al empleado.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Reasigna o finaliza las entregas activas antes de eliminar al empleado.");
 
             var orders = await _context.Orders
                 .Where(o => o.EmployeeId == id)
                 .ToListAsync();
             if (orders.Any(o =>
                     o.Status != OrderStatus.Delivered && o.Status != OrderStatus.Cancelled))
-                throw new InvalidOperationException("Finaliza o reasigna los pedidos activos antes de eliminar al empleado.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Finaliza o reasigna los pedidos activos antes de eliminar al empleado.");
 
             var schedules = await _context.EmployeeSchedules
                 .Where(s => s.EmployeeId == id)
@@ -565,9 +565,10 @@ _realtime = realtime;
 
         private static async Task UpdateCvAsync(Employee employee, IFormFile cv)
         {
+            SaborExpress.Shared.Security.UploadFilePolicy.ValidatePdf(cv);
             employee.CvFile = await FileHelper.ToByteArrayAsync(cv);
-            employee.CvFilename = cv.FileName;
-            employee.CvContentType = cv.ContentType;
+            employee.CvFilename = $"cv-{employee.Id}.pdf";
+            employee.CvContentType = "application/pdf";
         }
     }
 }

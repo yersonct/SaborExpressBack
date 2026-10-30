@@ -57,7 +57,7 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.BasePay)
                 .HasColumnName("base_pay")
-                .HasColumnType("decimal(10,2)")
+                .HasColumnType("decimal(14,2)")
                 .HasDefaultValue(0);
 
 

@@ -2,6 +2,8 @@ namespace SaborExpress.Modules.Customers.DTOs
 {
     public class RegisterCustomerDto
     {
+        public bool AcceptedPrivacyPolicy { get; set; }
+        public string? PrivacyPolicyVersion { get; set; }
         public string Email { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;

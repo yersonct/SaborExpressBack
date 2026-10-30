@@ -69,12 +69,24 @@ namespace SaborExpress.Data
         public DbSet<Notification> Notifications  => Set<Notification>();
         public DbSet<PushDevice> PushDevices => Set<PushDevice>();
         
+        private static string SnakeCase(string value) =>
+            System.Text.RegularExpressions.Regex.Replace(value, "([a-z0-9])([A-Z])", "$1_$2").ToLowerInvariant();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
             // Aplica autom�ticamente todas las configuraciones
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+            foreach (var entity in modelBuilder.Model.GetEntityTypes())
+            {
+                var tableName = entity.GetTableName();
+                if (tableName is null || !char.IsUpper(tableName[0])) continue;
+                entity.SetTableName(SnakeCase(tableName));
+                foreach (var property in entity.GetProperties())
+                    property.SetColumnName(SnakeCase(property.Name));
+            }
+
         }
     }
 

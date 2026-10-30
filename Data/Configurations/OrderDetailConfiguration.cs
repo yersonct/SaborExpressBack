@@ -9,7 +9,11 @@ namespace SaborExpress.Data.Configurations
     {
         public void Configure(EntityTypeBuilder<OrderDetail> builder)
         {
-            builder.ToTable("order_details");
+            builder.ToTable("order_details", table =>
+            {
+                table.HasCheckConstraint("ck_order_details_quantity", "quantity > 0");
+                table.HasCheckConstraint("ck_order_details_money", "unit_price >= 0 AND sub_total >= 0");
+            });
 
             builder.HasKey(x => x.Id);
 
@@ -51,12 +55,12 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.UnitPrice)
                 .HasColumnName("unit_price")
-                .HasColumnType("decimal(10,2)")
+                .HasColumnType("decimal(14,2)")
                 .IsRequired();
 
             builder.Property(x => x.SubTotal)
                 .HasColumnName("sub_total")
-                .HasColumnType("decimal(10,2)")
+                .HasColumnType("decimal(14,2)")
                 .IsRequired();
 
             builder.Property(x => x.Notes)

@@ -50,8 +50,22 @@ builder.Services.AddScoped<ApiMessageLocalizationFilter>();
 
 builder.Services.AddControllers(options =>
 {
+    options.Conventions.Add(new ApiVersionConvention());
+    options.Filters.Add<ApiPaginationFilter>();
     options.Filters.AddService<ApiExceptionFilter>();
     options.Filters.AddService<ApiMessageLocalizationFilter>();
+})
+.ConfigureApiBehaviorOptions(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var message = string.Join(" ", context.ModelState.Values.SelectMany(value => value.Errors)
+            .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage) ? "Datos de solicitud inválidos." : error.ErrorMessage));
+        var localizer = context.HttpContext.RequestServices.GetRequiredService<IApiMessageLocalizer>();
+        return new Microsoft.AspNetCore.Mvc.BadRequestObjectResult(new SaborExpress.Shared.Responses.ApiError(
+            "VALIDATION_ERROR", localizer.LocalizeError(message, context.HttpContext.Request.Headers.AcceptLanguage.ToString()),
+            context.HttpContext.TraceIdentifier));
+    };
 })
 .AddJsonOptions(options =>
 {
@@ -66,6 +80,7 @@ builder.Services.AddJwtConfiguration(builder.Configuration);
 builder.Services.AddScoped<IAuthorizationHandler, ActiveShiftHandler>();
 builder.Services.AddAuthorization(options =>
 {
+    options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
     options.AddPolicy("ActiveShift", policy =>
         policy.Requirements.Add(new ActiveShiftRequirement()));
 });
@@ -99,6 +114,18 @@ builder.Services.AddHostedService<RoleExpirationBackgroundService>();
 builder.Services.AddHostedService<WompiPendingPaymentsSyncService>();
 
 var app = builder.Build();
+
+var exportArgument = args.FirstOrDefault(arg => arg.StartsWith("--export-openapi=", StringComparison.Ordinal));
+if (exportArgument is not null)
+{
+    var output = Path.GetFullPath(exportArgument["--export-openapi=".Length..]);
+    Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+    var document = app.Services.GetRequiredService<Swashbuckle.AspNetCore.Swagger.ISwaggerProvider>().GetSwagger("v1");
+    using var stream = File.CreateText(output);
+    document.SerializeAsV3(new Microsoft.OpenApi.Writers.OpenApiJsonWriter(stream));
+    Console.WriteLine("OpenAPI exportado correctamente.");
+    return;
+}
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 app.MapGet("/health/ready", async (AppDbContext context, CancellationToken cancellationToken) =>
@@ -134,13 +161,43 @@ app.MapGet("/health/ready", async (AppDbContext context, CancellationToken cance
     }
 }).AllowAnonymous();
 
-await app.MigrarYSembrarBaseDeDatosAsync();
+if (app.Configuration.GetValue("Database:ApplyMigrationsOnStartup", false))
+{
+    if (!app.Environment.IsDevelopment() &&
+        !app.Configuration.GetValue("Database:BackupConfirmed", false))
+        throw new InvalidOperationException("Confirma Database:BackupConfirmed antes de migrar fuera de desarrollo.");
+    await app.MigrarYSembrarBaseDeDatosAsync();
+}
 
+app.UseSwagger();
 if (app.Environment.IsDevelopment())
-    app.UseSwaggerConfiguration();
+    app.UseSwaggerUI(options => options.SwaggerEndpoint("/swagger/v1/swagger.json", "SaborExpress API v1"));
+app.UseStatusCodePages(async status =>
+{
+    var response = status.HttpContext.Response;
+    var localizer = status.HttpContext.RequestServices.GetRequiredService<IApiMessageLocalizer>();
+    var code = response.StatusCode switch
+    {
+        401 => "UNAUTHORIZED", 403 => "FORBIDDEN", 404 => "NOT_FOUND",
+        429 => "RATE_LIMITED", _ => "HTTP_ERROR"
+    };
+    var message = response.StatusCode switch
+    {
+        401 => "No se pudo identificar al usuario autenticado.",
+        403 => "No tienes permiso para realizar esta acción.",
+        404 => "El recurso solicitado no existe.",
+        _ => "No se pudo completar la solicitud."
+    };
+    await response.WriteAsJsonAsync(new SaborExpress.Shared.Responses.ApiError(code,
+        localizer.LocalizeError(message, status.HttpContext.Request.Headers.AcceptLanguage.ToString()),
+        status.HttpContext.TraceIdentifier));
+});
 app.UseRouting();
 app.UseMiddleware<ApiLatencyMetricsMiddleware>();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = context => context.Context.Response.Headers["X-Content-Type-Options"] = "nosniff"
+});
 app.UseCors("AllowAll");
 
 app.UseAuthentication();
@@ -149,11 +206,11 @@ app.UseMiddleware<WebRequestRealtimeMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications"); // ← NUEVO
-app.MapHub<PublicMenuHub>("/hubs/public-menu");
+app.MapHub<PublicMenuHub>("/hubs/public-menu").AllowAnonymous();
 
 app.MapGet("/metrics", (ApiMetricsRegistry metrics) =>
         Results.Text(metrics.RenderPrometheus(), "text/plain; version=0.0.4; charset=utf-8"))
-    .AllowAnonymous();
+    .RequireAuthorization(policy => policy.RequireRole(SaborExpress.Shared.Constants.RoleNames.Gerente));
 
 app.Run();
 
@@ -167,8 +224,13 @@ static class ProgramExtensions
         var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
 
         await context.Database.MigrateAsync();
-        await PermissionSeeder.SeedAsync(context);
-        await ClienteRoleSeeder.SeedAsync(context);  
-        await InitialManagerSeeder.SeedAsync(context, configuration);
+        if (configuration.GetValue("Database:SeedOnStartup", false))
+        {
+            await PermissionSeeder.SeedAsync(context);
+            await ClienteRoleSeeder.SeedAsync(context);
+            await InitialManagerSeeder.SeedAsync(context, configuration);
+        }
     }
 }
+
+public partial class Program { }
