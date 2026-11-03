@@ -385,6 +385,52 @@ public sealed class SecurityRegressionTests
     }
 
     [Fact]
+    public async Task WaiterWithoutEffectiveTablePermissionCannotChangeTableStatus()
+    {
+        var tableService = new Mock<SaborExpress.Modules.Tables.Interfaces.ITableService>();
+        var authorization = new Mock<SaborExpress.Shared.Interfaces.IAuthorizationService>();
+        authorization.Setup(service => service.CanPerformActionAsync(12, PermissionNames.CambiarEstadoMesa))
+            .ReturnsAsync(false);
+        var controller = new TablesController(tableService.Object, authorization.Object);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = Principal(RoleNames.Mesero, 7, 12) }
+        };
+
+        var result = await controller.UpdateStatus(
+            33, new SaborExpress.Modules.Tables.DTOs.UpdateTableStatusDto());
+
+        Assert.IsType<ForbidResult>(result);
+        authorization.Verify(service => service.CanPerformActionAsync(
+            12, PermissionNames.CambiarEstadoMesa), Times.Once);
+        tableService.Verify(service => service.UpdateStatusAsync(
+            It.IsAny<int>(), It.IsAny<SaborExpress.Modules.Tables.DTOs.UpdateTableStatusDto>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CashierCannotUseAdministrativeTableReleaseWithoutEffectiveAdminRole()
+    {
+        var tableService = new Mock<SaborExpress.Modules.Tables.Interfaces.ITableService>();
+        var controller = new TablesController(
+            tableService.Object, Mock.Of<SaborExpress.Shared.Interfaces.IAuthorizationService>());
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = Principal(RoleNames.Cajero, 7, 12) }
+        };
+
+        var result = await controller.ReleasePrevious(
+            33, new SaborExpress.Modules.Tables.DTOs.ReleasePreviousTableDto
+            {
+                Administrative = true,
+                Reason = "Regularización administrativa solicitada"
+            });
+
+        Assert.IsType<ForbidResult>(result);
+        tableService.Verify(service => service.ReleasePreviousDayAsync(
+            It.IsAny<int>(), It.IsAny<SaborExpress.Modules.Tables.DTOs.ReleasePreviousTableDto>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
     public void ExpiredJwtIsRejectedWithoutClockSkew()
     {
         var testJwtSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
