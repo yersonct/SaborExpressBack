@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using SaborExpress.Modules.Tables.DTOs;
 using SaborExpress.Modules.Tables.Interfaces;
 using SaborExpress.Shared.Constants;
+using PermissionAuthorizationService = SaborExpress.Shared.Interfaces.IAuthorizationService;
 
 namespace SaborExpress.Controllers
 {
@@ -14,10 +15,12 @@ namespace SaborExpress.Controllers
     public class TablesController : ControllerBase
     {
         private readonly ITableService _tableService;
+        private readonly PermissionAuthorizationService _authorizationService;
 
-        public TablesController(ITableService tableService)
+        public TablesController(ITableService tableService, PermissionAuthorizationService authorizationService)
         {
             _tableService = tableService;
+            _authorizationService = authorizationService;
         }
 
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador},{RoleNames.Mesero},{RoleNames.Cajero},{RoleNames.Cocinero},{RoleNames.AuxiliarCocina}")]
@@ -58,6 +61,17 @@ namespace SaborExpress.Controllers
         [HttpPatch("{id:int}/status")]
         public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateTableStatusDto dto)
         {
+            if (User.IsInRole(RoleNames.Mesero)
+                && !User.IsInRole(RoleNames.Gerente)
+                && !User.IsInRole(RoleNames.Administrador)
+                && !User.IsInRole(RoleNames.Cajero))
+            {
+                var employeeIdValue = User.FindFirst("EmployeeId")?.Value;
+                if (!int.TryParse(employeeIdValue, out var employeeId) ||
+                    !await _authorizationService.CanPerformActionAsync(employeeId, PermissionNames.CambiarEstadoMesa))
+                    return Forbid();
+            }
+
             var currentUserId = GetCurrentUserId();
             var result = await _tableService.UpdateStatusAsync(id, dto, currentUserId);
             return Ok(result);
@@ -77,7 +91,14 @@ namespace SaborExpress.Controllers
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador},{RoleNames.Cajero}")]
         [HttpPost("{id:int}/release-previous")]
         public async Task<IActionResult> ReleasePrevious(int id, [FromBody] ReleasePreviousTableDto dto)
-            => Ok(await _tableService.ReleasePreviousDayAsync(id, dto, GetCurrentUserId()));
+        {
+            if (dto.Administrative &&
+                !User.IsInRole(RoleNames.Gerente) &&
+                !User.IsInRole(RoleNames.Administrador))
+                return Forbid();
+
+            return Ok(await _tableService.ReleasePreviousDayAsync(id, dto, GetCurrentUserId()));
+        }
 
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador}")]
         [HttpDelete("{id:int}")]

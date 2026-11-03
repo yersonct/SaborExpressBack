@@ -32,6 +32,7 @@ using SaborExpress.Modules.UsersRoles.Models;
 using SaborExpress.Shared.Constants;
 using SaborExpress.Shared.Filters;
 using SaborExpress.Shared.Interfaces;
+using SaborExpress.Shared.Responses;
 using Xunit;
 
 namespace SaborExpressBack.Security.Tests;
@@ -82,7 +83,11 @@ public sealed class HttpAuthenticationTests
         Assert.True(denied.StatusCode == HttpStatusCode.Forbidden, await denied.Content.ReadAsStringAsync());
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", fixture.TokenFor(fixture.Admin));
         var crossBranch = await client.GetAsync("/api/Employees/50/cv");
-        Assert.True(crossBranch.StatusCode == HttpStatusCode.Forbidden, await crossBranch.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Forbidden, crossBranch.StatusCode);
+        var crossBranchError = await crossBranch.Content.ReadFromJsonAsync<ApiError>();
+        Assert.NotNull(crossBranchError);
+        Assert.Equal("FORBIDDEN", crossBranchError.Code);
+        Assert.False(string.IsNullOrWhiteSpace(crossBranchError.TraceId));
     }
 
     [Fact]
@@ -126,6 +131,34 @@ public sealed class HttpAuthenticationTests
             5, 9, It.IsAny<ClaimsPrincipal>()), Times.Once);
     }
 
+    [Fact]
+    public async Task CvDownloadUsesStandardErrorContractAndPreservesValidFileResponseOverHttp()
+    {
+        using var fixture = new ApiFixture();
+        using var client = fixture.Server.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", fixture.TokenForRole(RoleNames.Gerente));
+
+        var missing = await client.GetAsync("/api/Employees/51/cv");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        var error = await missing.Content.ReadFromJsonAsync<ApiError>();
+        Assert.NotNull(error);
+        Assert.Equal("NOT_FOUND", error.Code);
+        Assert.Equal("Este empleado no tiene CV cargado", error.Message);
+        Assert.False(string.IsNullOrWhiteSpace(error.TraceId));
+
+        var pdf = "%PDF-1.7\n%%EOF"u8.ToArray();
+        fixture.EmployeeService
+            .Setup(service => service.GetCvAsync(51, It.IsAny<int>()))
+            .ReturnsAsync((pdf, "hoja-de-vida.pdf", "application/pdf"));
+
+        var download = await client.GetAsync("/api/Employees/51/cv");
+        Assert.Equal(HttpStatusCode.OK, download.StatusCode);
+        Assert.Equal("application/pdf", download.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(pdf, await download.Content.ReadAsByteArrayAsync());
+        Assert.Contains("hoja-de-vida.pdf", download.Content.Headers.ContentDisposition?.FileName);
+    }
+
     private sealed class ApiFixture : IDisposable
     {
         public TestServer Server { get; }
@@ -133,6 +166,7 @@ public sealed class HttpAuthenticationTests
         public User Customer { get; }
         public User Admin { get; }
         public Mock<IRolePermissionService> RolePermissions { get; } = new();
+        public Mock<IEmployeeService> EmployeeService { get; } = new();
         private readonly Mock<IEmployeeScheduleRepository> _schedules = new();
         private readonly JwtSettings _settings;
         public ApiFixture()
@@ -181,6 +215,10 @@ public sealed class HttpAuthenticationTests
                 }]);
             var employees = new Mock<IEmployeeRepository>();
             employees.Setup(r => r.GetByIdAsync(50)).ReturnsAsync(new Employee { Id = 50, BranchId = 2, CvFile = "%PDF-1.7"u8.ToArray() });
+            EmployeeService.Setup(service => service.GetCvAsync(50, 102))
+                .ThrowsAsync(new SaborExpress.Shared.Exceptions.ForbiddenException("No puedes consultar el CV de otra sede."));
+            EmployeeService.Setup(service => service.GetCvAsync(51, 102))
+                .ReturnsAsync((ValueTuple<byte[], string, string>?)null);
             var customers = new Mock<ICustomerRepository>();
             customers.Setup(r => r.GetByUserIdAsync(101)).ReturnsAsync(Customer.Customer);
             RolePermissions.Setup(service => service.AssignAsync(
@@ -204,6 +242,9 @@ public sealed class HttpAuthenticationTests
                     services.AddDbContext<AppDbContext>(options => options.UseNpgsql("Host=localhost;Database=isolated_test;Username=test"));
                     services.AddDependencies();
                     services.AddSingleton<IConfiguration>(configuration);
+                    services.AddSingleton(EmployeeService.Object);
+                    services.AddSingleton<SaborExpress.Shared.Localization.IApiMessageLocalizer,
+                        SaborExpress.Shared.Localization.ApiMessageLocalizer>();
                     services.AddSingleton(auth.Object); services.AddSingleton(refresh.Object);
                     services.AddSingleton(_schedules.Object); services.AddSingleton(employees.Object); services.AddSingleton(customers.Object);
                     services.AddSingleton(Mock.Of<INotificationService>());
@@ -215,7 +256,7 @@ public sealed class HttpAuthenticationTests
                     services.AddSingleton(RolePermissions.Object);
                     services.AddJwtConfiguration(configuration);
                     services.AddAuthorization(options => options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
-                    services.AddControllers(options => { options.Conventions.Add(new ApiVersionConvention()); options.Filters.Add<ApiPaginationFilter>(); options.Filters.Add<ApiExceptionFilter>(); })
+                    services.AddControllers(options => { options.Conventions.Add(new ApiVersionConvention()); options.Filters.Add<ApiPaginationFilter>(); options.Filters.Add<ApiExceptionFilter>(); options.Filters.Add<ApiErrorResultFilter>(); })
                         .AddApplicationPart(typeof(AuthController).Assembly);
                 })
                 .Configure(app => { app.UseRouting(); app.UseAuthentication(); app.UseAuthorization(); app.UseEndpoints(endpoints => endpoints.MapControllers()); }));

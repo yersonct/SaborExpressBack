@@ -71,6 +71,17 @@ public sealed class OperationalAuthorizationTests
     }
 
     [Fact]
+    public void GlobalRoleAndPermissionWrites_AreLimitedToManager()
+    {
+        AssertRoleSet<RolesController>("Create", RoleNames.Gerente);
+        AssertRoleSet<RolesController>("Update", RoleNames.Gerente);
+        AssertRoleSet<RolesController>("Delete", RoleNames.Gerente);
+        AssertRoleSet<PermissionsController>("Create", RoleNames.Gerente);
+        AssertRoleSet<PermissionsController>("Update", RoleNames.Gerente);
+        AssertRoleSet<PermissionsController>("Delete", RoleNames.Gerente);
+    }
+
+    [Fact]
     public void DeliveryAssignmentAndProgress_UseExpectedRoles()
     {
         AssertRoleSet<DeliveriesController>("Create", RoleNames.Gerente, RoleNames.Administrador);

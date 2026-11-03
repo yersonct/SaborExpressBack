@@ -46,6 +46,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ApiMetricsRegistry>();
 builder.Services.AddSingleton<ApiRouteCatalog>();
 builder.Services.AddScoped<ApiExceptionFilter>();
+builder.Services.AddScoped<ApiErrorResultFilter>();
 builder.Services.AddScoped<ApiMessageLocalizationFilter>();
 
 builder.Services.AddControllers(options =>
@@ -53,6 +54,7 @@ builder.Services.AddControllers(options =>
     options.Conventions.Add(new ApiVersionConvention());
     options.Filters.Add<ApiPaginationFilter>();
     options.Filters.AddService<ApiExceptionFilter>();
+    options.Filters.AddService<ApiErrorResultFilter>();
     options.Filters.AddService<ApiMessageLocalizationFilter>();
 })
 .ConfigureApiBehaviorOptions(options =>
