@@ -22,6 +22,8 @@ using SaborExpress.Modules.EmployeeSchedules.Interfaces;
 using SaborExpress.Modules.Employees.Interfaces;
 using SaborExpress.Modules.Employees.Models;
 using SaborExpress.Modules.Notifications.Interfaces;
+using SaborExpress.Modules.RolePermissions.DTOs;
+using SaborExpress.Modules.RolePermissions.Interfaces;
 using SaborExpress.Modules.Roles.Models;
 using SaborExpress.Modules.UsersRoles.Models;
 using SaborExpress.Shared.Constants;
@@ -80,12 +82,54 @@ public sealed class HttpAuthenticationTests
         Assert.True(crossBranch.StatusCode == HttpStatusCode.Forbidden, await crossBranch.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task GlobalRolePermissionMutationsRequireManagerRole()
+    {
+        using var fixture = new ApiFixture();
+        using var client = fixture.Server.CreateClient();
+        var permission = new CreateRolePermissionDto { RoleId = 5, PermissionId = 9 };
+
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync("/api/role-permissions", permission)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.DeleteAsync("/api/role-permissions/5/9")).StatusCode);
+
+        foreach (var role in new[]
+        {
+            RoleNames.Administrador, RoleNames.Mesero, RoleNames.Cajero,
+            RoleNames.Cocinero, RoleNames.AuxiliarCocina,
+            RoleNames.Repartidor, RoleNames.Cliente
+        })
+        {
+            client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", fixture.TokenForRole(role));
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await client.PostAsJsonAsync("/api/role-permissions", permission)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await client.DeleteAsync("/api/role-permissions/5/9")).StatusCode);
+        }
+
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", fixture.TokenForRole(RoleNames.Gerente));
+        Assert.Equal(HttpStatusCode.Created,
+            (await client.PostAsJsonAsync("/api/role-permissions", permission)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await client.DeleteAsync("/api/role-permissions/5/9")).StatusCode);
+
+        fixture.RolePermissions.Verify(service => service.AssignAsync(
+            It.Is<CreateRolePermissionDto>(dto => dto.RoleId == 5 && dto.PermissionId == 9),
+            It.IsAny<ClaimsPrincipal>()), Times.Once);
+        fixture.RolePermissions.Verify(service => service.RemoveAsync(
+            5, 9, It.IsAny<ClaimsPrincipal>()), Times.Once);
+    }
+
     private sealed class ApiFixture : IDisposable
     {
         public TestServer Server { get; }
         public string Password { get; } = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
         public User Customer { get; }
         public User Admin { get; }
+        public Mock<IRolePermissionService> RolePermissions { get; } = new();
         private readonly JwtSettings _settings;
         public ApiFixture()
         {
@@ -124,6 +168,19 @@ public sealed class HttpAuthenticationTests
             employees.Setup(r => r.GetByIdAsync(50)).ReturnsAsync(new Employee { Id = 50, BranchId = 2, CvFile = "%PDF-1.7"u8.ToArray() });
             var customers = new Mock<ICustomerRepository>();
             customers.Setup(r => r.GetByUserIdAsync(101)).ReturnsAsync(Customer.Customer);
+            RolePermissions.Setup(service => service.AssignAsync(
+                    It.IsAny<CreateRolePermissionDto>(), It.IsAny<ClaimsPrincipal>()))
+                .ReturnsAsync(new RolePermissionResponseDto
+                {
+                    RoleId = 5,
+                    RoleName = "MESERO",
+                    PermissionId = 9,
+                    PermissionName = "VER_PEDIDOS",
+                    AssignedAt = DateTime.UtcNow
+                });
+            RolePermissions.Setup(service => service.RemoveAsync(
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<ClaimsPrincipal>()))
+                .Returns(Task.CompletedTask);
             Server = new TestServer(new WebHostBuilder().UseEnvironment("Development")
                 .ConfigureAppConfiguration((_, c) => c.AddConfiguration(configuration))
                 .ConfigureServices(services =>
@@ -140,6 +197,7 @@ public sealed class HttpAuthenticationTests
                     services.AddSingleton(Mock.Of<SaborExpress.Shared.Interfaces.IAuthorizationService>());
                     services.AddSingleton(Mock.Of<INotificationRepository>());
                     services.AddSingleton(Mock.Of<IRealtimeNotifier>());
+                    services.AddSingleton(RolePermissions.Object);
                     services.AddJwtConfiguration(configuration);
                     services.AddAuthorization(options => options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
                     services.AddControllers(options => { options.Conventions.Add(new ApiVersionConvention()); options.Filters.Add<ApiPaginationFilter>(); options.Filters.Add<ApiExceptionFilter>(); })
@@ -154,6 +212,13 @@ public sealed class HttpAuthenticationTests
             user.Token = token;
             return token;
         }
+        public string TokenForRole(string role) => TokenFor(new User
+        {
+            Id = Random.Shared.Next(1000, 100000),
+            Status = true,
+            Employee = new Employee { Id = Random.Shared.Next(1000, 100000), BranchId = 1 },
+            UserRoles = [new UserRole { Role = new Role { Name = role } }]
+        });
         public void Dispose() => Server.Dispose();
     }
 }
