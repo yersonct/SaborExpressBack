@@ -20,6 +20,8 @@ using SaborExpress.Modules.Auth.Models;
 using SaborExpress.Modules.Customers.Interfaces;
 using SaborExpress.Modules.Customers.Models;
 using SaborExpress.Modules.EmployeeSchedules.Interfaces;
+using SaborExpress.Modules.EmployeeSchedules.Enum;
+using SaborExpress.Modules.EmployeeSchedules.Models;
 using SaborExpress.Modules.Employees.Interfaces;
 using SaborExpress.Modules.Employees.Models;
 using SaborExpress.Modules.Notifications.Interfaces;
@@ -131,6 +133,7 @@ public sealed class HttpAuthenticationTests
         public User Customer { get; }
         public User Admin { get; }
         public Mock<IRolePermissionService> RolePermissions { get; } = new();
+        private readonly Mock<IEmployeeScheduleRepository> _schedules = new();
         private readonly JwtSettings _settings;
         public ApiFixture()
         {
@@ -163,8 +166,19 @@ public sealed class HttpAuthenticationTests
             refresh.Setup(r => r.GetActiveByTokenAsync(It.IsAny<string>())).ReturnsAsync((string token) => refreshTokens.TryGetValue(token, out var stored) && !stored.IsRevoked && stored.ExpiresAt > DateTime.UtcNow ? stored : null);
             refresh.Setup(r => r.RevokeAsync(It.IsAny<RefreshToken>())).Callback<RefreshToken>(token => token.IsRevoked = true).Returns(Task.CompletedTask);
             refresh.Setup(r => r.RevokeAllForUserAsync(It.IsAny<int>())).Callback<int>(id => { foreach (var token in refreshTokens.Values.Where(t => t.UserId == id)) token.IsRevoked = true; }).Returns(Task.CompletedTask);
-            var schedules = new Mock<IEmployeeScheduleRepository>();
-            schedules.Setup(r => r.CanActAsAdministratorAsync(102, It.IsAny<DateTime>())).ReturnsAsync(true);
+            _schedules.Setup(r => r.CanActAsAdministratorAsync(102, It.IsAny<DateTime>())).ReturnsAsync(true);
+            _schedules.Setup(r => r.GetByEmployeeAndDateAsync(202, It.IsAny<DateOnly>()))
+                .ReturnsAsync((int _, DateOnly date) =>
+                [new EmployeeSchedule
+                {
+                    EmployeeId = 202,
+                    BranchId = 1,
+                    RoleId = Admin.UserRoles.Single().RoleId,
+                    ShiftDate = date,
+                    StartTime = TimeOnly.MinValue,
+                    EndTime = TimeOnly.MaxValue,
+                    Status = ScheduleStatus.Programado
+                }]);
             var employees = new Mock<IEmployeeRepository>();
             employees.Setup(r => r.GetByIdAsync(50)).ReturnsAsync(new Employee { Id = 50, BranchId = 2, CvFile = "%PDF-1.7"u8.ToArray() });
             var customers = new Mock<ICustomerRepository>();
@@ -191,7 +205,7 @@ public sealed class HttpAuthenticationTests
                     services.AddDependencies();
                     services.AddSingleton<IConfiguration>(configuration);
                     services.AddSingleton(auth.Object); services.AddSingleton(refresh.Object);
-                    services.AddSingleton(schedules.Object); services.AddSingleton(employees.Object); services.AddSingleton(customers.Object);
+                    services.AddSingleton(_schedules.Object); services.AddSingleton(employees.Object); services.AddSingleton(customers.Object);
                     services.AddSingleton(Mock.Of<INotificationService>());
                     services.AddSingleton(Mock.Of<SaborExpress.Modules.Deliveries.Interfaces.IDeliveryAssignmentService>());
                     services.AddSingleton(Mock.Of<IEmployeeActivationService>());
@@ -213,13 +227,32 @@ public sealed class HttpAuthenticationTests
             user.Token = token;
             return token;
         }
-        public string TokenForRole(string role) => TokenFor(new User
+        public string TokenForRole(string role)
         {
-            Id = Random.Shared.Next(1000, 100000),
-            Status = true,
-            Employee = new Employee { Id = Random.Shared.Next(1000, 100000), BranchId = 1 },
-            UserRoles = [new UserRole { Role = new Role { Name = role } }]
-        });
+            var user = role == RoleNames.Cliente ? Customer : Admin;
+            var roleId = role switch
+            {
+                RoleNames.Gerente => 1,
+                RoleNames.Administrador => 2,
+                RoleNames.Cliente => 3,
+                RoleNames.Mesero => 4,
+                RoleNames.Cajero => 5,
+                RoleNames.Cocinero => 6,
+                RoleNames.AuxiliarCocina => 7,
+                RoleNames.Repartidor => 8,
+                _ => throw new ArgumentOutOfRangeException(nameof(role), role, "Rol de prueba no reconocido.")
+            };
+            user.UserRoles = [new UserRole
+            {
+                UserId = user.Id,
+                RoleId = roleId,
+                Role = new Role { Id = roleId, Name = role }
+            }];
+            var generator = new JwtTokenGenerator(Microsoft.Extensions.Options.Options.Create(_settings));
+            var token = generator.Generate(user, "yersonct", effectiveRoles: [role]);
+            user.Token = token;
+            return token;
+        }
         public void Dispose() => Server.Dispose();
     }
 }
