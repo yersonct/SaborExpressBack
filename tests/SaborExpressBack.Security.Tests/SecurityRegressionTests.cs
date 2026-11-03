@@ -61,6 +61,50 @@ public sealed class SecurityRegressionTests
         Assert.DoesNotContain("https://admin.example.test/path", configured);
     }
 
+    [Theory]
+    [InlineData("http://localhost:3000", true)]
+    [InlineData("https://service.localhost:3000", true)]
+    [InlineData("https://admin.local", true)]
+    [InlineData("https://preview.devtunnels.ms", true)]
+    [InlineData("http://127.0.0.1:5000", true)]
+    [InlineData("http://[::1]:5000", true)]
+    [InlineData("http://[fe80::1]:5000", true)]
+    [InlineData("http://[fd12:3456:789a::1]:5000", true)]
+    [InlineData("http://10.20.30.40:3000", true)]
+    [InlineData("http://172.16.0.1:3000", true)]
+    [InlineData("http://172.31.255.254:3000", true)]
+    [InlineData("http://192.168.1.25:3000", true)]
+    [InlineData("http://100.64.0.1:3000", true)]
+    [InlineData("https://public.example.test", false)]
+    [InlineData("https://localhost.example.test", false)]
+    [InlineData("http://[2001:4860:4860::8888]:5000", false)]
+    [InlineData("http://172.15.255.254:3000", false)]
+    [InlineData("http://172.32.0.1:3000", false)]
+    [InlineData("http://100.63.255.254:3000", false)]
+    [InlineData("http://100.128.0.1:3000", false)]
+    public void DevelopmentCorsAutomaticallyAllowsOnlyLoopbackAndPrivateNetworkOrigins(
+        string origin,
+        bool expected)
+    {
+        var configured = CorsOriginPolicy.FilterConfiguredOrigins([], isDevelopment: true);
+
+        Assert.Equal(expected, CorsOriginPolicy.IsDevelopmentOrigin(origin));
+        Assert.Equal(expected, CorsOriginPolicy.IsAllowedOrigin(origin, configured, isDevelopment: true));
+    }
+
+    [Theory]
+    [InlineData("ftp://localhost:3000")]
+    [InlineData("http://user@localhost:3000")]
+    [InlineData("http://localhost:3000/path")]
+    [InlineData("http://localhost:3000?query=1")]
+    [InlineData("null")]
+    public void DevelopmentCorsRejectsNonHttpAndMalformedOrigins(string origin)
+    {
+        Assert.False(CorsOriginPolicy.IsValidOrigin(origin));
+        Assert.False(CorsOriginPolicy.IsDevelopmentOrigin(origin));
+        Assert.False(CorsOriginPolicy.IsAllowedOrigin(origin, new HashSet<string>(), isDevelopment: true));
+    }
+
     [Fact]
     public void EmployeeCannotReadOrdersFromAnotherBranch()
     {
