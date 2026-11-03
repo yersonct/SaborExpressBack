@@ -286,6 +286,105 @@ public sealed class SecurityRegressionTests
     }
 
     [Fact]
+    public async Task EmployeeOrderMutationsAreDeniedOutsideTheirAssignedBranch()
+    {
+        var actor = new User { Id = 7, Employee = new Employee { Id = 12, BranchId = 3 } };
+        var order = new Order { Id = 81, BranchId = 9, EmployeeId = 12 };
+        var (controller, orderService) = CreateOrdersController(
+            Principal(RoleNames.Cajero, 7, 12), actor, order);
+
+        var updateResult = await controller.Update(81, new SaborExpress.Modules.Orders.DTOs.UpdateOrderDto());
+        var statusResult = await controller.UpdateStatus(81, new SaborExpress.Modules.Orders.DTOs.UpdateOrderStatusDto());
+        var cancelResult = await controller.Cancel(81, new SaborExpress.Modules.Orders.DTOs.CancelOrderDto());
+
+        Assert.IsType<ForbidResult>(updateResult);
+        Assert.IsType<ForbidResult>(statusResult);
+        Assert.IsType<ForbidResult>(cancelResult);
+        orderService.Verify(service => service.UpdateAsync(
+            It.IsAny<int>(), It.IsAny<SaborExpress.Modules.Orders.DTOs.UpdateOrderDto>(), It.IsAny<int>()), Times.Never);
+        orderService.Verify(service => service.UpdateStatusAsync(
+            It.IsAny<int>(), It.IsAny<SaborExpress.Modules.Orders.DTOs.UpdateOrderStatusDto>(), It.IsAny<int>()), Times.Never);
+        orderService.Verify(service => service.CancelAsync(
+            It.IsAny<int>(), It.IsAny<SaborExpress.Modules.Orders.DTOs.CancelOrderDto>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AdministratorCannotCreateManualNotificationForAnotherBranch()
+    {
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Id = 7, Employee = new Employee { Id = 12, BranchId = 3 } });
+        var notificationService = new Mock<IUserNotificationService>();
+        var controller = CreateNotificationsController(
+            notificationService.Object, authRepository.Object,
+            Principal(RoleNames.Administrador, 7));
+
+        var result = await controller.Create(new SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto
+        {
+            BranchId = 9,
+            Title = "Aviso de prueba",
+            Message = "Contenido sintético"
+        });
+
+        Assert.IsType<ForbidResult>(result);
+        notificationService.Verify(service => service.CreateManualAsync(
+            It.IsAny<SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AdministratorCannotTargetAnEmployeeFromAnotherBranchWithManualNotification()
+    {
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Id = 7, Employee = new Employee { Id = 12, BranchId = 3 } });
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(44))
+            .ReturnsAsync(new User { Id = 44, Employee = new Employee { Id = 30, BranchId = 9 } });
+        var notificationService = new Mock<IUserNotificationService>();
+        var controller = CreateNotificationsController(
+            notificationService.Object, authRepository.Object,
+            Principal(RoleNames.Administrador, 7));
+
+        var result = await controller.Create(new SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto
+        {
+            UserId = 44,
+            Title = "Aviso de prueba",
+            Message = "Contenido sintético"
+        });
+
+        Assert.IsType<ForbidResult>(result);
+        notificationService.Verify(service => service.CreateManualAsync(
+            It.IsAny<SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AdministratorCanCreateManualNotificationWithinTheirBranch()
+    {
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Id = 7, Employee = new Employee { Id = 12, BranchId = 3 } });
+        var created = new List<SaborExpress.Modules.Notifications.DTOs.NotificationDto>();
+        var notificationService = new Mock<IUserNotificationService>();
+        notificationService.Setup(service => service.CreateManualAsync(
+                It.IsAny<SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto>()))
+            .ReturnsAsync(created);
+        var controller = CreateNotificationsController(
+            notificationService.Object, authRepository.Object,
+            Principal(RoleNames.Administrador, 7));
+
+        var result = await controller.Create(new SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto
+        {
+            BranchId = 3,
+            Title = "Aviso de prueba",
+            Message = "Contenido sintético"
+        });
+
+        var createdResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status201Created, createdResult.StatusCode);
+        notificationService.Verify(service => service.CreateManualAsync(
+            It.IsAny<SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto>()), Times.Once);
+    }
+
+    [Fact]
     public void ExpiredJwtIsRejectedWithoutClockSkew()
     {
         var testJwtSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
@@ -379,13 +478,52 @@ public sealed class SecurityRegressionTests
         Assert.DoesNotContain(providerDetail, logged, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static ClaimsPrincipal Principal(string role, int? userId = null)
+    private static ClaimsPrincipal Principal(string role, int? userId = null, int? employeeId = null)
     {
         var claims = new List<Claim> { new(ClaimTypes.Role, role) };
         if (userId.HasValue)
             claims.Add(new Claim(ClaimTypes.NameIdentifier, userId.Value.ToString()));
+        if (employeeId.HasValue)
+            claims.Add(new Claim("EmployeeId", employeeId.Value.ToString()));
 
         return new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType: "security-test"));
+    }
+
+    private static (OrdersController Controller, Mock<IOrderService> OrderService) CreateOrdersController(
+        ClaimsPrincipal identity,
+        User actor,
+        Order order)
+    {
+        var orderService = new Mock<IOrderService>();
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(actor.Id))
+            .ReturnsAsync(actor);
+        var orderRepository = new Mock<IOrderRepository>();
+        orderRepository.Setup(repository => repository.GetByIdAsync(order.Id)).ReturnsAsync(order);
+        var controller = new OrdersController(
+            orderService.Object,
+            Mock.Of<IPaymentRepository>(),
+            authRepository.Object,
+            orderRepository.Object,
+            Mock.Of<ITableRepository>());
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = identity }
+        };
+        return (controller, orderService);
+    }
+
+    private static NotificationsController CreateNotificationsController(
+        IUserNotificationService notificationService,
+        IAuthRepository authRepository,
+        ClaimsPrincipal identity)
+    {
+        var controller = new NotificationsController(notificationService, authRepository);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = identity }
+        };
+        return controller;
     }
 
     private static OrderDetailHistoryController CreateOrderDetailHistoryController(
