@@ -5,6 +5,7 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+	  <DefaultItemExcludes>$(DefaultItemExcludes);**/tests/**;**/TestResults/**;**/.vs/**;**/.tools/**;**/bin/**;**/obj/**</DefaultItemExcludes>
 		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
 		<DockerfileContext>.</DockerfileContext>
 	  <UserSecretsId>823bf26f-0f30-43dd-af52-5ed33c7397fe</UserSecretsId>
