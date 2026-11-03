@@ -73,6 +73,102 @@ public sealed class SecurityRegressionTests
     }
 
     [Fact]
+    public void WaiterCannotReadOwnedOrderAfterItMovesOutsideTheirBranch()
+    {
+        var identity = Principal(RoleNames.Mesero);
+        var actor = new User { Employee = new Employee { Id = 12, BranchId = 3 } };
+        var order = new Order { Id = 81, EmployeeId = 12, BranchId = 9 };
+        var summary = new SaborExpress.Modules.Orders.DTOs.OrderSummaryDto
+        {
+            Id = 81,
+            EmployeeId = 12,
+            BranchId = 9
+        };
+
+        Assert.False(ResourceReadPolicy.CanReadOrder(identity, actor, order));
+        Assert.False(ResourceReadPolicy.CanReadOrderSummary(identity, actor, summary));
+        Assert.False(ResourceReadPolicy.CanReadPaymentOfOrder(identity, actor, order));
+    }
+
+    [Fact]
+    public void WaiterCanReadTheirOwnOrderWithinTheirBranch()
+    {
+        var identity = Principal(RoleNames.Mesero);
+        var actor = new User { Employee = new Employee { Id = 12, BranchId = 3 } };
+        var order = new Order { Id = 81, EmployeeId = 12, BranchId = 3 };
+
+        Assert.True(ResourceReadPolicy.CanReadOrder(identity, actor, order));
+        Assert.True(ResourceReadPolicy.CanReadPaymentOfOrder(identity, actor, order));
+    }
+
+    [Theory]
+    [InlineData(RoleNames.Gerente, true, true, true, true, true, true)]
+    [InlineData(RoleNames.Administrador, false, true, false, true, true, false)]
+    [InlineData(RoleNames.Cajero, false, true, false, true, true, false)]
+    [InlineData(RoleNames.Mesero, false, true, false, true, true, false)]
+    [InlineData(RoleNames.Cocinero, false, true, false, true, false, false)]
+    [InlineData(RoleNames.AuxiliarCocina, false, true, false, true, false, false)]
+    [InlineData(RoleNames.Repartidor, false, true, false, false, true, false)]
+    [InlineData(RoleNames.Cliente, true, true, true, false, true, false)]
+    public void ResourceReadPolicyEnforcesCrossBranchRoleMatrix(
+        string role,
+        bool expectedCrossBranchOrder,
+        bool expectedSameBranchOrder,
+        bool expectedCrossBranchPayment,
+        bool expectedSameBranchBranchRead,
+        bool expectedSameBranchPayment,
+        bool expectedCrossBranchBranchRead)
+    {
+        var identity = Principal(role);
+        var actor = new User
+        {
+            Employee = new Employee { Id = 12, BranchId = 3 },
+            Customer = new SaborExpress.Modules.Customers.Models.Customer { Id = 21 }
+        };
+        var sameBranchOrder = new Order
+        {
+            Id = 81,
+            EmployeeId = 12,
+            AssignedDeliveryPersonId = 12,
+            CustomerId = 21,
+            BranchId = 3
+        };
+        var otherBranchOrder = new Order
+        {
+            Id = 82,
+            EmployeeId = 12,
+            AssignedDeliveryPersonId = 12,
+            CustomerId = 21,
+            BranchId = 9
+        };
+        var sameBranchSummary = new SaborExpress.Modules.Orders.DTOs.OrderSummaryDto
+        {
+            Id = 81,
+            EmployeeId = 12,
+            AssignedDeliveryPersonId = 12,
+            CustomerId = 21,
+            BranchId = 3
+        };
+        var otherBranchSummary = new SaborExpress.Modules.Orders.DTOs.OrderSummaryDto
+        {
+            Id = 82,
+            EmployeeId = 12,
+            AssignedDeliveryPersonId = 12,
+            CustomerId = 21,
+            BranchId = 9
+        };
+
+        Assert.Equal(expectedSameBranchBranchRead, ResourceReadPolicy.CanReadBranch(identity, actor, 3));
+        Assert.Equal(expectedCrossBranchBranchRead, ResourceReadPolicy.CanReadBranch(identity, actor, 9));
+        Assert.Equal(expectedSameBranchOrder, ResourceReadPolicy.CanReadOrder(identity, actor, sameBranchOrder));
+        Assert.Equal(expectedSameBranchOrder, ResourceReadPolicy.CanReadOrderSummary(identity, actor, sameBranchSummary));
+        Assert.Equal(expectedSameBranchPayment, ResourceReadPolicy.CanReadPaymentOfOrder(identity, actor, sameBranchOrder));
+        Assert.Equal(expectedCrossBranchOrder, ResourceReadPolicy.CanReadOrder(identity, actor, otherBranchOrder));
+        Assert.Equal(expectedCrossBranchOrder, ResourceReadPolicy.CanReadOrderSummary(identity, actor, otherBranchSummary));
+        Assert.Equal(expectedCrossBranchPayment, ResourceReadPolicy.CanReadPaymentOfOrder(identity, actor, otherBranchOrder));
+    }
+
+    [Fact]
     public void ForbiddenAccessIsReturnedAsHttp403()
     {
         var exceptionContext = new ExceptionContext(
