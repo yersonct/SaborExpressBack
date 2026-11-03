@@ -205,6 +205,87 @@ public sealed class SecurityRegressionTests
     }
 
     [Fact]
+    public async Task OrderDetailHistoryDeniesWaiterOutsideTheOrderBranch()
+    {
+        var detailRepository = new Mock<IOrderDetailRepository>();
+        detailRepository.Setup(repository => repository.GetByIdAsync(44))
+            .ReturnsAsync(new SaborExpress.Modules.Orders.Models.OrderDetail { Id = 44, OrderId = 81 });
+        var orderRepository = new Mock<IOrderRepository>();
+        orderRepository.Setup(repository => repository.GetByIdAsync(81))
+            .ReturnsAsync(new Order { Id = 81, BranchId = 9, EmployeeId = 12 });
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Employee = new Employee { Id = 12, BranchId = 3 } });
+        var historyService = new Mock<IOrderDetailHistoryService>();
+        var controller = CreateOrderDetailHistoryController(
+            historyService.Object,
+            detailRepository.Object,
+            orderRepository.Object,
+            authRepository.Object,
+            Principal(RoleNames.Mesero, 7));
+
+        var result = await controller.GetHistory(44);
+
+        Assert.IsType<ForbidResult>(result);
+        historyService.Verify(service => service.GetByOrderDetailIdAsync(44), Times.Never);
+    }
+
+    [Fact]
+    public async Task OrderDetailHistoryDeniesWaiterReadingAnotherWaitersOrder()
+    {
+        var detailRepository = new Mock<IOrderDetailRepository>();
+        detailRepository.Setup(repository => repository.GetByIdAsync(44))
+            .ReturnsAsync(new SaborExpress.Modules.Orders.Models.OrderDetail { Id = 44, OrderId = 81 });
+        var orderRepository = new Mock<IOrderRepository>();
+        orderRepository.Setup(repository => repository.GetByIdAsync(81))
+            .ReturnsAsync(new Order { Id = 81, BranchId = 3, EmployeeId = 99 });
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Employee = new Employee { Id = 12, BranchId = 3 } });
+        var historyService = new Mock<IOrderDetailHistoryService>();
+        var controller = CreateOrderDetailHistoryController(
+            historyService.Object,
+            detailRepository.Object,
+            orderRepository.Object,
+            authRepository.Object,
+            Principal(RoleNames.Mesero, 7));
+
+        var result = await controller.GetHistory(44);
+
+        Assert.IsType<ForbidResult>(result);
+        historyService.Verify(service => service.GetByOrderDetailIdAsync(44), Times.Never);
+    }
+
+    [Fact]
+    public async Task OrderDetailHistoryAllowsManagerAcrossBranches()
+    {
+        var detailRepository = new Mock<IOrderDetailRepository>();
+        detailRepository.Setup(repository => repository.GetByIdAsync(44))
+            .ReturnsAsync(new SaborExpress.Modules.Orders.Models.OrderDetail { Id = 44, OrderId = 81 });
+        var orderRepository = new Mock<IOrderRepository>();
+        orderRepository.Setup(repository => repository.GetByIdAsync(81))
+            .ReturnsAsync(new Order { Id = 81, BranchId = 9 });
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Employee = new Employee { Id = 12, BranchId = 3 } });
+        var history = new List<SaborExpress.Modules.Orders.DTOs.OrderDetailHistoryResponseDto>();
+        var historyService = new Mock<IOrderDetailHistoryService>();
+        historyService.Setup(service => service.GetByOrderDetailIdAsync(44)).ReturnsAsync(history);
+        var controller = CreateOrderDetailHistoryController(
+            historyService.Object,
+            detailRepository.Object,
+            orderRepository.Object,
+            authRepository.Object,
+            Principal(RoleNames.Gerente, 7));
+
+        var result = await controller.GetHistory(44);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Same(history, ok.Value);
+        historyService.Verify(service => service.GetByOrderDetailIdAsync(44), Times.Once);
+    }
+
+    [Fact]
     public void ExpiredJwtIsRejectedWithoutClockSkew()
     {
         var testJwtSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
@@ -298,8 +379,30 @@ public sealed class SecurityRegressionTests
         Assert.DoesNotContain(providerDetail, logged, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static ClaimsPrincipal Principal(string role) => new(
-        new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], authenticationType: "security-test"));
+    private static ClaimsPrincipal Principal(string role, int? userId = null)
+    {
+        var claims = new List<Claim> { new(ClaimTypes.Role, role) };
+        if (userId.HasValue)
+            claims.Add(new Claim(ClaimTypes.NameIdentifier, userId.Value.ToString()));
+
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType: "security-test"));
+    }
+
+    private static OrderDetailHistoryController CreateOrderDetailHistoryController(
+        IOrderDetailHistoryService historyService,
+        IOrderDetailRepository detailRepository,
+        IOrderRepository orderRepository,
+        IAuthRepository authRepository,
+        ClaimsPrincipal identity)
+    {
+        var controller = new OrderDetailHistoryController(
+            historyService, detailRepository, orderRepository, authRepository);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = identity }
+        };
+        return controller;
+    }
 
     private static PaymentService CreatePaymentService(IWompiClient wompi, ILogger<PaymentService> logger)
     {
