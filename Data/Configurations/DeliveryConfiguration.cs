@@ -9,7 +9,10 @@ namespace SaborExpress.Data.Configurations
     {
         public void Configure(EntityTypeBuilder<Delivery> builder)
         {
-            builder.ToTable("deliveries");
+            builder.ToTable("deliveries", table =>
+            {
+                table.HasCheckConstraint("ck_deliveries_rating", "customer_rating IS NULL OR customer_rating BETWEEN 1 AND 5");
+            });
 
             builder.HasKey(x => x.Id);
 

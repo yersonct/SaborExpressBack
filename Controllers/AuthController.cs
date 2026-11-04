@@ -40,6 +40,7 @@ namespace SaborExpress.Controllers
             _jwtSettings = jwtSettings.Value;
         }
 
+        [AllowAnonymous]
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
@@ -53,6 +54,7 @@ namespace SaborExpress.Controllers
             return Ok(response);
         }
 
+        [AllowAnonymous]
         [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
         {
@@ -60,6 +62,7 @@ namespace SaborExpress.Controllers
             return Ok(new { message = "Si la cuenta esta habilitada para recuperacion, recibiras un codigo." });
         }
 
+        [AllowAnonymous]
         [HttpPost("verify-reset-code")]
         public async Task<IActionResult> VerifyResetCode([FromBody] VerifyResetCodeDto dto)
         {
@@ -67,6 +70,7 @@ namespace SaborExpress.Controllers
             return Ok(response);
         }
 
+        [AllowAnonymous]
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
         {
@@ -112,6 +116,7 @@ namespace SaborExpress.Controllers
         }
 
 
+        [AllowAnonymous]
         [HttpPost("confirm-email")]
         public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailDto dto)
         {
@@ -119,6 +124,7 @@ namespace SaborExpress.Controllers
             return Ok(new { message = "Correo confirmado correctamente. Ya puedes iniciar sesion." });
         }
 
+        [AllowAnonymous]
         [HttpPost("resend-confirmation-code")]
         public async Task<IActionResult> ResendConfirmationCode([FromBody] ResendConfirmationDto dto)
         {
@@ -126,6 +132,7 @@ namespace SaborExpress.Controllers
             return Ok(new { message = "Si el correo existe y no ha sido confirmado, se enviara un nuevo codigo." });
         }
 
+        [AllowAnonymous]
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto dto)
         {
@@ -133,6 +140,7 @@ namespace SaborExpress.Controllers
             return Ok(response);
         }
 
+        [AllowAnonymous]
         [HttpPost("web-refresh-token")]
         public async Task<IActionResult> WebRefreshToken()
         {
@@ -152,6 +160,7 @@ namespace SaborExpress.Controllers
             response.RefreshToken = string.Empty;
             return Ok(response);
         }
+        [AllowAnonymous]
         [HttpPost("resend-activation-code")]
         public async Task<IActionResult> ResendActivationCode([FromBody] ResendActivationDto dto)
         {
@@ -159,6 +168,7 @@ namespace SaborExpress.Controllers
             return Ok(new { message = "Si la cuenta existe y no ha sido activada, se enviara un nuevo codigo." });
         }
 
+        [AllowAnonymous]
         [HttpPost("activate-account")]
         public async Task<IActionResult> ActivateAccount([FromBody] ActivateAccountDto dto)
         {

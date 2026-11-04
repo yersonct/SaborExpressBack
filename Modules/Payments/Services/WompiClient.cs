@@ -24,13 +24,13 @@ namespace SaborExpress.Modules.Payments.Services
             _http.BaseAddress = new Uri(baseUrl.EndsWith("/") ? baseUrl : baseUrl + "/");
 
             _publicKey = (configuration["Wompi:PublicKey"]
-                ?? throw new InvalidOperationException("Falta Wompi:PublicKey en la configuración")).Trim();
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("Falta Wompi:PublicKey en la configuración")).Trim();
             _privateKey = (configuration["Wompi:PrivateKey"]
-                ?? throw new InvalidOperationException("Falta Wompi:PrivateKey en la configuración")).Trim();
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("Falta Wompi:PrivateKey en la configuración")).Trim();
             _integritySecret = (configuration["Wompi:IntegritySecret"]
-                ?? throw new InvalidOperationException("Falta Wompi:IntegritySecret en la configuración")).Trim();
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("Falta Wompi:IntegritySecret en la configuración")).Trim();
             _eventsSecret = (configuration["Wompi:EventsSecret"]
-                ?? throw new InvalidOperationException("Falta Wompi:EventsSecret en la configuración")).Trim();
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("Falta Wompi:EventsSecret en la configuración")).Trim();
 
             _http.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _privateKey);

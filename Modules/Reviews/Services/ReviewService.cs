@@ -187,7 +187,7 @@ namespace SaborExpress.Modules.Reviews.Services
                 return;
 
             if (currentUser.Employee?.BranchId != branchId)
-                throw new InvalidOperationException("Solo puedes ver las reseñas de tu propia sede.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Solo puedes ver las reseñas de tu propia sede.");
         }
     }
 }

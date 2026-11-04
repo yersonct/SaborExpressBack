@@ -102,7 +102,7 @@ namespace SaborExpress.Modules.Payments.Repositories
                 .ToListAsync();
         }
 
-        public async Task<List<Payment>> GetAllAsync(int? branchId, DateTime? fromDate, DateTime? toDate)
+        public async Task<List<Payment>> GetAllAsync(int? branchId, DateTime? fromDate, DateTime? toDate, int? page = null, int? pageSize = null)
         {
             var query = _context.Payments
                 .Include(x => x.Cashier)
@@ -120,9 +120,10 @@ namespace SaborExpress.Modules.Payments.Repositories
             if (toDate.HasValue)
                 query = query.Where(x => x.PaidAt <= toDate.Value);
 
-            return await query
-                .OrderByDescending(x => x.PaidAt)
-                .ToListAsync();
+            query = query.OrderByDescending(x => x.PaidAt).ThenByDescending(x => x.Id);
+            var pagination = new SaborExpress.Shared.Responses.PageQuery { Page = page, PageSize = pageSize };
+            if (pagination.IsRequested) query = query.Skip(pagination.Offset).Take(pagination.Limit);
+            return await query.ToListAsync();
         }
 
         // NUEVO — cierre de caja: pagos que ESTE cajero registró desde una fecha (hoy, normalmente).
@@ -156,7 +157,7 @@ namespace SaborExpress.Modules.Payments.Repositories
                 ?? throw new ArgumentException("El pedido no existe.");
 
             if (order.Status is OrderStatus.Pending or OrderStatus.Cancelled)
-                throw new InvalidOperationException("Este pedido no admite pagos en su estado actual.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido no admite pagos en su estado actual.");
 
             var existing = await _context.Payments
                 .AsNoTracking()
@@ -196,11 +197,11 @@ namespace SaborExpress.Modules.Payments.Repositories
             if (requiredOrderStatus.HasValue)
             {
                 if (order.Status != requiredOrderStatus.Value)
-                    throw new InvalidOperationException("El pedido ya no admite este pago en lÃ­nea.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("El pedido ya no admite este pago en lÃ­nea.");
             }
             else if (order.Status is OrderStatus.Pending or OrderStatus.Cancelled)
             {
-                throw new InvalidOperationException("Este pedido no admite pagos en su estado actual.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido no admite pagos en su estado actual.");
             }
 
             var existing = await _context.Payments
@@ -217,10 +218,10 @@ namespace SaborExpress.Modules.Payments.Repositories
                 .ToList();
 
             if (completed >= order.Total)
-                throw new InvalidOperationException("Este pedido ya estÃ¡ pagado.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido ya estÃ¡ pagado.");
 
             if (pendingWompi.Count > 1)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "Este pedido ya tiene varios pagos Wompi pendientes y requiere revisiÃ³n.");
 
             var remaining = order.Total - completed;
@@ -228,14 +229,14 @@ namespace SaborExpress.Modules.Payments.Repositories
             {
                 var current = pendingWompi[0];
                 if (current.Amount != remaining || string.IsNullOrWhiteSpace(current.WompiReference))
-                    throw new InvalidOperationException("Ya hay un pago Wompi pendiente para este pedido.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("Ya hay un pago Wompi pendiente para este pedido.");
 
                 await transaction.CommitAsync();
                 return (current, false);
             }
 
             if (requestedPayment.Amount != remaining)
-                throw new InvalidOperationException("El saldo del pedido cambiÃ³. Actualiza el pedido e intÃ©ntalo de nuevo.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("El saldo del pedido cambiÃ³. Actualiza el pedido e intÃ©ntalo de nuevo.");
 
             requestedPayment.Status = PaymentStatus.Pending;
             requestedPayment.Method = PaymentMethod.Wompi;

@@ -120,7 +120,7 @@ namespace SaborExpress.Modules.Tables.Services
                     ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
                 if (actor.HasRole(RoleNames.Cajero) &&
                     !actor.HasRole(RoleNames.Administrador) && !actor.HasRole(RoleNames.Gerente))
-                    throw new InvalidOperationException("Para liberar mesas usa el cierre validado de jornada anterior.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("Para liberar mesas usa el cierre validado de jornada anterior.");
                 await _tableAvailabilityService.EnsureCanSetAvailableAsync(id);
                 table.CurrentSessionId = null;
             }
@@ -206,11 +206,11 @@ namespace SaborExpress.Modules.Tables.Services
                 return;
 
             var employeeId = currentUser.Employee?.Id
-                ?? throw new InvalidOperationException("El usuario actual no tiene un perfil de empleado asociado.");
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("El usuario actual no tiene un perfil de empleado asociado.");
 
             var canUpdateStatus = await _authorizationService.CanPerformActionAsync(employeeId, PermissionNames.CambiarEstadoMesa);
             if (!canUpdateStatus)
-                throw new InvalidOperationException("No tienes permiso para cambiar el estado de las mesas ahora mismo.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para cambiar el estado de las mesas ahora mismo.");
         }
 
     }

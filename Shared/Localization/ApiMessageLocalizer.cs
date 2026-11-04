@@ -19,6 +19,10 @@ public sealed class ApiMessageLocalizer : IApiMessageLocalizer
     private static readonly IReadOnlyDictionary<string, LocalizedMessage> Messages =
         new Dictionary<string, LocalizedMessage>(StringComparer.OrdinalIgnoreCase)
         {
+            ["Debes aceptar la política de tratamiento de datos vigente."] = new("Accept the current data privacy policy.", "Aceite a política de privacidade de dados vigente.", "Acceptez la politique de confidentialité en vigueur."),
+            ["El CV debe ser un archivo PDF válido."] = new("The CV must be a valid PDF file.", "O currículo deve ser um arquivo PDF válido.", "Le CV doit être un fichier PDF valide."),
+            ["La foto debe ser un archivo JPG, PNG o WEBP válido."] = new("The photo must be a valid JPG, PNG or WEBP file.", "A foto deve ser um arquivo JPG, PNG ou WEBP válido.", "La photo doit être un fichier JPG, PNG ou WEBP valide."),
+            ["El archivo debe contener datos y no superar 5MB."] = new("The file must contain data and be no larger than 5MB.", "O arquivo deve conter dados e não exceder 5MB.", "Le fichier doit contenir des données et ne pas dépasser 5 Mo."),
             ["Credenciales incorrectas."] = new("Incorrect credentials.", "Credenciais incorretas.", "Identifiants incorrects."),
             ["Debes ingresar tu correo o documento."] = new("Enter your email or ID number.", "Informe seu e-mail ou documento.", "Saisissez votre adresse e-mail ou votre pièce d'identité."),
             ["El correo es obligatorio"] = new("Email is required.", "O e-mail é obrigatório.", "L'adresse e-mail est obligatoire."),

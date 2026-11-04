@@ -42,7 +42,7 @@ namespace SaborExpress.Modules.UserRoles.Services
             var esAdministrador = currentUser.HasRole(RoleNames.Administrador);
 
             if (!esGerente && !esAdministrador)
-                throw new InvalidOperationException("No tienes permiso para asignar roles.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para asignar roles.");
 
             var user = await _authRepository.GetByIdWithRelationsAsync(dto.UserId)
                 ?? throw new KeyNotFoundException("El usuario no existe.");
@@ -51,22 +51,22 @@ namespace SaborExpress.Modules.UserRoles.Services
                 ?? throw new KeyNotFoundException("El rol no existe.");
 
             if (user.Customer != null)
-                throw new InvalidOperationException("No se puede asignar un rol a un usuario que es cliente.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No se puede asignar un rol a un usuario que es cliente.");
 
             if (user.Employee == null)
-                throw new InvalidOperationException("Solo se pueden asignar roles a usuarios que son empleados.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Solo se pueden asignar roles a usuarios que son empleados.");
 
             // Un Administrador solo puede asignar roles operativos a empleados
             // de su sede. Los roles de gestión se reservan para el Gerente.
             if (!esGerente && esAdministrador)
             {
                 if (role.Name == RoleNames.Administrador || role.Name == RoleNames.Gerente)
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "Un Administrador no puede asignar el rol de Administrador ni Gerente. Solo un Gerente puede hacerlo.");
 
                 if (currentUser.Employee?.BranchId == null ||
                     user.Employee.BranchId != currentUser.Employee.BranchId)
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "Solo puedes asignar roles a empleados de tu misma sede.");
             }
 
@@ -79,7 +79,7 @@ namespace SaborExpress.Modules.UserRoles.Services
                     user.Employee.BranchId.Value, excludeUserId: dto.UserId);
 
                 if (yaTieneAdmin)
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "Esta sede ya tiene un Administrador asignado.");
             }
 
@@ -117,7 +117,7 @@ namespace SaborExpress.Modules.UserRoles.Services
             if (!esGerente && esAdministrador)
             {
                 if (role.Name == RoleNames.Administrador || role.Name == RoleNames.Gerente)
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "Un Administrador no puede quitar el rol de Administrador ni Gerente. Solo un Gerente puede hacerlo.");
 
                 var targetUser = await _authRepository.GetByIdWithRelationsAsync(userId)
@@ -125,7 +125,7 @@ namespace SaborExpress.Modules.UserRoles.Services
 
                 if (currentUser.Employee?.BranchId == null ||
                     targetUser.Employee?.BranchId != currentUser.Employee.BranchId)
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "Solo puedes quitar roles a empleados de tu misma sede.");
             }
 
@@ -141,7 +141,7 @@ namespace SaborExpress.Modules.UserRoles.Services
                         targetUser.Employee.BranchId.Value, excludeUserId: userId);
 
                     if (!hayOtroAdmin)
-                        throw new InvalidOperationException(
+                        throw new SaborExpress.Shared.Exceptions.ConflictException(
                             "No puedes quitar el rol de Administrador porque es el único de esta sede. " +
                             "Asigna otro Administrador antes de quitar este.");
                 }

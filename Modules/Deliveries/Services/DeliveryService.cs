@@ -63,13 +63,13 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
 {
     var canAssign = await _authorizationService.CanPerformActionAsync(currentEmployeeId, PermissionNames.TomarEntrega);
     if (!canAssign)
-        throw new InvalidOperationException("No tienes permiso para asignar entregas manualmente.");
+        throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para asignar entregas manualmente.");
 
     var order = await _orderRepository.GetByIdAsync(dto.OrderId)
         ?? throw new ArgumentException("El pedido no existe.");
 
     if (order.AddressId is null)
-        throw new InvalidOperationException("Este pedido no tiene una dirección de entrega asociada.");
+        throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido no tiene una dirección de entrega asociada.");
 
     await _validator.ValidateCreateAsync(dto, currentEmployeeId);
 
@@ -80,7 +80,7 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
         ?? throw new ArgumentException("El repartidor indicado no existe o no tiene sede asignada.");
 
     if (employeeBranchId != order.BranchId)
-        throw new InvalidOperationException("El repartidor debe pertenecer a la misma sede del pedido.");
+        throw new SaborExpress.Shared.Exceptions.ConflictException("El repartidor debe pertenecer a la misma sede del pedido.");
 
     var delivery = new Delivery
     {
@@ -159,7 +159,7 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
             {
                 var canUpdate = await _authorizationService.CanPerformActionAsync(currentEmployeeId, PermissionNames.ActualizarEstadoEntrega);
                 if (!canUpdate)
-                    throw new InvalidOperationException("No tienes permiso para actualizar entregas ahora mismo.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para actualizar entregas ahora mismo.");
             }
 
             _validator.ValidateStatusChange(delivery, dto, currentEmployeeId, isAdmin);
@@ -167,7 +167,7 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
             // NUEVO: si el pedido fue cancelado, no se puede salir ni entregar
             if (delivery.Order.Status == OrderStatus.Cancelled
                 && dto.Status != DeliveryStatus.Assigned)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "Este pedido fue cancelado. No puedes continuar con la entrega.");
 
             // El repartidor solo puede salir cuando cocina terminó todos los platos
@@ -180,14 +180,14 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
                     && d.Status != OrderDetailStatus.Delivered);
 
                 if (kitchenPending)
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "La cocina aún no termina este pedido. Espera a que esté listo para salir.");
             }
 
             var deliveredAt = dto.Status == DeliveryStatus.Delivered ? DateTime.UtcNow : (DateTime?)null;
             if (!await _deliveryRepository.TryTransitionStatusAsync(
                     id, delivery.Status, dto.Status, deliveredAt))
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "El estado de este domicilio cambiÃ³ en otro dispositivo. Actualiza la lista e intÃ©ntalo de nuevo.");
 
             if (dto.Status == DeliveryStatus.Delivered)
@@ -265,13 +265,13 @@ public async Task<DeliveryResponseDto> CreateAsync(CreateDeliveryDto dto, int cu
                 ?? throw new ArgumentException("El domicilio no existe.");
 
             if (delivery.Order.CustomerId != customerId)
-                throw new InvalidOperationException("Este pedido no te pertenece.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido no te pertenece.");
 
             if (delivery.Status != DeliveryStatus.Delivered)
-                throw new InvalidOperationException("Solo puedes calificar cuando el pedido ya fue entregado.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Solo puedes calificar cuando el pedido ya fue entregado.");
 
             if (delivery.CustomerRating != null)
-                throw new InvalidOperationException("Ya calificaste a este repartidor en este pedido.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Ya calificaste a este repartidor en este pedido.");
 
             var comment = dto.Comment?.Trim();
             if (!string.IsNullOrEmpty(comment) && comment.Length > 250)

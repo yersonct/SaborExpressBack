@@ -7,7 +7,7 @@ namespace SaborExpress.Modules.Orders.Interfaces
     public interface IOrderRepository
     {
         Task<Order?> GetByIdAsync(int id);
-        Task<List<Order>> GetAllAsync(int? branchId, OrderStatus? status, int? employeeId = null, DateTime? fromDate = null, DateTime? toDate = null);
+        Task<List<Order>> GetAllAsync(int? branchId, OrderStatus? status, int? employeeId = null, DateTime? fromDate = null, DateTime? toDate = null, int? page = null, int? pageSize = null);
         Task<List<Order>> GetByTableIdAsync(int tableId);
         Task<List<Order>> GetByCustomerIdAsync(int customerId);
         Task<List<Order>> GetByBranchIdAsync(int branchId);

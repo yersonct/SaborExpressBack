@@ -16,13 +16,15 @@ namespace SaborExpress.Controllers
         public RolePermissionsController(IRolePermissionService service) => _service = service;
 
         [HttpPost]
+        [Authorize(Roles = RoleNames.Gerente)]
         public async Task<IActionResult> Assign([FromBody] CreateRolePermissionDto dto) =>
-            StatusCode(201, await _service.AssignAsync(dto));
+            StatusCode(201, await _service.AssignAsync(dto, User));
 
         [HttpDelete("{roleId}/{permissionId}")]
+        [Authorize(Roles = RoleNames.Gerente)]
         public async Task<IActionResult> Remove(int roleId, int permissionId)
         {
-            await _service.RemoveAsync(roleId, permissionId);
+            await _service.RemoveAsync(roleId, permissionId, User);
             return NoContent();
         }
 
