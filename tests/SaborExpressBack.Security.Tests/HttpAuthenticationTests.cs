@@ -241,6 +241,7 @@ public sealed class HttpAuthenticationTests
                     services.AddLogging(); services.AddMemoryCache(); services.AddHttpClient(); services.AddSignalR();
                     services.AddDbContext<AppDbContext>(options => options.UseNpgsql("Host=localhost;Database=isolated_test;Username=test"));
                     services.AddDependencies();
+                    services.AddSingleton<IAuthTransactionRunner, ImmediateAuthTransactionRunner>();
                     services.AddSingleton<IConfiguration>(configuration);
                     services.AddSingleton(EmployeeService.Object);
                     services.AddSingleton<SaborExpress.Shared.Localization.IApiMessageLocalizer,
@@ -295,5 +296,14 @@ public sealed class HttpAuthenticationTests
             return token;
         }
         public void Dispose() => Server.Dispose();
+
+        private sealed class ImmediateAuthTransactionRunner : IAuthTransactionRunner
+        {
+            public Task<T> ExecuteSerializableAsync<T>(Func<Task<T>> operation, CancellationToken cancellationToken = default)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return operation();
+            }
+        }
     }
 }
