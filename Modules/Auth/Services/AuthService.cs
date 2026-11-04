@@ -153,8 +153,15 @@
             await using var userLock = await _userSessionLock.AcquireAsync(userId);
             string? notificationEmail = null;
             string? notificationName = null;
+            var sessionWasReplaced = false;
             var loginResponse = await _transactionRunner.ExecuteSerializableAsync(async () =>
             {
+                // The serializable transaction runner can retry this callback after a
+                // PostgreSQL serialization failure, so only retain values from its final run.
+                notificationEmail = null;
+                notificationName = null;
+                sessionWasReplaced = false;
+
                 // Re-check after acquiring the lock so a concurrent password reset
                 // cannot allow an already-started login with the old password.
                 user = await _authRepository.GetByIdWithRelationsAsync(userId)
@@ -194,11 +201,24 @@
                     await _refreshTokenRepository.RevokeAllForUserAsync(user.Id);
 
                 var refreshToken = await GenerateAndSaveRefreshTokenAsync(user.Id);
-                if (enforceSingleSession)
-                    await _realtimeNotifier.SessionReplacedAsync(user.Id);
+                sessionWasReplaced = enforceSingleSession;
 
                 return AuthMapper.ToAuthResponse(user, token, refreshToken, hasActiveShift, activeShiftRoleName, effectiveRoles);
             });
+
+            // Keep external SignalR effects outside the retryable database callback.
+            // A notification failure must not make a committed login look unsuccessful.
+            if (sessionWasReplaced)
+            {
+                try
+                {
+                    await _realtimeNotifier.SessionReplacedAsync(userId);
+                }
+                catch
+                {
+                    // Login and the new session have already committed; notification is best effort.
+                }
+            }
 
             if (notificationEmail is not null && notificationName is not null)
                 NotifyLoginAsync(notificationEmail, notificationName);

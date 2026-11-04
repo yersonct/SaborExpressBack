@@ -33,7 +33,10 @@ namespace SaborExpress.Modules.Auth.Helpers
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, identifier)
+                new Claim(ClaimTypes.Name, identifier),
+                // Ensure a new login never recreates an earlier access-token string
+                // within the same expiration second.
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N"))
             };
 
             var roles = effectiveRoles ?? user.UserRoles.Select(ur => ur.Role.Name).ToList();
