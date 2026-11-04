@@ -148,6 +148,8 @@ namespace SaborExpress.Configuration
 
             services.AddScoped<IPasswordResetRepository, PasswordResetRepository>();
             services.AddScoped<IPasswordResetService, PasswordResetService>();
+            services.AddSingleton<IUserSessionLock, UserSessionLock>();
+            services.AddScoped<IAuthTransactionRunner, EfAuthTransactionRunner>();
             services.AddScoped<ForgotPasswordValidator>();
             services.AddScoped<VerifyResetCodeValidator>();
             services.AddScoped<ResetPasswordValidator>();
