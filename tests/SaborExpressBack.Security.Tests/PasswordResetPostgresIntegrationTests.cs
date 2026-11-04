@@ -29,6 +29,7 @@ using SaborExpress.Shared.Constants;
 using SaborExpress.Shared.Interfaces;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using Xunit;
 
 namespace SaborExpressBack.Security.Tests;
@@ -41,13 +42,13 @@ namespace SaborExpressBack.Security.Tests;
 /// </summary>
 public sealed class PasswordResetPostgresIntegrationTests
 {
-    private const string OldPassword = "OldSyntheticPass-7!";
-    private const string NewPassword = "NewSyntheticPass-8!";
-    private const string ConcurrentPassword = "ConcurrentSyntheticPass-9!";
-
     [Fact]
     public async Task PasswordRecoveryRevokesSessionsRollsBackAndRetriesSerializableConflicts()
     {
+        var oldPassword = CreateSyntheticPassword();
+        var newPassword = CreateSyntheticPassword();
+        var concurrentPassword = CreateSyntheticPassword();
+        var rollbackAttemptPassword = CreateSyntheticPassword();
         var password = Environment.GetEnvironmentVariable("HU01_PG_TEST_PASSWORD");
         Assert.False(string.IsNullOrWhiteSpace(password),
             "Set HU01_PG_TEST_PASSWORD from the isolated local container; no migration was run.");
@@ -59,6 +60,7 @@ public sealed class PasswordResetPostgresIntegrationTests
             Database = "hu01_test",
             Username = "hu01_test",
             Password = password,
+            SslMode = SslMode.Disable,
             Pooling = false
         };
         var safeConnectionString = connection.ConnectionString;
@@ -106,7 +108,7 @@ public sealed class PasswordResetPostgresIntegrationTests
                 var user = new User
                 {
                     Email = email,
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(OldPassword),
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(oldPassword),
                     Status = true,
                     EmailConfirmed = true,
                     UserRoles =
@@ -125,7 +127,7 @@ public sealed class PasswordResetPostgresIntegrationTests
             await using (var context = new AppDbContext(options))
             {
                 var auth = CreateAuthService(context);
-                var initialLogin = await auth.LoginAsync(new LoginDto { Identifier = email, Password = OldPassword });
+                var initialLogin = await auth.LoginAsync(new LoginDto { Identifier = email, Password = oldPassword });
                 originalAccessToken = initialLogin.Token;
                 originalRefreshToken = initialLogin.RefreshToken;
 
@@ -138,7 +140,7 @@ public sealed class PasswordResetPostgresIntegrationTests
                 await context.SaveChangesAsync();
 
                 var reset = CreatePasswordResetService(context);
-                await reset.ResetPasswordAsync(ResetRequest(firstResetToken, NewPassword));
+                await reset.ResetPasswordAsync(ResetRequest(firstResetToken, newPassword));
 
                 var afterReset = await authRepository.GetSessionInfoAsync(userId);
                 Assert.True(afterReset.Exists);
@@ -149,15 +151,15 @@ public sealed class PasswordResetPostgresIntegrationTests
                 await Assert.ThrowsAsync<UnauthorizedAccessException>(() => auth.RefreshTokenAsync(
                     new RefreshTokenRequestDto { RefreshToken = originalRefreshToken }));
                 await Assert.ThrowsAsync<UnauthorizedAccessException>(() => auth.LoginAsync(
-                    new LoginDto { Identifier = email, Password = OldPassword }));
+                    new LoginDto { Identifier = email, Password = oldPassword }));
 
-                var newLogin = await auth.LoginAsync(new LoginDto { Identifier = email, Password = NewPassword });
+                var newLogin = await auth.LoginAsync(new LoginDto { Identifier = email, Password = newPassword });
                 Assert.NotEqual(originalAccessToken, newLogin.Token);
                 var newSession = await authRepository.GetSessionInfoAsync(userId);
                 Assert.Equal(newLogin.Token, newSession.Token);
 
                 await Assert.ThrowsAsync<UnauthorizedAccessException>(() => reset.ResetPasswordAsync(
-                    ResetRequest(firstResetToken, NewPassword)));
+                    ResetRequest(firstResetToken, newPassword)));
 
                 var rollbackToken = Guid.NewGuid().ToString("N");
                 var rollbackRefreshToken = Guid.NewGuid().ToString("N");
@@ -176,7 +178,7 @@ public sealed class PasswordResetPostgresIntegrationTests
                 {
                     var failingReset = CreatePasswordResetService(failingContext);
                     await Assert.ThrowsAsync<InvalidOperationException>(() => failingReset.ResetPasswordAsync(
-                        ResetRequest(rollbackToken, "RollbackSyntheticPass-0!")));
+                        ResetRequest(rollbackToken, rollbackAttemptPassword)));
                 }
 
                 await using var afterRollback = new AppDbContext(options);
@@ -185,7 +187,7 @@ public sealed class PasswordResetPostgresIntegrationTests
                     .SingleAsync(code => code.ResetToken == rollbackToken);
                 var refreshAfterRollback = await afterRollback.RefreshTokens
                     .SingleAsync(token => token.Token == rollbackRefreshToken);
-                Assert.True(BCrypt.Net.BCrypt.Verify(NewPassword, userAfterRollback.PasswordHash));
+                Assert.True(BCrypt.Net.BCrypt.Verify(newPassword, userAfterRollback.PasswordHash));
                 Assert.Equal(tokenBeforeRollback, userAfterRollback.Token);
                 Assert.False(resetAfterRollback.IsCompleted);
                 Assert.False(refreshAfterRollback.IsRevoked);
@@ -213,7 +215,7 @@ public sealed class PasswordResetPostgresIntegrationTests
             {
                 await using var context = new AppDbContext(options);
                 await CreatePasswordResetService(context).ResetPasswordAsync(
-                    ResetRequest(concurrentResetToken, ConcurrentPassword));
+                    ResetRequest(concurrentResetToken, concurrentPassword));
             });
             var refreshTask = RunAfterSignalAsync(startRace.Task, async () =>
             {
@@ -231,18 +233,18 @@ public sealed class PasswordResetPostgresIntegrationTests
                     .SingleAsync(code => code.ResetToken == concurrentResetToken);
                 var activeRefreshCount = await verifyRace.RefreshTokens
                     .CountAsync(token => token.UserId == userId && !token.IsRevoked && token.ExpiresAt > DateTime.UtcNow);
-                Assert.True(BCrypt.Net.BCrypt.Verify(ConcurrentPassword, userAfterRace.PasswordHash));
+                Assert.True(BCrypt.Net.BCrypt.Verify(concurrentPassword, userAfterRace.PasswordHash));
                 Assert.Null(userAfterRace.Token);
                 Assert.True(codeAfterRace.IsCompleted);
                 Assert.Equal(0, activeRefreshCount);
 
                 var finalAuth = CreateAuthService(verifyRace);
                 await Assert.ThrowsAsync<UnauthorizedAccessException>(() => finalAuth.LoginAsync(
-                    new LoginDto { Identifier = email, Password = OldPassword }));
+                    new LoginDto { Identifier = email, Password = oldPassword }));
                 var finalLogin = await finalAuth.LoginAsync(new LoginDto
                 {
                     Identifier = email,
-                    Password = ConcurrentPassword
+                    Password = concurrentPassword
                 });
                 Assert.NotEqual(originalAccessToken, finalLogin.Token);
                 Assert.Equal(finalLogin.Token,
@@ -263,6 +265,9 @@ public sealed class PasswordResetPostgresIntegrationTests
             }
         }
     }
+
+    private static string CreateSyntheticPassword() =>
+        $"T{Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))}aA1!";
 
     private static async Task VerifySerializableRetryAsync(DbContextOptions<AppDbContext> options, int userId)
     {
