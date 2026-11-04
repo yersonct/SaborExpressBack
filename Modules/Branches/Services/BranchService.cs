@@ -54,7 +54,7 @@ namespace SaborExpress.Modules.Branches.Services
 
             // La dirección es obligatoria para poder ubicar la sede en el mapa
             if (string.IsNullOrWhiteSpace(dto.Address))
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "La dirección es obligatoria: se usa para calcular la ubicación de la sede.");
 
             var (latitude, longitude) = await _geocodingService.GeocodeAsync(dto.Address);
@@ -141,7 +141,7 @@ namespace SaborExpress.Modules.Branches.Services
             if (branch.Status != dto.Status)
             {
                 if (!await _accessGuard.IsGerenteAsync(currentUserId))
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "Solo el Gerente puede activar o desactivar una sede.");
 
                 wasDeactivated = branch.Status && !dto.Status;
@@ -151,7 +151,7 @@ namespace SaborExpress.Modules.Branches.Services
             if (addressChanged)
             {
                 if (string.IsNullOrWhiteSpace(dto.Address))
-                    throw new InvalidOperationException(
+                    throw new SaborExpress.Shared.Exceptions.ConflictException(
                         "La dirección es obligatoria: se usa para calcular la ubicación de la sede.");
 
                 var (latitude, longitude) = await _geocodingService.GeocodeAsync(dto.Address);
@@ -211,7 +211,7 @@ namespace SaborExpress.Modules.Branches.Services
                 motivos.Add("tiene turnos registrados (activos o históricos)");
 
             if (motivos.Count > 0)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     $"No se puede eliminar la sede '{branch.Name}' porque {string.Join(", ", motivos)}. " +
                     "Usa la opción de editar para desactivarla (Status) en su lugar.");
 
@@ -236,7 +236,7 @@ namespace SaborExpress.Modules.Branches.Services
         public async Task<BranchResponseDto> GetMineAsync(int currentUserId)
         {
             var branchId = await _accessGuard.GetOwnBranchIdAsync(currentUserId)
-                ?? throw new InvalidOperationException("El usuario actual no tiene una sede asignada.");
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("El usuario actual no tiene una sede asignada.");
 
             var summary = await _branchRepository.GetSummaryByIdAsync(branchId)
                 ?? throw new KeyNotFoundException("La sede no existe.");
@@ -248,7 +248,7 @@ namespace SaborExpress.Modules.Branches.Services
             var branches = await _branchRepository.GetAllActiveWithCoordinatesAsync();
 
             if (branches.Count == 0)
-                throw new InvalidOperationException("No hay sedes activas disponibles.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No hay sedes activas disponibles.");
 
             Branch? nearest = null;
             double shortestDistance = double.MaxValue;
@@ -284,7 +284,7 @@ namespace SaborExpress.Modules.Branches.Services
             // Si ninguna cubre la dirección, devolver la más cercana para que
             // cliente/backend muestren 'Fuera de cobertura' (jamás aceptar pedido).
             return nearestWithCoverage ?? nearest
-                ?? throw new InvalidOperationException("Ninguna sede activa tiene coordenadas válidas.");
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("Ninguna sede activa tiene coordenadas válidas.");
         }
 
         private static double CalculateHaversineDistanceKm(double lat1, double lon1, double lat2, double lon2)

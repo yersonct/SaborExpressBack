@@ -18,6 +18,8 @@ public sealed class ClosedBranchGuardMiddleware
     {
         var user = context.User;
         var route = context.Request.Path;
+        if (route.StartsWithSegments("/api/v1", out var remainder))
+            route = new PathString("/api").Add(remainder);
         if (user.Identity?.IsAuthenticated == true
             && route.StartsWithSegments("/api")
             && !route.StartsWithSegments("/api/auth")

@@ -37,7 +37,7 @@ public sealed class CashClosuresController : ControllerBase
             var closure = await _service.CloseAsync(this.GetCurrentEmployeeId(), dto);
             return Ok(closure);
         }
-        catch (InvalidOperationException ex)
+        catch (SaborExpress.Shared.Exceptions.ConflictException ex)
         {
             return Conflict(new { message = ex.Message });
         }
@@ -56,7 +56,7 @@ public sealed class CashClosuresController : ControllerBase
         catch (UnauthorizedAccessException) { return Forbid(); }
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
         catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
-        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
+        catch (SaborExpress.Shared.Exceptions.ConflictException ex) { return Conflict(new { message = ex.Message }); }
     }
 
     [HttpGet]

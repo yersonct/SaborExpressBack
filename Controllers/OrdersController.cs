@@ -63,11 +63,8 @@ namespace SaborExpress.Controllers
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
-            var order = await _orderRepository.GetByIdAsync(id);
-            if (order == null) return NotFound();
-
-            var actor = await GetActorAsync();
-            if (!ResourceReadPolicy.CanReadOrder(User, actor, order)) return Forbid();
+            var accessResult = await EnsureCanAccessOrderAsync(id);
+            if (accessResult != null) return accessResult;
 
             var result = await _orderService.GetByIdAsync(id);
             return Ok(result);
@@ -88,6 +85,7 @@ namespace SaborExpress.Controllers
                 filter.BranchId = branchId;
             }
 
+            if (User.IsInRole(RoleNames.Mesero)) filter.EmployeeId = actor.Employee?.Id;
             var result = await _orderService.GetAllAsync(filter, actor.Id);
             // No ampliar la visibilidad del MESERO si tiene otros roles historicos asignados.
             if (User.IsInRole(RoleNames.Mesero))
@@ -149,6 +147,9 @@ namespace SaborExpress.Controllers
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateOrderDto dto)
         {
+            var accessResult = await EnsureCanAccessOrderAsync(id);
+            if (accessResult != null) return accessResult;
+
             var employeeId = this.GetCurrentEmployeeId();
             var result = await _orderService.UpdateAsync(id, dto, employeeId);
             return Ok(result);
@@ -160,6 +161,9 @@ namespace SaborExpress.Controllers
             // El panel de Gerente/Administrador es solo de supervisión.
             if (User.IsInRole(RoleNames.Gerente) || User.IsInRole(RoleNames.Administrador))
                 return StatusCode(403, new { message = "Gerente y Administrador no pueden cambiar el estado de los pedidos." });
+
+            var accessResult = await EnsureCanAccessOrderAsync(id);
+            if (accessResult != null) return accessResult;
 
             var employeeId = this.GetCurrentEmployeeId();
 
@@ -212,9 +216,23 @@ namespace SaborExpress.Controllers
             if (User.IsInRole(RoleNames.Gerente) || User.IsInRole(RoleNames.Administrador))
                 return StatusCode(403, new { message = "Gerente y Administrador no pueden cancelar pedidos." });
 
+            var accessResult = await EnsureCanAccessOrderAsync(id);
+            if (accessResult != null) return accessResult;
+
             var employeeId = this.GetCurrentEmployeeId();
             var result = await _orderService.CancelAsync(id, dto, employeeId);
             return Ok(result);
+        }
+
+        private async Task<IActionResult?> EnsureCanAccessOrderAsync(int orderId)
+        {
+            var order = await _orderRepository.GetByIdAsync(orderId);
+            if (order == null) return NotFound();
+
+            var actor = await GetActorAsync();
+            if (!ResourceReadPolicy.CanReadOrder(User, actor, order)) return Forbid();
+
+            return null;
         }
     }
 }

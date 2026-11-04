@@ -189,7 +189,7 @@ namespace SaborExpress.Modules.Deliveries.Services
                 if (courierUserId == null)
                 {
                     if (throwOnNotificationFailure)
-                        throw new InvalidOperationException("El repartidor asignado no tiene usuario asociado.");
+                        throw new SaborExpress.Shared.Exceptions.ConflictException("El repartidor asignado no tiene usuario asociado.");
                     return;
                 }
 
