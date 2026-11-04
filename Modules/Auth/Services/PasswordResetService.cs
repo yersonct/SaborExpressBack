@@ -14,6 +14,9 @@ namespace SaborExpress.Modules.Auth.Services
     {
         private readonly IAuthRepository _authRepository;
         private readonly IPasswordResetRepository _resetRepository;
+        private readonly IRefreshTokenRepository _refreshTokenRepository;
+        private readonly IUserSessionLock _userSessionLock;
+        private readonly IAuthTransactionRunner _transactionRunner;
         private readonly INotificationService _notificationService;
         private readonly ForgotPasswordValidator _forgotPasswordValidator;
         private readonly VerifyResetCodeValidator _verifyResetCodeValidator;
@@ -27,6 +30,9 @@ namespace SaborExpress.Modules.Auth.Services
         public PasswordResetService(
             IAuthRepository authRepository,
             IPasswordResetRepository resetRepository,
+            IRefreshTokenRepository refreshTokenRepository,
+            IUserSessionLock userSessionLock,
+            IAuthTransactionRunner transactionRunner,
             INotificationService notificationService,
             IBackgroundEmailQueue emailQueue,
             ForgotPasswordValidator forgotPasswordValidator,
@@ -35,6 +41,9 @@ namespace SaborExpress.Modules.Auth.Services
         {
             _authRepository = authRepository;
             _resetRepository = resetRepository;
+            _refreshTokenRepository = refreshTokenRepository;
+            _userSessionLock = userSessionLock;
+            _transactionRunner = transactionRunner;
             _notificationService = notificationService;
             _emailQueue = emailQueue; 
             _forgotPasswordValidator = forgotPasswordValidator;
@@ -114,21 +123,36 @@ namespace SaborExpress.Modules.Auth.Services
         {
             _resetPasswordValidator.Validate(dto);
 
-            var resetCode = await _resetRepository.GetByResetTokenAsync(dto.ResetToken);
-            if (resetCode == null)
+            var candidate = await _resetRepository.GetByResetTokenAsync(dto.ResetToken);
+            if (candidate == null)
                 throw new UnauthorizedAccessException("El codigo de recuperacion es invalido o ha expirado.");
 
-            var user = await _authRepository.GetByIdWithRelationsAsync(resetCode.UserId);
-            if (user == null || !CanRecoverWebAccount(user))
-                throw new UnauthorizedAccessException("El codigo de recuperacion es invalido o ha expirado.");
+            var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            await using var userLock = await _userSessionLock.AcquireAsync(candidate.UserId);
 
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
-            user.Token = null;
+            await _transactionRunner.ExecuteSerializableAsync(async () =>
+            {
+                // Re-read after taking the per-user lock. The serializable transaction
+                // also makes competing reset requests single-use across API instances.
+                var resetCode = await _resetRepository.GetByResetTokenAsync(dto.ResetToken);
+                if (resetCode == null || resetCode.UserId != candidate.UserId)
+                    throw new UnauthorizedAccessException("El codigo de recuperacion es invalido o ha expirado.");
 
-            await _authRepository.UpdateAsync(user);
+                var user = await _authRepository.GetByIdWithRelationsAsync(resetCode.UserId);
+                if (user == null || !CanRecoverWebAccount(user))
+                    throw new UnauthorizedAccessException("El codigo de recuperacion es invalido o ha expirado.");
 
-            resetCode.IsCompleted = true;
-            await _resetRepository.UpdateAsync(resetCode);
+                user.PasswordHash = passwordHash;
+                user.Token = null;
+
+                await _authRepository.UpdateAsync(user);
+                await _refreshTokenRepository.RevokeAllForUserAsync(user.Id);
+
+                resetCode.IsCompleted = true;
+                await _resetRepository.UpdateAsync(resetCode);
+
+                return true;
+            });
         }
 
         private static bool CanRecoverWebAccount(User user) =>

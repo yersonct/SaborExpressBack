@@ -288,7 +288,7 @@ internal sealed class InvoiceFontResolver : IFontResolver
     private static byte[] ReadFont(string resourceName)
     {
         using var stream = typeof(InvoiceFontResolver).Assembly.GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"No se encontró el recurso de fuente requerido: {resourceName}");
+            ?? throw new SaborExpress.Shared.Exceptions.ConflictException($"No se encontró el recurso de fuente requerido: {resourceName}");
         using var buffer = new MemoryStream();
         stream.CopyTo(buffer);
         return buffer.ToArray();

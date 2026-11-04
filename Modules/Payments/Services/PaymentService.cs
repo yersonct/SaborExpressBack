@@ -85,7 +85,7 @@ namespace SaborExpress.Modules.Payments.Services
             };
 
             if (!await _paymentRepository.TryAddCompletedPaymentAtomicallyAsync(payment))
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "El saldo del pedido cambiÃ³ o ya fue pagado. Actualiza la lista antes de volver a cobrar.");
             await _realtime.PaymentsChangedAsync();
             // El pago es una de las dos confirmaciones requeridas para liberar la mesa.
@@ -188,7 +188,7 @@ namespace SaborExpress.Modules.Payments.Services
 
         public async Task<List<PaymentResponseDto>> GetAllAsync(PaymentFilterDto filter)
         {
-            var payments = await _paymentRepository.GetAllAsync(filter.BranchId, filter.FromDate, filter.ToDate);
+            var payments = await _paymentRepository.GetAllAsync(filter.BranchId, filter.FromDate, filter.ToDate, filter.Page, filter.PageSize);
             return payments.Select(PaymentMapper.ToResponse).ToList();
         }
 
@@ -232,20 +232,20 @@ namespace SaborExpress.Modules.Payments.Services
             // Aquí asumo que User tiene la navegación Customer.
             var customerId = currentUser.Customer?.Id;
             if (customerId == null || order.CustomerId != customerId)
-                throw new InvalidOperationException("Este pedido no te pertenece.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido no te pertenece.");
 
             if (order.Status != OrderStatus.Pending)
-                throw new InvalidOperationException("Este pedido ya no admite pago en línea.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido ya no admite pago en línea.");
 
             var existing = await _paymentRepository.GetByOrderIdAsync(order.Id);
             if (existing.Any(p => p.Status == PaymentStatus.Completed))
-                throw new InvalidOperationException("Este pedido ya está pagado.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido ya está pagado.");
 
             // El monto SIEMPRE sale del pedido, nunca del cliente
             var amount = order.Total;
 
             if (amount <= 0)
-                throw new InvalidOperationException("El pedido no tiene un total válido.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("El pedido no tiene un total válido.");
 
             var (payment, created) = await _paymentRepository.GetOrCreatePendingWompiPaymentAsync(
                 new Payment
@@ -293,7 +293,7 @@ namespace SaborExpress.Modules.Payments.Services
             // El monto SIEMPRE lo calcula el back: total menos lo ya pagado
             var amount = order.Total - alreadyPaid;
             if (amount <= 0)
-                throw new InvalidOperationException("Este pedido ya está pagado.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido ya está pagado.");
 
             // Si el cajero vuelve a tocar "QR", reusamos el pago pendiente (mismo QR, sin duplicados)
             var (payment, created) = await _paymentRepository.GetOrCreatePendingWompiPaymentAsync(
@@ -387,7 +387,7 @@ namespace SaborExpress.Modules.Payments.Services
             if (user.Employee == null && !user.HasRole(RoleNames.Gerente) && !user.HasRole(RoleNames.Administrador))
             {
                 if (user.Customer == null || payment.Order.CustomerId != user.Customer.Id)
-                    throw new InvalidOperationException("Este pago no te pertenece.");
+                    throw new SaborExpress.Shared.Exceptions.ConflictException("Este pago no te pertenece.");
             }
 
             if (payment.Status == PaymentStatus.Pending && payment.WompiReference != null)
@@ -631,11 +631,11 @@ namespace SaborExpress.Modules.Payments.Services
                 return;
 
             var employeeId = currentUser.Employee?.Id
-                ?? throw new InvalidOperationException("El usuario actual no tiene un perfil de empleado asociado.");
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("El usuario actual no tiene un perfil de empleado asociado.");
 
             var canRegister = await _authorizationService.CanPerformActionAsync(employeeId, PermissionNames.RegistrarPago);
             if (!canRegister)
-                throw new InvalidOperationException("No tienes permiso para registrar pagos ahora mismo.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para registrar pagos ahora mismo.");
         }
 
         private async Task EnsureCanRefundAsync(int currentUserId)
@@ -647,11 +647,11 @@ namespace SaborExpress.Modules.Payments.Services
                 return;
 
             var employeeId = currentUser.Employee?.Id
-                ?? throw new InvalidOperationException("El usuario actual no tiene un perfil de empleado asociado.");
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("El usuario actual no tiene un perfil de empleado asociado.");
 
             var canRefund = await _authorizationService.CanPerformActionAsync(employeeId, PermissionNames.ReembolsarPago);
             if (!canRefund)
-                throw new InvalidOperationException("No tienes permiso para procesar reembolsos ahora mismo.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No tienes permiso para procesar reembolsos ahora mismo.");
         }
     }
 }

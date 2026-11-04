@@ -8,7 +8,7 @@ namespace SaborExpress.Modules.Customers.Interfaces
         Task<RegisterResponseDto> RegisterAsync(RegisterCustomerDto dto);
         Task<CustomerResponseDto> GetMeAsync(int userId);
         Task<CustomerResponseDto> UpdateMeAsync(int userId, UpdateCustomerDto dto);
-        Task<List<CustomerResponseDto>> GetAllAsync();
+        Task<List<CustomerResponseDto>> GetAllAsync(int? page = null, int? pageSize = null);
         Task<CustomerResponseDto> GetByIdAsync(int id);
         }
 }

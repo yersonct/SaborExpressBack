@@ -40,7 +40,8 @@ namespace SaborExpress.Controllers
 
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador}")]
         [HttpGet]
-        public async Task<IActionResult> GetAll() => Ok(await _customerService.GetAllAsync());
+        public async Task<IActionResult> GetAll([FromQuery] SaborExpress.Shared.Responses.PageQuery page) =>
+            Ok(await _customerService.GetAllAsync(page.Page, page.PageSize));
 
         [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador}")]
         [HttpGet("{id:int}")]

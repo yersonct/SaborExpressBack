@@ -68,7 +68,7 @@ namespace SaborExpress.Modules.Notifications.Services
             }
 
             if (entity.UserId != userId)
-                throw new InvalidOperationException("La clave de idempotencia pertenece a otro destinatario.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("La clave de idempotencia pertenece a otro destinatario.");
 
             var dto = entity.ToDto();
 
@@ -160,7 +160,7 @@ namespace SaborExpress.Modules.Notifications.Services
                 ?? throw new KeyNotFoundException("Notificación no encontrada.");
 
             if (entity.UserId != userId)
-                throw new UnauthorizedAccessException("No puedes marcar como leída una notificación que no es tuya.");
+                throw new SaborExpress.Shared.Exceptions.ForbiddenException("No puedes marcar como leída una notificación que no es tuya.");
 
             if (!entity.IsRead)
             {
@@ -185,7 +185,7 @@ namespace SaborExpress.Modules.Notifications.Services
                 ?? throw new KeyNotFoundException("Notificación no encontrada.");
 
             if (entity.UserId != userId)
-                throw new UnauthorizedAccessException("No puedes eliminar una notificación que no es tuya.");
+                throw new SaborExpress.Shared.Exceptions.ForbiddenException("No puedes eliminar una notificación que no es tuya.");
 
             await _repository.DeleteAsync(entity);
             await NotifyNotificationStateChangedAsync(userId);

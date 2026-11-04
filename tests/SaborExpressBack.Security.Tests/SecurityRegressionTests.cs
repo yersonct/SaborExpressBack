@@ -61,6 +61,50 @@ public sealed class SecurityRegressionTests
         Assert.DoesNotContain("https://admin.example.test/path", configured);
     }
 
+    [Theory]
+    [InlineData("http://localhost:3000", true)]
+    [InlineData("https://service.localhost:3000", true)]
+    [InlineData("https://admin.local", true)]
+    [InlineData("https://preview.devtunnels.ms", true)]
+    [InlineData("http://127.0.0.1:5000", true)]
+    [InlineData("http://[::1]:5000", true)]
+    [InlineData("http://[fe80::1]:5000", true)]
+    [InlineData("http://[fd12:3456:789a::1]:5000", true)]
+    [InlineData("http://10.20.30.40:3000", true)]
+    [InlineData("http://172.16.0.1:3000", true)]
+    [InlineData("http://172.31.255.254:3000", true)]
+    [InlineData("http://192.168.1.25:3000", true)]
+    [InlineData("http://100.64.0.1:3000", true)]
+    [InlineData("https://public.example.test", false)]
+    [InlineData("https://localhost.example.test", false)]
+    [InlineData("http://[2001:4860:4860::8888]:5000", false)]
+    [InlineData("http://172.15.255.254:3000", false)]
+    [InlineData("http://172.32.0.1:3000", false)]
+    [InlineData("http://100.63.255.254:3000", false)]
+    [InlineData("http://100.128.0.1:3000", false)]
+    public void DevelopmentCorsAutomaticallyAllowsOnlyLoopbackAndPrivateNetworkOrigins(
+        string origin,
+        bool expected)
+    {
+        var configured = CorsOriginPolicy.FilterConfiguredOrigins([], isDevelopment: true);
+
+        Assert.Equal(expected, CorsOriginPolicy.IsDevelopmentOrigin(origin));
+        Assert.Equal(expected, CorsOriginPolicy.IsAllowedOrigin(origin, configured, isDevelopment: true));
+    }
+
+    [Theory]
+    [InlineData("ftp://localhost:3000")]
+    [InlineData("http://user@localhost:3000")]
+    [InlineData("http://localhost:3000/path")]
+    [InlineData("http://localhost:3000?query=1")]
+    [InlineData("null")]
+    public void DevelopmentCorsRejectsNonHttpAndMalformedOrigins(string origin)
+    {
+        Assert.False(CorsOriginPolicy.IsValidOrigin(origin));
+        Assert.False(CorsOriginPolicy.IsDevelopmentOrigin(origin));
+        Assert.False(CorsOriginPolicy.IsAllowedOrigin(origin, new HashSet<string>(), isDevelopment: true));
+    }
+
     [Fact]
     public void EmployeeCannotReadOrdersFromAnotherBranch()
     {
@@ -70,6 +114,102 @@ public sealed class SecurityRegressionTests
 
         Assert.False(ResourceReadPolicy.CanReadBranch(identity, actor, order.BranchId));
         Assert.False(ResourceReadPolicy.CanReadOrder(identity, actor, order));
+    }
+
+    [Fact]
+    public void WaiterCannotReadOwnedOrderAfterItMovesOutsideTheirBranch()
+    {
+        var identity = Principal(RoleNames.Mesero);
+        var actor = new User { Employee = new Employee { Id = 12, BranchId = 3 } };
+        var order = new Order { Id = 81, EmployeeId = 12, BranchId = 9 };
+        var summary = new SaborExpress.Modules.Orders.DTOs.OrderSummaryDto
+        {
+            Id = 81,
+            EmployeeId = 12,
+            BranchId = 9
+        };
+
+        Assert.False(ResourceReadPolicy.CanReadOrder(identity, actor, order));
+        Assert.False(ResourceReadPolicy.CanReadOrderSummary(identity, actor, summary));
+        Assert.False(ResourceReadPolicy.CanReadPaymentOfOrder(identity, actor, order));
+    }
+
+    [Fact]
+    public void WaiterCanReadTheirOwnOrderWithinTheirBranch()
+    {
+        var identity = Principal(RoleNames.Mesero);
+        var actor = new User { Employee = new Employee { Id = 12, BranchId = 3 } };
+        var order = new Order { Id = 81, EmployeeId = 12, BranchId = 3 };
+
+        Assert.True(ResourceReadPolicy.CanReadOrder(identity, actor, order));
+        Assert.True(ResourceReadPolicy.CanReadPaymentOfOrder(identity, actor, order));
+    }
+
+    [Theory]
+    [InlineData(RoleNames.Gerente, true, true, true, true, true, true)]
+    [InlineData(RoleNames.Administrador, false, true, false, true, true, false)]
+    [InlineData(RoleNames.Cajero, false, true, false, true, true, false)]
+    [InlineData(RoleNames.Mesero, false, true, false, true, true, false)]
+    [InlineData(RoleNames.Cocinero, false, true, false, true, false, false)]
+    [InlineData(RoleNames.AuxiliarCocina, false, true, false, true, false, false)]
+    [InlineData(RoleNames.Repartidor, false, true, false, false, true, false)]
+    [InlineData(RoleNames.Cliente, true, true, true, false, true, false)]
+    public void ResourceReadPolicyEnforcesCrossBranchRoleMatrix(
+        string role,
+        bool expectedCrossBranchOrder,
+        bool expectedSameBranchOrder,
+        bool expectedCrossBranchPayment,
+        bool expectedSameBranchBranchRead,
+        bool expectedSameBranchPayment,
+        bool expectedCrossBranchBranchRead)
+    {
+        var identity = Principal(role);
+        var actor = new User
+        {
+            Employee = new Employee { Id = 12, BranchId = 3 },
+            Customer = new SaborExpress.Modules.Customers.Models.Customer { Id = 21 }
+        };
+        var sameBranchOrder = new Order
+        {
+            Id = 81,
+            EmployeeId = 12,
+            AssignedDeliveryPersonId = 12,
+            CustomerId = 21,
+            BranchId = 3
+        };
+        var otherBranchOrder = new Order
+        {
+            Id = 82,
+            EmployeeId = 12,
+            AssignedDeliveryPersonId = 12,
+            CustomerId = 21,
+            BranchId = 9
+        };
+        var sameBranchSummary = new SaborExpress.Modules.Orders.DTOs.OrderSummaryDto
+        {
+            Id = 81,
+            EmployeeId = 12,
+            AssignedDeliveryPersonId = 12,
+            CustomerId = 21,
+            BranchId = 3
+        };
+        var otherBranchSummary = new SaborExpress.Modules.Orders.DTOs.OrderSummaryDto
+        {
+            Id = 82,
+            EmployeeId = 12,
+            AssignedDeliveryPersonId = 12,
+            CustomerId = 21,
+            BranchId = 9
+        };
+
+        Assert.Equal(expectedSameBranchBranchRead, ResourceReadPolicy.CanReadBranch(identity, actor, 3));
+        Assert.Equal(expectedCrossBranchBranchRead, ResourceReadPolicy.CanReadBranch(identity, actor, 9));
+        Assert.Equal(expectedSameBranchOrder, ResourceReadPolicy.CanReadOrder(identity, actor, sameBranchOrder));
+        Assert.Equal(expectedSameBranchOrder, ResourceReadPolicy.CanReadOrderSummary(identity, actor, sameBranchSummary));
+        Assert.Equal(expectedSameBranchPayment, ResourceReadPolicy.CanReadPaymentOfOrder(identity, actor, sameBranchOrder));
+        Assert.Equal(expectedCrossBranchOrder, ResourceReadPolicy.CanReadOrder(identity, actor, otherBranchOrder));
+        Assert.Equal(expectedCrossBranchOrder, ResourceReadPolicy.CanReadOrderSummary(identity, actor, otherBranchSummary));
+        Assert.Equal(expectedCrossBranchPayment, ResourceReadPolicy.CanReadPaymentOfOrder(identity, actor, otherBranchOrder));
     }
 
     [Fact]
@@ -106,6 +246,232 @@ public sealed class SecurityRegressionTests
         var order = new Order { Id = 81, BranchId = 9 };
 
         Assert.True(ResourceReadPolicy.CanReadOrder(identity, actor, order));
+    }
+
+    [Fact]
+    public async Task OrderDetailHistoryDeniesWaiterOutsideTheOrderBranch()
+    {
+        var detailRepository = new Mock<IOrderDetailRepository>();
+        detailRepository.Setup(repository => repository.GetByIdAsync(44))
+            .ReturnsAsync(new SaborExpress.Modules.Orders.Models.OrderDetail { Id = 44, OrderId = 81 });
+        var orderRepository = new Mock<IOrderRepository>();
+        orderRepository.Setup(repository => repository.GetByIdAsync(81))
+            .ReturnsAsync(new Order { Id = 81, BranchId = 9, EmployeeId = 12 });
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Employee = new Employee { Id = 12, BranchId = 3 } });
+        var historyService = new Mock<IOrderDetailHistoryService>();
+        var controller = CreateOrderDetailHistoryController(
+            historyService.Object,
+            detailRepository.Object,
+            orderRepository.Object,
+            authRepository.Object,
+            Principal(RoleNames.Mesero, 7));
+
+        var result = await controller.GetHistory(44);
+
+        Assert.IsType<ForbidResult>(result);
+        historyService.Verify(service => service.GetByOrderDetailIdAsync(44), Times.Never);
+    }
+
+    [Fact]
+    public async Task OrderDetailHistoryDeniesWaiterReadingAnotherWaitersOrder()
+    {
+        var detailRepository = new Mock<IOrderDetailRepository>();
+        detailRepository.Setup(repository => repository.GetByIdAsync(44))
+            .ReturnsAsync(new SaborExpress.Modules.Orders.Models.OrderDetail { Id = 44, OrderId = 81 });
+        var orderRepository = new Mock<IOrderRepository>();
+        orderRepository.Setup(repository => repository.GetByIdAsync(81))
+            .ReturnsAsync(new Order { Id = 81, BranchId = 3, EmployeeId = 99 });
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Employee = new Employee { Id = 12, BranchId = 3 } });
+        var historyService = new Mock<IOrderDetailHistoryService>();
+        var controller = CreateOrderDetailHistoryController(
+            historyService.Object,
+            detailRepository.Object,
+            orderRepository.Object,
+            authRepository.Object,
+            Principal(RoleNames.Mesero, 7));
+
+        var result = await controller.GetHistory(44);
+
+        Assert.IsType<ForbidResult>(result);
+        historyService.Verify(service => service.GetByOrderDetailIdAsync(44), Times.Never);
+    }
+
+    [Fact]
+    public async Task OrderDetailHistoryAllowsManagerAcrossBranches()
+    {
+        var detailRepository = new Mock<IOrderDetailRepository>();
+        detailRepository.Setup(repository => repository.GetByIdAsync(44))
+            .ReturnsAsync(new SaborExpress.Modules.Orders.Models.OrderDetail { Id = 44, OrderId = 81 });
+        var orderRepository = new Mock<IOrderRepository>();
+        orderRepository.Setup(repository => repository.GetByIdAsync(81))
+            .ReturnsAsync(new Order { Id = 81, BranchId = 9 });
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Employee = new Employee { Id = 12, BranchId = 3 } });
+        var history = new List<SaborExpress.Modules.Orders.DTOs.OrderDetailHistoryResponseDto>();
+        var historyService = new Mock<IOrderDetailHistoryService>();
+        historyService.Setup(service => service.GetByOrderDetailIdAsync(44)).ReturnsAsync(history);
+        var controller = CreateOrderDetailHistoryController(
+            historyService.Object,
+            detailRepository.Object,
+            orderRepository.Object,
+            authRepository.Object,
+            Principal(RoleNames.Gerente, 7));
+
+        var result = await controller.GetHistory(44);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Same(history, ok.Value);
+        historyService.Verify(service => service.GetByOrderDetailIdAsync(44), Times.Once);
+    }
+
+    [Fact]
+    public async Task EmployeeOrderMutationsAreDeniedOutsideTheirAssignedBranch()
+    {
+        var actor = new User { Id = 7, Employee = new Employee { Id = 12, BranchId = 3 } };
+        var order = new Order { Id = 81, BranchId = 9, EmployeeId = 12 };
+        var (controller, orderService) = CreateOrdersController(
+            Principal(RoleNames.Cajero, 7, 12), actor, order);
+
+        var updateResult = await controller.Update(81, new SaborExpress.Modules.Orders.DTOs.UpdateOrderDto());
+        var statusResult = await controller.UpdateStatus(81, new SaborExpress.Modules.Orders.DTOs.UpdateOrderStatusDto());
+        var cancelResult = await controller.Cancel(81, new SaborExpress.Modules.Orders.DTOs.CancelOrderDto());
+
+        Assert.IsType<ForbidResult>(updateResult);
+        Assert.IsType<ForbidResult>(statusResult);
+        Assert.IsType<ForbidResult>(cancelResult);
+        orderService.Verify(service => service.UpdateAsync(
+            It.IsAny<int>(), It.IsAny<SaborExpress.Modules.Orders.DTOs.UpdateOrderDto>(), It.IsAny<int>()), Times.Never);
+        orderService.Verify(service => service.UpdateStatusAsync(
+            It.IsAny<int>(), It.IsAny<SaborExpress.Modules.Orders.DTOs.UpdateOrderStatusDto>(), It.IsAny<int>()), Times.Never);
+        orderService.Verify(service => service.CancelAsync(
+            It.IsAny<int>(), It.IsAny<SaborExpress.Modules.Orders.DTOs.CancelOrderDto>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AdministratorCannotCreateManualNotificationForAnotherBranch()
+    {
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Id = 7, Employee = new Employee { Id = 12, BranchId = 3 } });
+        var notificationService = new Mock<IUserNotificationService>();
+        var controller = CreateNotificationsController(
+            notificationService.Object, authRepository.Object,
+            Principal(RoleNames.Administrador, 7));
+
+        var result = await controller.Create(new SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto
+        {
+            BranchId = 9,
+            Title = "Aviso de prueba",
+            Message = "Contenido sintético"
+        });
+
+        Assert.IsType<ForbidResult>(result);
+        notificationService.Verify(service => service.CreateManualAsync(
+            It.IsAny<SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AdministratorCannotTargetAnEmployeeFromAnotherBranchWithManualNotification()
+    {
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Id = 7, Employee = new Employee { Id = 12, BranchId = 3 } });
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(44))
+            .ReturnsAsync(new User { Id = 44, Employee = new Employee { Id = 30, BranchId = 9 } });
+        var notificationService = new Mock<IUserNotificationService>();
+        var controller = CreateNotificationsController(
+            notificationService.Object, authRepository.Object,
+            Principal(RoleNames.Administrador, 7));
+
+        var result = await controller.Create(new SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto
+        {
+            UserId = 44,
+            Title = "Aviso de prueba",
+            Message = "Contenido sintético"
+        });
+
+        Assert.IsType<ForbidResult>(result);
+        notificationService.Verify(service => service.CreateManualAsync(
+            It.IsAny<SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AdministratorCanCreateManualNotificationWithinTheirBranch()
+    {
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(7))
+            .ReturnsAsync(new User { Id = 7, Employee = new Employee { Id = 12, BranchId = 3 } });
+        var created = new List<SaborExpress.Modules.Notifications.DTOs.NotificationDto>();
+        var notificationService = new Mock<IUserNotificationService>();
+        notificationService.Setup(service => service.CreateManualAsync(
+                It.IsAny<SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto>()))
+            .ReturnsAsync(created);
+        var controller = CreateNotificationsController(
+            notificationService.Object, authRepository.Object,
+            Principal(RoleNames.Administrador, 7));
+
+        var result = await controller.Create(new SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto
+        {
+            BranchId = 3,
+            Title = "Aviso de prueba",
+            Message = "Contenido sintético"
+        });
+
+        var createdResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status201Created, createdResult.StatusCode);
+        notificationService.Verify(service => service.CreateManualAsync(
+            It.IsAny<SaborExpress.Modules.Notifications.DTOs.CreateNotificationDto>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task WaiterWithoutEffectiveTablePermissionCannotChangeTableStatus()
+    {
+        var tableService = new Mock<SaborExpress.Modules.Tables.Interfaces.ITableService>();
+        var authorization = new Mock<SaborExpress.Shared.Interfaces.IAuthorizationService>();
+        authorization.Setup(service => service.CanPerformActionAsync(12, PermissionNames.CambiarEstadoMesa))
+            .ReturnsAsync(false);
+        var controller = new TablesController(tableService.Object, authorization.Object);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = Principal(RoleNames.Mesero, 7, 12) }
+        };
+
+        var result = await controller.UpdateStatus(
+            33, new SaborExpress.Modules.Tables.DTOs.UpdateTableStatusDto());
+
+        Assert.IsType<ForbidResult>(result);
+        authorization.Verify(service => service.CanPerformActionAsync(
+            12, PermissionNames.CambiarEstadoMesa), Times.Once);
+        tableService.Verify(service => service.UpdateStatusAsync(
+            It.IsAny<int>(), It.IsAny<SaborExpress.Modules.Tables.DTOs.UpdateTableStatusDto>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CashierCannotUseAdministrativeTableReleaseWithoutEffectiveAdminRole()
+    {
+        var tableService = new Mock<SaborExpress.Modules.Tables.Interfaces.ITableService>();
+        var controller = new TablesController(
+            tableService.Object, Mock.Of<SaborExpress.Shared.Interfaces.IAuthorizationService>());
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = Principal(RoleNames.Cajero, 7, 12) }
+        };
+
+        var result = await controller.ReleasePrevious(
+            33, new SaborExpress.Modules.Tables.DTOs.ReleasePreviousTableDto
+            {
+                Administrative = true,
+                Reason = "Regularización administrativa solicitada"
+            });
+
+        Assert.IsType<ForbidResult>(result);
+        tableService.Verify(service => service.ReleasePreviousDayAsync(
+            It.IsAny<int>(), It.IsAny<SaborExpress.Modules.Tables.DTOs.ReleasePreviousTableDto>(), It.IsAny<int>()), Times.Never);
     }
 
     [Fact]
@@ -202,8 +568,69 @@ public sealed class SecurityRegressionTests
         Assert.DoesNotContain(providerDetail, logged, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static ClaimsPrincipal Principal(string role) => new(
-        new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], authenticationType: "security-test"));
+    private static ClaimsPrincipal Principal(string role, int? userId = null, int? employeeId = null)
+    {
+        var claims = new List<Claim> { new(ClaimTypes.Role, role) };
+        if (userId.HasValue)
+            claims.Add(new Claim(ClaimTypes.NameIdentifier, userId.Value.ToString()));
+        if (employeeId.HasValue)
+            claims.Add(new Claim("EmployeeId", employeeId.Value.ToString()));
+
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType: "security-test"));
+    }
+
+    private static (OrdersController Controller, Mock<IOrderService> OrderService) CreateOrdersController(
+        ClaimsPrincipal identity,
+        User actor,
+        Order order)
+    {
+        var orderService = new Mock<IOrderService>();
+        var authRepository = new Mock<IAuthRepository>();
+        authRepository.Setup(repository => repository.GetByIdWithRelationsAsync(actor.Id))
+            .ReturnsAsync(actor);
+        var orderRepository = new Mock<IOrderRepository>();
+        orderRepository.Setup(repository => repository.GetByIdAsync(order.Id)).ReturnsAsync(order);
+        var controller = new OrdersController(
+            orderService.Object,
+            Mock.Of<IPaymentRepository>(),
+            authRepository.Object,
+            orderRepository.Object,
+            Mock.Of<ITableRepository>());
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = identity }
+        };
+        return (controller, orderService);
+    }
+
+    private static NotificationsController CreateNotificationsController(
+        IUserNotificationService notificationService,
+        IAuthRepository authRepository,
+        ClaimsPrincipal identity)
+    {
+        var controller = new NotificationsController(notificationService, authRepository);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = identity }
+        };
+        return controller;
+    }
+
+    private static OrderDetailHistoryController CreateOrderDetailHistoryController(
+        IOrderDetailHistoryService historyService,
+        IOrderDetailRepository detailRepository,
+        IOrderRepository orderRepository,
+        IAuthRepository authRepository,
+        ClaimsPrincipal identity)
+    {
+        var controller = new OrderDetailHistoryController(
+            historyService, detailRepository, orderRepository, authRepository);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = identity }
+        };
+        return controller;
+    }
 
     private static PaymentService CreatePaymentService(IWompiClient wompi, ILogger<PaymentService> logger)
     {

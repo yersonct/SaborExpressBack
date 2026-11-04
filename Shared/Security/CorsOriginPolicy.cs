@@ -39,6 +39,9 @@ public static class CorsOriginPolicy
 
     public static bool IsDevelopmentOrigin(string origin)
     {
+        if (!IsValidOrigin(origin))
+            return false;
+
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
             return false;
 

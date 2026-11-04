@@ -39,10 +39,12 @@ namespace SaborExpress.Modules.Customers.Services
             await _validator.ValidateAsync(dto);
 
             var clienteRole = await _roleRepository.GetByNameAsync(RoleNames.Cliente)
-                ?? throw new InvalidOperationException("El rol CLIENTE no está configurado en el sistema.");
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("El rol CLIENTE no está configurado en el sistema.");
 
             var customer = new Customer
             {
+                PrivacyAcceptedAtUtc = DateTime.UtcNow,
+                PrivacyPolicyVersion = dto.PrivacyPolicyVersion,
                 Name = dto.Name,
                 LastName = dto.LastName,
                 Document = dto.Document,
@@ -143,9 +145,9 @@ namespace SaborExpress.Modules.Customers.Services
             };
         }
 
-        public async Task<List<CustomerResponseDto>> GetAllAsync()
+        public async Task<List<CustomerResponseDto>> GetAllAsync(int? page = null, int? pageSize = null)
         {
-            var customers = await _customerRepository.GetAllAsync();
+            var customers = await _customerRepository.GetAllAsync(page, pageSize);
             return customers.Select(c => CustomerMapper.ToResponse(c)).ToList();
         }
 

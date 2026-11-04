@@ -9,7 +9,10 @@ namespace SaborExpress.Data.Configurations
     {
         public void Configure(EntityTypeBuilder<Order> builder)
         {
-            builder.ToTable("orders");
+            builder.ToTable("orders", table =>
+            {
+                table.HasCheckConstraint("ck_orders_money", "sub_total >= 0 AND tax >= 0 AND delivery_fee >= 0 AND total >= 0");
+            });
 
             builder.HasKey(x => x.Id);
 
@@ -77,21 +80,21 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.SubTotal)
                 .HasColumnName("sub_total")
-                .HasColumnType("decimal(10,2)")
+                .HasColumnType("decimal(14,2)")
                 .IsRequired();
 
             builder.Property(x => x.Tax)
                 .HasColumnName("tax")
-                .HasColumnType("decimal(10,2)")
+                .HasColumnType("decimal(14,2)")
                 .IsRequired();
 
             builder.Property(x => x.TaxRate).HasColumnName("tax_rate").HasColumnType("decimal(5,2)").IsRequired();
             builder.Property(x => x.TaxIncludedInPrice).HasColumnName("tax_included_in_price").IsRequired();
-            builder.Property(x => x.DeliveryFee).HasColumnName("delivery_fee").HasColumnType("decimal(12,2)").IsRequired();
+            builder.Property(x => x.DeliveryFee).HasColumnName("delivery_fee").HasColumnType("decimal(14,2)").IsRequired();
 
             builder.Property(x => x.Total)
                 .HasColumnName("total")
-                .HasColumnType("decimal(10,2)")
+                .HasColumnType("decimal(14,2)")
                 .IsRequired();
 
             builder.Property(x => x.Notes)

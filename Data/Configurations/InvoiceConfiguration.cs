@@ -19,7 +19,7 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.DeliveryFee)
                 .HasColumnName("delivery_fee")
-                .HasColumnType("decimal(12,2)")
+                .HasColumnType("decimal(14,2)")
                 .IsRequired();
 
             builder.Property(x => x.TaxIncludedInPrice)

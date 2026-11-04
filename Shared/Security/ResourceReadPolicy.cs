@@ -52,7 +52,9 @@ public static class ResourceReadPolicy
                    order.AssignedDeliveryPersonId == actor.Employee.Id &&
                    actor.Employee.BranchId == order.BranchId;
         if (IsWaiterOnly(identity))
-            return actor.Employee != null && order.EmployeeId == actor.Employee.Id;
+            return actor.Employee != null &&
+                   actor.Employee.BranchId == order.BranchId &&
+                   order.EmployeeId == actor.Employee.Id;
         if (IsCustomerOnly(identity))
             return actor.Customer != null && order.CustomerId == actor.Customer.Id;
         return CanReadBranch(identity, actor, order.BranchId);
@@ -66,7 +68,9 @@ public static class ResourceReadPolicy
                    order.AssignedDeliveryPersonId == actor.Employee.Id &&
                    actor.Employee.BranchId == order.BranchId;
         if (IsWaiterOnly(identity))
-            return actor.Employee != null && order.EmployeeId == actor.Employee.Id;
+            return actor.Employee != null &&
+                   actor.Employee.BranchId == order.BranchId &&
+                   order.EmployeeId == actor.Employee.Id;
         if (IsCustomerOnly(identity))
             return actor.Customer != null && order.CustomerId == actor.Customer.Id;
         return CanReadBranch(identity, actor, order.BranchId);

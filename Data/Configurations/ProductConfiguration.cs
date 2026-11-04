@@ -8,7 +8,10 @@ namespace SaborExpress.Data.Configurations
     {
         public void Configure(EntityTypeBuilder<Product> builder)
         {
-            builder.ToTable("products");
+            builder.ToTable("products", table =>
+            {
+                table.HasCheckConstraint("ck_products_price", "price >= 0");
+            });
 
             builder.HasKey(x => x.Id);
 
@@ -43,7 +46,7 @@ namespace SaborExpress.Data.Configurations
 
             builder.Property(x => x.Price)
                 .HasColumnName("price")
-                .HasColumnType("decimal(10,2)")
+                .HasColumnType("decimal(14,2)")
                 .IsRequired();
 
             builder.Property(x => x.Photo)
