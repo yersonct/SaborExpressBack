@@ -1,4 +1,3 @@
-    using System.Collections.Concurrent;
     using SaborExpress.Modules.Auth.DTOs;
     using SaborExpress.Modules.Auth.Helpers;
     using SaborExpress.Modules.Auth.Interfaces;
@@ -20,6 +19,7 @@
     using SaborExpress.Modules.Branches.Interfaces;
     using SaborExpress.Data;
     using Microsoft.EntityFrameworkCore;
+    using System.Data;
     using SaborExpress.Shared.Helpers;
 
     namespace SaborExpress.Modules.Auth.Services
@@ -39,10 +39,10 @@
         private readonly IConfiguration _configuration;
         private readonly IBranchRepository _branchRepository;
         private readonly AppDbContext _db;
+        private readonly IUserSessionLock _userSessionLock;
+        private readonly IAuthTransactionRunner _transactionRunner;
 
-        // Serializa login y renovación para que un refresh antiguo no sustituya la sesión nueva.
-        private static readonly ConcurrentDictionary<int, SemaphoreSlim> SessionLocks = new();
-
+        // Coordina las operaciones de sesión por usuario dentro de esta instancia.
         private static readonly string[] OperationalRoles =
         {
             RoleNames.Mesero, RoleNames.Cajero, RoleNames.Cocinero, RoleNames.AuxiliarCocina, RoleNames.Repartidor
@@ -66,9 +66,13 @@
                 INotificationRepository notificationRepository,
                 IConfiguration configuration,
                 IBranchRepository branchRepository,
-                AppDbContext db)
+                AppDbContext db,
+                IUserSessionLock userSessionLock,
+                IAuthTransactionRunner transactionRunner)
                 {
                     _db = db;
+                    _userSessionLock = userSessionLock;
+                    _transactionRunner = transactionRunner;
                     _branchRepository = branchRepository;
                     _configuration = configuration;
                     _customerRepository = customerRepository;
@@ -108,33 +112,60 @@
 
             var esValido = user != null && BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash);
 
-        if (!esValido)
-        {
-            if (user != null)
+            if (!esValido && user != null)
             {
-                user.FailedLoginAttempts++;
-
-                if (user.FailedLoginAttempts >= MaxFailedAttempts)
+                var failedUserId = user.Id;
+                await using var failedLoginLock = await _userSessionLock.AcquireAsync(failedUserId);
+                esValido = await _transactionRunner.ExecuteSerializableAsync(async () =>
                 {
-                    user.LockoutEnd = DateTime.UtcNow.AddMinutes(LockoutMinutes);
-                    user.FailedLoginAttempts = 0;
-                }
+                    var currentUser = await _authRepository.GetByIdWithRelationsAsync(failedUserId);
+                    if (currentUser == null)
+                        return false;
 
-                await _authRepository.UpdateAsync(user);
+                    if (currentUser.LockoutEnd.HasValue && currentUser.LockoutEnd.Value > DateTime.UtcNow)
+                    {
+                        var retryAfter = (int)(currentUser.LockoutEnd.Value - DateTime.UtcNow).TotalSeconds;
+                        throw new TooManyLoginAttemptsException(retryAfter);
+                    }
+
+                    // A reset may have completed after the first password check.
+                    // Let the normal locked login path re-check and issue the session.
+                    if (BCrypt.Net.BCrypt.Verify(dto.Password, currentUser.PasswordHash))
+                        return true;
+
+                    currentUser.FailedLoginAttempts++;
+
+                    if (currentUser.FailedLoginAttempts >= MaxFailedAttempts)
+                    {
+                        currentUser.LockoutEnd = DateTime.UtcNow.AddMinutes(LockoutMinutes);
+                        currentUser.FailedLoginAttempts = 0;
+                    }
+
+                    await _authRepository.UpdateAsync(currentUser);
+                    return false;
+                });
             }
 
-            throw new UnauthorizedAccessException("Credenciales incorrectas.");
-        }
+            if (!esValido)
+                throw new UnauthorizedAccessException("Credenciales incorrectas.");
 
-            user!.FailedLoginAttempts = 0;
-            user.LockoutEnd = null;
-
-            await EnsureBranchIsActiveAsync(user);
-
-            var sessionLock = SessionLocks.GetOrAdd(user.Id, static _ => new SemaphoreSlim(1, 1));
-            await sessionLock.WaitAsync();
-            try
+            var userId = user!.Id;
+            await using var userLock = await _userSessionLock.AcquireAsync(userId);
+            string? notificationEmail = null;
+            string? notificationName = null;
+            var loginResponse = await _transactionRunner.ExecuteSerializableAsync(async () =>
             {
+                // Re-check after acquiring the lock so a concurrent password reset
+                // cannot allow an already-started login with the old password.
+                user = await _authRepository.GetByIdWithRelationsAsync(userId)
+                    ?? throw new UnauthorizedAccessException("Credenciales incorrectas.");
+                _loginValidator.ValidateAccountRules(user, dto);
+                if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+                    throw new UnauthorizedAccessException("Credenciales incorrectas.");
+
+                user.FailedLoginAttempts = 0;
+                user.LockoutEnd = null;
+                await EnsureBranchIsActiveAsync(user);
                 var enforceSingleSession = _configuration.GetValue("Auth:SingleSession", true);
                 await EnsureCustomerForEmployeeAsync(user);
 
@@ -154,7 +185,10 @@
 
                 var nombreCompleto = user.GetDisplayName(dto.Identifier);
                 if (!string.IsNullOrEmpty(user.Email))
-                    NotifyLoginAsync(user.Email, nombreCompleto);
+                {
+                    notificationEmail = user.Email;
+                    notificationName = nombreCompleto;
+                }
 
                 if (enforceSingleSession)
                     await _refreshTokenRepository.RevokeAllForUserAsync(user.Id);
@@ -164,11 +198,12 @@
                     await _realtimeNotifier.SessionReplacedAsync(user.Id);
 
                 return AuthMapper.ToAuthResponse(user, token, refreshToken, hasActiveShift, activeShiftRoleName, effectiveRoles);
-            }
-            finally
-            {
-                sessionLock.Release();
-            }
+            });
+
+            if (notificationEmail is not null && notificationName is not null)
+                NotifyLoginAsync(notificationEmail, notificationName);
+
+            return loginResponse;
         }
         public async Task ChangePasswordAsync(int userId, ChangePasswordDto dto)
         {
@@ -183,6 +218,9 @@
 
             if (dto.ConfirmPassword is not null && dto.ConfirmPassword != dto.NewPassword)
                 throw new ArgumentException("Las contraseñas no coinciden.");
+
+            await using var userLock = await _userSessionLock.AcquireAsync(userId);
+            await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
             var user = await _authRepository.GetByIdWithRelationsAsync(userId)
                 ?? throw new KeyNotFoundException("Usuario no encontrado.");
@@ -200,6 +238,7 @@
 
             // Ninguna sesión previa puede renovarse con la contraseña vieja.
             await _refreshTokenRepository.RevokeAllForUserAsync(userId);
+            await transaction.CommitAsync();
         }
 
         // Con la sede desactivada solo entran Gerente y Administrador (panel web).
@@ -268,9 +307,8 @@
                 var stored = await _refreshTokenRepository.GetActiveByTokenAsync(dto.RefreshToken)
                     ?? throw new UnauthorizedAccessException("Refresh token invalido o expirado.");
 
-                var sessionLock = SessionLocks.GetOrAdd(stored.UserId, static _ => new SemaphoreSlim(1, 1));
-                await sessionLock.WaitAsync();
-                try
+                await using var userLock = await _userSessionLock.AcquireAsync(stored.UserId);
+                return await _transactionRunner.ExecuteSerializableAsync(async () =>
                 {
                     // El login pudo revocar este token mientras esperábamos el bloqueo.
                     stored = await _refreshTokenRepository.GetActiveByTokenAsync(dto.RefreshToken)
@@ -298,11 +336,7 @@
 
                     var newRefreshToken = await GenerateAndSaveRefreshTokenAsync(user.Id);
                     return AuthMapper.ToAuthResponse(user, newAccessToken, newRefreshToken, hasActiveShift, activeShiftRoleName, effectiveRoles);
-                }
-                finally
-                {
-                    sessionLock.Release();
-                }
+                });
             }
             private void NotifyLoginAsync(string email, string nombreCompleto)
             {
@@ -325,13 +359,18 @@
 
             public async Task LogoutAsync(int userId)
             {
-                var user = await _authRepository.GetByIdWithRelationsAsync(userId);
-                if (user == null)
-                    return;
+                await using var userLock = await _userSessionLock.AcquireAsync(userId);
+                await _transactionRunner.ExecuteSerializableAsync(async () =>
+                {
+                    var user = await _authRepository.GetByIdWithRelationsAsync(userId);
+                    if (user == null)
+                        return false;
 
-                user.Token = null;
-                await _authRepository.UpdateAsync(user);
-                await _refreshTokenRepository.RevokeAllForUserAsync(userId);
+                    user.Token = null;
+                    await _authRepository.UpdateAsync(user);
+                    await _refreshTokenRepository.RevokeAllForUserAsync(userId);
+                    return true;
+                });
             }
         }
     }

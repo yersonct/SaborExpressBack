@@ -93,11 +93,7 @@ namespace SaborExpress.Modules.Employees.Validators
         {
             if (cv == null) return;
 
-            if (cv.ContentType != "application/pdf")
-                throw new ArgumentException("El CV debe ser un archivo PDF");
-
-            if (cv.Length > MaxCvSizeBytes)
-                throw new ArgumentException("El PDF no debe superar 5MB");
+            SaborExpress.Shared.Security.UploadFilePolicy.ValidatePdf(cv);
         }
 
         private static void ValidateCvRequirement(List<Role> roles, IFormFile? cv, bool hasExistingCv)

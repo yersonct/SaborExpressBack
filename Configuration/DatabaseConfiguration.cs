@@ -1,72 +1,20 @@
 using Microsoft.EntityFrameworkCore;
 using SaborExpress.Data;
 
-namespace SaborExpress.Configuration
+namespace SaborExpress.Configuration;
+
+public static class DatabaseConfiguration
 {
-    public static class DatabaseConfiguration
+    public static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration configuration)
     {
-        public static IServiceCollection AddDatabase(
-            this IServiceCollection services,
-            IConfiguration configuration)
-        {
-            var dbProvider = configuration.GetValue<string>("DatabaseProvider");
-
-            services.AddDbContext<AppDbContext>(options =>
-                ConfigurarProveedor(options, dbProvider, configuration));
-
-            return services;
-        }
-
-        private static void ConfigurarProveedor(
-            DbContextOptionsBuilder options, string? dbProvider, IConfiguration configuration)
-        {
-            switch (dbProvider)
-            {
-                case "MySQL":
-                    ConfigurarMySql(options, configuration);
-                    break;
-
-                case "SqlServer":
-                    ConfigurarSqlServer(options, configuration);
-                    break;
-
-                case "PostgreSQL":
-                    ConfigurarPostgres(options, configuration);
-                    break;
-
-                default:
-                    throw new InvalidOperationException(
-                        $"Proveedor de base de datos no soportado: {dbProvider}");
-            }
-        }
-
-        private static void ConfigurarMySql(DbContextOptionsBuilder options, IConfiguration configuration)
-        {
-            var connectionString = ObtenerConnectionString(configuration, "MySQLConnection");
-            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
-        }
-
-        private static void ConfigurarSqlServer(DbContextOptionsBuilder options, IConfiguration configuration)
-        {
-            var connectionString = ObtenerConnectionString(configuration, "SqlServerConnection");
-            options.UseSqlServer(connectionString);
-        }
-
-        private static void ConfigurarPostgres(DbContextOptionsBuilder options, IConfiguration configuration)
-        {
-            var connectionString = ObtenerConnectionString(configuration, "PostgresConnection");
-            options.UseNpgsql(connectionString, npgsql =>
-                npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
-        }
-
-        private static string ObtenerConnectionString(IConfiguration configuration, string key)
-        {
-            var connectionString = configuration.GetConnectionString(key);
-
-            if (string.IsNullOrEmpty(connectionString))
-                throw new Exception($"{key} no est� configurada.");
-
-            return connectionString;
-        }
+        var provider = configuration["DatabaseProvider"] ?? "PostgreSQL";
+        if (!string.Equals(provider, "PostgreSQL", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Solo PostgreSQL dispone de migraciones verificadas. Configure DatabaseProvider=PostgreSQL.");
+        var connection = configuration.GetConnectionString("PostgresConnection");
+        if (string.IsNullOrWhiteSpace(connection))
+            throw new InvalidOperationException("ConnectionStrings:PostgresConnection no está configurada.");
+        services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connection,
+            npgsql => npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
+        return services;
     }
 }

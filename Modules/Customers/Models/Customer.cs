@@ -14,6 +14,8 @@ namespace SaborExpress.Modules.Customers.Models
         public string? LastName { get; set; }
         public string? Phone { get; set; }
         public string? Address { get; set; }
+        public DateTime? PrivacyAcceptedAtUtc { get; set; }
+        public string? PrivacyPolicyVersion { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

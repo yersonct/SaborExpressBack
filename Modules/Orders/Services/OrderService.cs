@@ -102,7 +102,7 @@ namespace SaborExpress.Modules.Orders.Services
          await _validator.ValidateCreateAsync(dto, employeeId, resolvedBranchId);
 
         var settings = await _settingsRepository.GetByBranchIdAsync(resolvedBranchId)
-            ?? throw new InvalidOperationException(
+            ?? throw new SaborExpress.Shared.Exceptions.ConflictException(
                 "La sede aún no tiene configurados el Impoconsumo y la tarifa de domicilio. " +
                 "Pide al administrador que los configure en Ajustes del Restaurante.");
 
@@ -118,11 +118,11 @@ namespace SaborExpress.Modules.Orders.Services
                 ?? throw new ArgumentException("La mesa no existe.");
 
             if (table.BranchId != resolvedBranchId)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "La mesa no pertenece a la sede indicada.");
 
             if (table.Status != TableStatus.Available)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "La mesa ya no está disponible. Puede que otro mesero ya la haya tomado.");
 
             tableSessionId = Guid.NewGuid();
@@ -229,7 +229,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                 ?? throw new KeyNotFoundException("El empleado no existe.");
 
             if (!employee.BranchId.HasValue)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "Tu cuenta no tiene una sede asignada todavía. Pide a tu gerente/administrador " +
                     "que te asigne un turno, y vuelve a iniciar sesión.");
 
@@ -261,7 +261,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
             branch => branch.Id == dto.BranchId.Value);
 
         if (selectedBranch is null)
-            throw new InvalidOperationException(
+            throw new SaborExpress.Shared.Exceptions.ConflictException(
                 "La sede seleccionada no está disponible. Elige otra sede e inténtalo de nuevo.");
 
         return selectedBranch.Id;
@@ -287,7 +287,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
 
             var effectiveBranchId = await ResolveAllowedBranchIdAsync(filter.BranchId, currentUserId);
 
-            int? effectiveEmployeeId = null;
+            int? effectiveEmployeeId = filter.EmployeeId;
             var esGerenteOAdmin = currentUser.HasRole(RoleNames.Gerente) || currentUser.HasRole(RoleNames.Administrador);
 
             // Solo se restringe a "mis propios pedidos" si el único rol operativo real
@@ -302,7 +302,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
             if (!esGerenteOAdmin && esSoloMesero)
             {
                 effectiveEmployeeId = currentUser.Employee?.Id
-                    ?? throw new InvalidOperationException("El usuario actual no tiene un perfil de empleado asociado.");
+                    ?? throw new SaborExpress.Shared.Exceptions.ConflictException("El usuario actual no tiene un perfil de empleado asociado.");
             }
 
             var orders = await _orderRepository.GetAllAsync(
@@ -310,7 +310,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                 filter.Status,
                 effectiveEmployeeId,
                 filter.FromDate,
-                filter.ToDate);
+                filter.ToDate, filter.Page, filter.PageSize);
             return orders.Select(OrderMapper.ToSummary).ToList();
         }
 
@@ -348,11 +348,26 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
         // sede, para no exponerlo en una URL sin protección.
         public async Task<List<OrderSummaryDto>> GetKitchenBoardByAccessTokenAsync(string accessToken)
         {
-            var schedule = await _scheduleRepository.GetActiveScheduleByTokenAsync(accessToken, DateTime.Now)
+            var schedule = await _scheduleRepository.GetActiveScheduleByTokenAsync(accessToken, SaborExpress.Shared.Helpers.ColombiaTime.Now)
                 ?? throw new UnauthorizedAccessException("Este link ya no es válido o el turno ha terminado.");
 
             var orders = await _orderRepository.GetByBranchIdAsync(schedule.BranchId);
-            return orders.Select(OrderMapper.ToSummary).ToList();
+            return orders.Where(order => order.Status is not OrderStatus.Delivered and not OrderStatus.Cancelled)
+                .Select(order =>
+                {
+                    var summary = OrderMapper.ToSummary(order);
+                    summary.CustomerId = null;
+                    summary.CustomerName = null;
+                    summary.EmployeeId = null;
+                    summary.EmployeeName = null;
+                    summary.AssignedDeliveryPersonId = null;
+                    summary.AssignedDeliveryPersonName = null;
+                    summary.SubTotal = 0;
+                    summary.Tax = 0;
+                    summary.Total = 0;
+                    summary.DeliveryFee = 0;
+                    return summary;
+                }).ToList();
         }
 
         public async Task<OrderResponseDto> UpdateAsync(int id, UpdateOrderDto dto, int employeeId)
@@ -466,11 +481,11 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                 ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
 
             if (user.Customer == null || order.CustomerId != user.Customer.Id)
-                throw new InvalidOperationException("Este pedido no te pertenece.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido no te pertenece.");
 
             // El cliente solo cancela antes de que cocina empiece
             if (order.Status != OrderStatus.Pending && order.Status != OrderStatus.Confirmed)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "Tu pedido ya está en preparación y no se puede cancelar.");
 
             if (string.IsNullOrWhiteSpace(dto.Reason))
@@ -492,20 +507,20 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                 ?? throw new KeyNotFoundException("Usuario actual no encontrado.");
 
             if (user.Customer == null || order.CustomerId != user.Customer.Id)
-                throw new InvalidOperationException("Este pedido no te pertenece.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido no te pertenece.");
 
             if (order.OrderType != OrderType.Delivery || order.Channel != OrderChannel.App)
-                throw new InvalidOperationException("Este pedido no es un domicilio hecho desde la app.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido no es un domicilio hecho desde la app.");
 
             if (order.Status != OrderStatus.Pending)
-                throw new InvalidOperationException("Este pedido ya no está pendiente de confirmación.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido ya no está pendiente de confirmación.");
 
             if (order.Total <= 0)
-                throw new InvalidOperationException("El pedido no tiene productos.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("El pedido no tiene productos.");
 
             var payments = await _paymentRepository.GetByOrderIdAsync(order.Id);
             if (payments.Any(p => p.Status == PaymentStatus.Completed))
-                throw new InvalidOperationException("Este pedido ya está pagado.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Este pedido ya está pagado.");
 
             try
             {
@@ -547,7 +562,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
             if (totalPaid > 0m &&
                 (order.Total <= 0m || totalPaid >= order.Total))
             {
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "Este pedido ya registra pagos y no se puede cancelar de forma automática.");
             }
 
@@ -557,7 +572,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                     d.Status == OrderDetailStatus.Ready ||
                     d.Status == OrderDetailStatus.Delivered))
             {
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "Este pedido ya tiene platos en preparación, listos o entregados. " +
                     "No se puede cancelar mientras cocina ya empezó a prepararlo.");
             }
@@ -669,7 +684,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                 (double)address.Latitude, (double)address.Longitude);
 
             if (km > (double)radiusKm)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     $"Tu dirección está a {km:0.0} km de la sede {branch.Name} y el radio de entrega es de {radiusKm:0.#} km. " +
                     "No podemos llevar el pedido a esa dirección.");
         }
@@ -687,14 +702,14 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
             if (canEditOwn && order.EmployeeId == employeeId)
                 return;
 
-            throw new InvalidOperationException("No tienes permiso para modificar este pedido.");
+            throw new SaborExpress.Shared.Exceptions.ForbiddenException("No tienes permiso para modificar este pedido.");
         }
 
         private async Task EnsureCanUpdateStatusAsync(int employeeId)
         {
             var canUpdateStatus = await _authorizationService.CanPerformActionAsync(employeeId, PermissionNames.ActualizarEstadoPedido);
             if (!canUpdateStatus)
-                throw new InvalidOperationException("No tienes permiso para cambiar el estado de este pedido.");
+                throw new SaborExpress.Shared.Exceptions.ForbiddenException("No tienes permiso para cambiar el estado de este pedido.");
         }
 
         private async Task EnsureCashierConfirmsCustomerOrderAsync(int employeeId)
@@ -704,7 +719,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                 userRole.Role.Name == RoleNames.Cajero) ?? false;
 
             if (!isCashier)
-                throw new InvalidOperationException(
+                throw new SaborExpress.Shared.Exceptions.ConflictException(
                     "Solo el cajero puede confirmar un pedido realizado por el cliente.");
         }
 
@@ -712,7 +727,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
         {
             var canCancel = await _authorizationService.CanPerformActionAsync(employeeId, PermissionNames.CancelarPedido);
             if (!canCancel)
-                throw new InvalidOperationException("No tienes permiso para cancelar pedidos.");
+                throw new SaborExpress.Shared.Exceptions.ForbiddenException("No tienes permiso para cancelar pedidos.");
         }
 
         // Nuevo: si el usuario es Administrador (o cualquier no-Gerente), fuerza
@@ -727,7 +742,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                 return requestedBranchId;
 
             var ownBranchId = currentUser.Employee?.BranchId
-                ?? throw new InvalidOperationException("El usuario actual no tiene una sede asignada.");
+                ?? throw new SaborExpress.Shared.Exceptions.ConflictException("El usuario actual no tiene una sede asignada.");
 
             return ownBranchId;
         }
@@ -742,7 +757,7 @@ private async Task<int> ResolveBranchIdAsync(CreateOrderDto dto, int? employeeId
                 return;
 
             if (currentUser.Employee?.BranchId != branchId)
-                throw new InvalidOperationException("Solo puedes ver los pedidos de tu propia sede.");
+                throw new SaborExpress.Shared.Exceptions.ForbiddenException("Solo puedes ver los pedidos de tu propia sede.");
         }
     }
 }

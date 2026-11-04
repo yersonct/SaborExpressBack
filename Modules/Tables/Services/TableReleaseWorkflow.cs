@@ -147,13 +147,13 @@ namespace SaborExpress.Modules.Tables.Services
                 throw new ArgumentException("La mesa no existe.");
             await EnsureBranchAccessAsync(table.BranchId, userId, dto.Administrative);
             if (table.CurrentSessionId != dto.ExpectedSessionId)
-                throw new InvalidOperationException("La sesión cambió. Actualiza los datos de la mesa antes de continuar.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("La sesión cambió. Actualiza los datos de la mesa antes de continuar.");
 
             var review = await BuildReviewAsync(table);
             if (!review.IsOccupied || (!review.IsPreviousDay && !(dto.Administrative && review.IsOrphan)))
-                throw new InvalidOperationException("No puedes liberar una sesión activa de hoy.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("No puedes liberar una sesión activa de hoy.");
             if (!dto.Administrative && !review.CanReleaseNormally)
-                throw new InvalidOperationException("Existen pedidos sin entregar, sin pagar o no hay historial verificable. Solicita una regularización administrativa.");
+                throw new SaborExpress.Shared.Exceptions.ConflictException("Existen pedidos sin entregar, sin pagar o no hay historial verificable. Solicita una regularización administrativa.");
 
             _db.TableReleaseAudits.Add(new TableReleaseAudit
             {

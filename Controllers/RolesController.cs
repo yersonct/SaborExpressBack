@@ -27,10 +27,12 @@ namespace SaborExpress.Controllers
             Ok(await _roleService.GetByIdAsync(id));
 
         [HttpPost]
+        [Authorize(Roles = RoleNames.Gerente)]
         public async Task<IActionResult> Create([FromBody] CreateRoleDto dto) =>
             StatusCode(201, await _roleService.CreateAsync(dto));
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = RoleNames.Gerente)]
         public async Task<IActionResult> Delete(int id)
         {
             await _roleService.DeleteAsync(id);
@@ -38,6 +40,7 @@ namespace SaborExpress.Controllers
         }
 
         [HttpPut("{id}")]
+        [Authorize(Roles = RoleNames.Gerente)]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateRoleDto dto) =>
             Ok(await _roleService.UpdateAsync(id, dto));
     }

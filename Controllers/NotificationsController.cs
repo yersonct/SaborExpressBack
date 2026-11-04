@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SaborExpress.Modules.Auth.Interfaces;
 using SaborExpress.Modules.Notifications.DTOs;
 using SaborExpress.Modules.Notifications.Interfaces;
 using SaborExpress.Shared.Extensions;
@@ -13,10 +14,14 @@ namespace SaborExpress.Controllers
     public class NotificationsController : ControllerBase
     {
         private readonly IUserNotificationService   _service;
+        private readonly IAuthRepository _authRepository;
 
-        public NotificationsController(IUserNotificationService   service)
+        public NotificationsController(
+            IUserNotificationService service,
+            IAuthRepository authRepository)
         {
             _service = service;
+            _authRepository = authRepository;
         }
 
         [HttpPut("push-device")]
@@ -69,6 +74,23 @@ namespace SaborExpress.Controllers
     [Authorize(Roles = $"{RoleNames.Gerente},{RoleNames.Administrador}")]
     public async Task<IActionResult> Create([FromBody] CreateNotificationDto dto)
         {
+            if (User.IsInRole(RoleNames.Administrador) && !User.IsInRole(RoleNames.Gerente))
+            {
+                var actor = await _authRepository.GetByIdWithRelationsAsync(this.GetCurrentUserId());
+                var branchId = actor?.Employee?.BranchId;
+                if (!branchId.HasValue) return Forbid();
+
+                if (dto.BranchId.HasValue && dto.BranchId.Value != branchId.Value)
+                    return Forbid();
+
+                if (dto.UserId.HasValue)
+                {
+                    var target = await _authRepository.GetByIdWithRelationsAsync(dto.UserId.Value);
+                    if (target?.Employee?.BranchId != branchId.Value)
+                        return Forbid();
+                }
+            }
+
             var result = await _service.CreateManualAsync(dto);
             return StatusCode(201, result);
         }

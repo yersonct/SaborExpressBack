@@ -34,7 +34,7 @@ namespace SaborExpress.Modules.Addresses.Services
 
             var isOwner = currentUser.Customer?.Id == customerId;
             if (!isOwner)
-                throw new UnauthorizedAccessException("Solo puedes ver tus propias direcciones");
+                throw new SaborExpress.Shared.Exceptions.ForbiddenException("Solo puedes ver tus propias direcciones");
 
             var addresses = await _addressRepository.GetByCustomerIdAsync(customerId);
             return addresses.Select(AddressMapper.ToResponse).ToList();
@@ -63,7 +63,7 @@ namespace SaborExpress.Modules.Addresses.Services
                     return AddressMapper.ToResponse(address);
             }
 
-            throw new UnauthorizedAccessException("No tienes permiso para ver esta dirección");
+            throw new SaborExpress.Shared.Exceptions.ForbiddenException("No tienes permiso para ver esta dirección");
         }
 
         public async Task<AddressResponseDto> CreateAsync(CreateAddressDto dto, int customerId)
