@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -17,6 +18,7 @@ using SaborExpress.Modules.Auth.DTOs;
 using SaborExpress.Modules.Auth.Helpers;
 using SaborExpress.Modules.Auth.Interfaces;
 using SaborExpress.Modules.Auth.Models;
+using SaborExpress.Modules.Customers.DTOs;
 using SaborExpress.Modules.Customers.Interfaces;
 using SaborExpress.Modules.Customers.Models;
 using SaborExpress.Modules.EmployeeSchedules.Interfaces;
@@ -24,6 +26,7 @@ using SaborExpress.Modules.EmployeeSchedules.Enum;
 using SaborExpress.Modules.EmployeeSchedules.Models;
 using SaborExpress.Modules.Employees.Interfaces;
 using SaborExpress.Modules.Employees.Models;
+using ActualEmployeeService = SaborExpress.Modules.Employees.Services.EmployeeService;
 using SaborExpress.Modules.Notifications.Interfaces;
 using SaborExpress.Modules.RolePermissions.DTOs;
 using SaborExpress.Modules.RolePermissions.Interfaces;
@@ -88,6 +91,73 @@ public sealed class HttpAuthenticationTests
         Assert.NotNull(crossBranchError);
         Assert.Equal("FORBIDDEN", crossBranchError.Code);
         Assert.False(string.IsNullOrWhiteSpace(crossBranchError.TraceId));
+    }
+
+    // HU-SE-002: camino HTTP con controlador + servicio de empleados REAL.
+    [Fact]
+    public async Task CvHttpRequiresLoginEnforcesBranchAndDownloadsOwnBranchWithRealService()
+    {
+        using var fixture = new ApiFixture(useRealEmployeeService: true);
+        using var client = fixture.Server.CreateClient();
+
+        var anonymous = await client.GetAsync("/api/Employees/52/cv");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", fixture.TokenFor(fixture.Admin));
+        var denied = await client.GetAsync("/api/Employees/50/cv");
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        var deniedBody = await denied.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("PRIVATE_BRANCH_TWO_CV", deniedBody);
+        var deniedError = await denied.Content.ReadFromJsonAsync<ApiError>();
+        Assert.NotNull(deniedError);
+        Assert.Equal("FORBIDDEN", deniedError.Code);
+
+        var authorized = await client.GetAsync("/api/Employees/52/cv");
+        Assert.Equal(HttpStatusCode.OK, authorized.StatusCode);
+        Assert.Equal("application/pdf", authorized.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(fixture.ValidCvPdf, await authorized.Content.ReadAsByteArrayAsync());
+    }
+
+    // HU-SE-003: GET/PUT me deben respetar identidad y rol a nivel HTTP.
+    [Fact]
+    public async Task CustomerMeHttpEnforcesAnonymousWrongRoleAndOwnProfileForGetAndPut()
+    {
+        using var fixture = new ApiFixture();
+        using var client = fixture.Server.CreateClient();
+        var update = new UpdateCustomerDto
+        {
+            Name = "Maria", LastName = "Prueba",
+            Phone = "3001234567", Address = "Calle 12 numero 34"
+        };
+
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.GetAsync("/api/v1/Customers/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PutAsJsonAsync("/api/v1/Customers/me", update)).StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", fixture.TokenFor(fixture.Admin));
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync("/api/v1/Customers/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.PutAsJsonAsync("/api/v1/Customers/me", update)).StatusCode);
+        fixture.Customers.Verify(x => x.UpdateAsync(It.IsAny<Customer>()), Times.Never);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", fixture.TokenFor(fixture.Customer));
+        var ownGet = await client.GetAsync("/api/v1/Customers/me");
+        Assert.Equal(HttpStatusCode.OK, ownGet.StatusCode);
+        var put = await client.PutAsJsonAsync("/api/v1/Customers/me", update);
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+        var response = await put.Content.ReadFromJsonAsync<SaborExpress.Modules.Customers.DTOs.CustomerResponseDto>();
+        Assert.NotNull(response);
+        Assert.Equal(fixture.Customer.Id, response.UserId);
+        Assert.Equal("Maria", response.Name);
+        fixture.Customers.Verify(x => x.UpdateAsync(It.Is<Customer>(c =>
+            c.UserId == fixture.Customer.Id && c.Name == "Maria")), Times.Once);
+        fixture.Customers.Verify(x => x.UpdateAsync(It.Is<Customer>(c =>
+            c.UserId != fixture.Customer.Id)), Times.Never);
     }
 
     [Fact]
@@ -167,9 +237,11 @@ public sealed class HttpAuthenticationTests
         public User Admin { get; }
         public Mock<IRolePermissionService> RolePermissions { get; } = new();
         public Mock<IEmployeeService> EmployeeService { get; } = new();
+        public Mock<ICustomerRepository> Customers { get; } = new();
+        public byte[] ValidCvPdf { get; } = Convert.FromBase64String("JVBERi0xLjMKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSCj4+CmVuZG9iagoyIDAgb2JqCjw8Ci9CYXNlRm9udCAvSGVsdmV0aWNhIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nIC9OYW1lIC9GMSAvU3VidHlwZSAvVHlwZTEgL1R5cGUgL0ZvbnQKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL0NvbnRlbnRzIDcgMCBSIC9NZWRpYUJveCBbIDAgMCAyMDAgMjAwIF0gL1BhcmVudCA2IDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iago0IDAgb2JqCjw8Ci9QYWdlTW9kZSAvVXNlTm9uZSAvUGFnZXMgNiAwIFIgL1R5cGUgL0NhdGFsb2cKPj4KZW5kb2JqCjUgMCBvYmoKPDwKL0F1dGhvciAoYW5vbnltb3VzKSAvQ3JlYXRpb25EYXRlIChEOjIwMjYxMTA1MjE0MzQ1KzAwJzAwJykgL0NyZWF0b3IgKGFub255bW91cykgL0tleXdvcmRzICgpIC9Nb2REYXRlIChEOjIwMjYxMTA1MjE0MzQ1KzAwJzAwJykgL1Byb2R1Y2VyIChSZXBvcnRMYWIgUERGIExpYnJhcnkgLSBcKG9wZW5zb3VyY2VcKSkgCiAgL1N1YmplY3QgKHVuc3BlY2lmaWVkKSAvVGl0bGUgKHVudGl0bGVkKSAvVHJhcHBlZCAvRmFsc2UKPj4KZW5kb2JqCjYgMCBvYmoKPDwKL0NvdW50IDEgL0tpZHMgWyAzIDAgUiBdIC9UeXBlIC9QYWdlcwo+PgplbmRvYmoKNyAwIG9iago8PAovRmlsdGVyIFsgL0FTQ0lJODVEZWNvZGUgL0ZsYXRlRGVjb2RlIF0gL0xlbmd0aCAxMTIKPj4Kc3RyZWFtCkdhcFFoMEU9RiwwVVxIM1RccE5ZVF5RS2s/dGM+SVAsO1cjVTFeMjNpaFBFTV8/Q1c0S0lTaFwmZEFPSStoN3B1Yz0lJi9XPHJldFY1WyVDJEckU2BXQmQmTVZGIWg+NkFRQ0pRTkBzJ2VBO3I6fj5lbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDA2MSAwMDAwMCBuIAowMDAwMDAwMDkyIDAwMDAwIG4gCjAwMDAwMDAxOTkgMDAwMDAgbiAKMDAwMDAwMDM5MiAwMDAwMCBuIAowMDAwMDAwNDYwIDAwMDAwIG4gCjAwMDAwMDA3MjEgMDAwMDAgbiAKMDAwMDAwMDc4MCAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9JRCAKWzxmZmZhM2E5MjBiM2IxOWE3NDk2ZGE3NjQ1YjRlOGU4Nz48ZmZmYTNhOTIwYjNiMTlhNzQ5NmRhNzY0NWI0ZThlODc+XQolIFJlcG9ydExhYiBnZW5lcmF0ZWQgUERGIGRvY3VtZW50IC0tIGRpZ2VzdCAob3BlbnNvdXJjZSkKCi9JbmZvIDUgMCBSCi9Sb290IDQgMCBSCi9TaXplIDgKPj4Kc3RhcnR4cmVmCjk4MgolJUVPRgo=");
         private readonly Mock<IEmployeeScheduleRepository> _schedules = new();
         private readonly JwtSettings _settings;
-        public ApiFixture()
+        public ApiFixture(bool useRealEmployeeService = false)
         {
             Customer = new User { Id = 101, Status = true, EmailConfirmed = true, Email = "yersonct@example.invalid",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(Password, 4),
@@ -214,13 +286,14 @@ public sealed class HttpAuthenticationTests
                     Status = ScheduleStatus.Programado
                 }]);
             var employees = new Mock<IEmployeeRepository>();
-            employees.Setup(r => r.GetByIdAsync(50)).ReturnsAsync(new Employee { Id = 50, BranchId = 2, CvFile = "%PDF-1.7"u8.ToArray() });
+            employees.Setup(r => r.GetByIdAsync(50)).ReturnsAsync(new Employee { Id = 50, BranchId = 2, CvFile = "%PDF-1.7 PRIVATE_BRANCH_TWO_CV"u8.ToArray() });
+            employees.Setup(r => r.GetByIdAsync(52)).ReturnsAsync(new Employee { Id = 52, BranchId = 1, CvFile = ValidCvPdf, CvFilename = "cv-test.pdf", CvContentType = "application/pdf" });
             EmployeeService.Setup(service => service.GetCvAsync(50, 102))
                 .ThrowsAsync(new SaborExpress.Shared.Exceptions.ForbiddenException("No puedes consultar el CV de otra sede."));
             EmployeeService.Setup(service => service.GetCvAsync(51, 102))
                 .ReturnsAsync((ValueTuple<byte[], string, string>?)null);
-            var customers = new Mock<ICustomerRepository>();
-            customers.Setup(r => r.GetByUserIdAsync(101)).ReturnsAsync(Customer.Customer);
+            Customers.Setup(r => r.GetByUserIdAsync(101)).ReturnsAsync(Customer.Customer);
+            Customers.Setup(r => r.UpdateAsync(It.IsAny<Customer>())).Returns(Task.CompletedTask);
             RolePermissions.Setup(service => service.AssignAsync(
                     It.IsAny<CreateRolePermissionDto>(), It.IsAny<ClaimsPrincipal>()))
                 .ReturnsAsync(new RolePermissionResponseDto
@@ -243,11 +316,20 @@ public sealed class HttpAuthenticationTests
                     services.AddDependencies();
                     services.AddSingleton<IAuthTransactionRunner, ImmediateAuthTransactionRunner>();
                     services.AddSingleton<IConfiguration>(configuration);
-                    services.AddSingleton(EmployeeService.Object);
+                    if (useRealEmployeeService)
+                    {
+                        services.AddSingleton<IEmployeeService>(new ActualEmployeeService(
+                            employees.Object, null!, auth.Object, null!, null!, null!, null!,
+                            null!, null!, NullLogger<ActualEmployeeService>.Instance, null!));
+                    }
+                    else
+                    {
+                        services.AddSingleton(EmployeeService.Object);
+                    }
                     services.AddSingleton<SaborExpress.Shared.Localization.IApiMessageLocalizer,
                         SaborExpress.Shared.Localization.ApiMessageLocalizer>();
                     services.AddSingleton(auth.Object); services.AddSingleton(refresh.Object);
-                    services.AddSingleton(_schedules.Object); services.AddSingleton(employees.Object); services.AddSingleton(customers.Object);
+                    services.AddSingleton(_schedules.Object); services.AddSingleton(employees.Object); services.AddSingleton(Customers.Object);
                     services.AddSingleton(Mock.Of<INotificationService>());
                     services.AddSingleton(Mock.Of<SaborExpress.Modules.Deliveries.Interfaces.IDeliveryAssignmentService>());
                     services.AddSingleton(Mock.Of<IEmployeeActivationService>());
