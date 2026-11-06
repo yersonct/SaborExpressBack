@@ -1,4 +1,4 @@
-name: Staging release smoke
+name: Render staging read-only diagnostics (PR116)
 
 on:
   # Bootstrap before this workflow exists on main. This metadata push never
@@ -89,3 +89,28 @@ jobs:
           path: release-results/render-staging-verification.json
           if-no-files-found: error
           retention-days: 90
+
+  render-readonly-diagnostics:
+    name: render-readonly-diagnostics
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/chore/pr116-render-readonly-diagnostics'
+    runs-on: windows-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Read staging deployment metadata and sanitized diagnostics
+        shell: pwsh
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_STAGING_SERVICE_ID: ${{ vars.RENDER_STAGING_SERVICE_ID }}
+          RENDER_PRODUCTION_SERVICE_ID: ${{ vars.RENDER_PRODUCTION_SERVICE_ID }}
+        run: ./scripts/release/collect-render-staging-diagnostics.ps1
+      - name: Preserve read-only diagnostics separately from release smoke
+        uses: actions/upload-artifact@v7
+        with:
+          name: render-staging-readonly-metadata
+          path: release-results/render-staging-readonly-metadata.json
+          if-no-files-found: error
+          retention-days: 30
