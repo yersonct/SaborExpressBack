@@ -348,7 +348,6 @@ public sealed class ApiMessageLocalizer : IApiMessageLocalizer
             ["Llegó un pedido nuevo."] = new("A new order has arrived.", "Chegou um novo pedido.", "Une nouvelle commande est arrivée."),
             ["Un pedido fue cancelado."] = new("An order was canceled.", "Um pedido foi cancelado.", "Une commande a été annulée."),
             ["Mesa disponible"] = new("Table available", "Mesa disponível", "Table disponible"),
-            ["Generación de PDF pendiente de implementar. Consulta el TODO en InvoicesController."] = new("PDF generation has not been implemented yet. See the TODO in InvoicesController.", "A geração de PDF ainda não foi implementada. Consulte o TODO em InvoicesController.", "La génération du PDF n'est pas encore implémentée. Consultez le TODO dans InvoicesController."),
 
             // Títulos de notificaciones almacenadas en español y presentadas por idioma del destinatario.
             ["Pedido nuevo"] = new("New order", "Novo pedido", "Nouvelle commande"),

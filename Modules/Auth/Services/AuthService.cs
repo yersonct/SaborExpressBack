@@ -6,6 +6,8 @@
     using SaborExpress.Shared.Extensions;
     using SaborExpress.Shared.Interfaces;
     using Microsoft.Extensions.Options;
+    using Microsoft.Extensions.Logging;
+    using Microsoft.Extensions.Logging.Abstractions;
     using SaborExpress.Configuration;
     using SaborExpress.Modules.Auth.Models;
     using SaborExpress.Modules.Auth.Exceptions;
@@ -41,6 +43,7 @@
         private readonly AppDbContext _db;
         private readonly IUserSessionLock _userSessionLock;
         private readonly IAuthTransactionRunner _transactionRunner;
+        private readonly ILogger<AuthService> _logger;
 
         // Coordina las operaciones de sesión por usuario dentro de esta instancia.
         private static readonly string[] OperationalRoles =
@@ -68,7 +71,8 @@
                 IBranchRepository branchRepository,
                 AppDbContext db,
                 IUserSessionLock userSessionLock,
-                IAuthTransactionRunner transactionRunner)
+                IAuthTransactionRunner transactionRunner,
+                ILogger<AuthService>? logger = null)
                 {
                     _db = db;
                     _userSessionLock = userSessionLock;
@@ -77,6 +81,7 @@
                     _configuration = configuration;
                     _customerRepository = customerRepository;
                     _notificationRepository = notificationRepository;
+                    _logger = logger ?? NullLogger<AuthService>.Instance;
                 _authRepository = authRepository;
                 _loginValidator = loginValidator;
                 _jwtGenerator = jwtGenerator;
@@ -214,9 +219,10 @@
                 {
                     await _realtimeNotifier.SessionReplacedAsync(userId);
                 }
-                catch
+                catch (Exception exception)
                 {
                     // Login and the new session have already committed; notification is best effort.
+                    _logger.LogWarning(exception, "Realtime session replacement notification failed for user {UserId}.", userId);
                 }
             }
 
@@ -369,10 +375,10 @@
                             "Inicio de Sesion - SaborExpress",
                             $"El usuario '{nombreCompleto}' ha iniciado sesion en SaborExpress.");
                     }
-                    catch
+                    catch (Exception exception)
                     {
-                        // No interrumpe el login: solo se registra si falla el envio.
-                        // TODO: reemplazar por ILogger cuando se centralice el logging del proyecto.
+                        // Do not fail login because an email notification is best effort.
+                        _logger.LogWarning(exception, "Login notification email failed for {Email}.", email);
                     }
                 });
             }
