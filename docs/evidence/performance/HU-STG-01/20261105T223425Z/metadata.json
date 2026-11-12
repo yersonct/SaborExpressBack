@@ -1,0 +1,20 @@
+{
+  "story": "HU-STG-01",
+  "environment": "staging",
+  "region": "Generador: Neiva, Colombia; Render: Virginia (US East)",
+  "apiHost": "saborexpressback-staging.onrender.com",
+  "webHost": null,
+  "datasetSize": "1 sede, 1 categoria, 1 producto (respuesta publica)",
+  "profile": "Lecturas publicas GET",
+  "vus": 15,
+  "warmupSeconds": 120,
+  "rampSeconds": 120,
+  "steadySeconds": 600,
+  "rampDownSeconds": 30,
+  "thinkTimeSeconds": 1,
+  "serverP95TargetMs": 300,
+  "commit": "ea5604e906ef9345240e1bebaf9f1939e9f9f625",
+  "k6Version": "k6.exe v2.3.0 (commit/e088784614, go1.26.8, windows/amd64)",
+  "startedAtUtc": "2026-11-05T22:34:25.5844776Z",
+  "note": "No se guardan tokens ni URLs completas. API client duration incluye red; server duration se extrae de Server-Timing."
+}
